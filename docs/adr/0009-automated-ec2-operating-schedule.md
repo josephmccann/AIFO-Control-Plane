@@ -18,12 +18,14 @@ Principles 1, 14, 20, and 23: trustworthy operation, transparent limits, best-in
 - EventBridge Scheduler supports schedule time zones, universal AWS SDK targets, retry policy, and dead-letter queues.
 - EC2 stop/start actions can target a specific instance ARN.
 - Manual stop/start remains available through IAM Identity Center.
+- EC2 releases an auto-assigned public IPv4 address when an instance is stopped and assigns a new one when it is started again.
 
 ## Assumptions
 
 - 08:00-16:00 Monday-Friday America/Los_Angeles is the first approved operating window. Confidence: medium.
 - A direct EventBridge Scheduler target is simpler than Lambda or Instance Scheduler for one host. Confidence: high.
 - The instance should be created running for first deployment verification, not immediately stopped by Terraform-managed state. Confidence: medium.
+- Stopped-state public IPv4 observations should not replace the host because the scheduled stop is expected behavior. Confidence: high.
 
 ## Unknowns
 
@@ -46,6 +48,8 @@ Create EventBridge Scheduler schedules that start only the Terraform-managed con
 
 Use a dedicated Scheduler execution role scoped to `ec2:StartInstances` and `ec2:StopInstances` for the single instance ARN. Configure retry policy and an encrypted SQS dead-letter queue for failed schedule deliveries.
 
+Ignore Terraform drift on `aws_instance.host.associate_public_ip_address` so the approved stopped state does not force replacement after EC2 releases the auto-assigned public IPv4 address. The instance still receives a public IPv4 address on start for outbound internet access, and administrative access remains SSM-only.
+
 Do not create a Lambda scheduler and do not schedule unrelated instances.
 
 ## Why This Decision Is Appropriate Now
@@ -59,6 +63,7 @@ It keeps cost control close to the EC2 resource, avoids recurring Lambda complex
 - Lambda plus EventBridge rule.
 - AWS Instance Scheduler solution.
 - Always-on host.
+- Elastic IP for stable public IPv4.
 
 ## Why Alternatives Were Rejected Or Deferred
 
@@ -67,10 +72,13 @@ It keeps cost control close to the EC2 resource, avoids recurring Lambda complex
 - Lambda adds code, IAM, logs, and operational surface for two API calls.
 - AWS Instance Scheduler is more complex than required for one host.
 - Always-on operation is not approved under the current budget.
+- An Elastic IP is unnecessary because operators use Session Manager, not the public address, and it would introduce avoidable address retention cost.
 
 ## Security Effects
 
 The Scheduler role cannot terminate instances and is scoped to the single host ARN.
+
+Ignoring `associate_public_ip_address` drift does not permit inbound network access. The host still has zero inbound security-group rules, no SSH key, IMDSv2 required, and SSM-only administration.
 
 ## Privacy Effects
 
@@ -87,6 +95,8 @@ EventBridge Scheduler usage is expected to fall within the AWS free tier at this
 ## Operational Burden
 
 Low. Operators must understand that manual starts are temporary and the next scheduled stop still applies.
+
+Terraform plans should be run against both the stopped live state and the cached running-state model when this lifecycle exception changes.
 
 ## Solo-Founder Recoverability
 

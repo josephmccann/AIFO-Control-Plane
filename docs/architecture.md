@@ -136,6 +136,8 @@ The first deployable control-plane plan now includes:
 
 The EC2 host is created running for first-session verification. Terraform does not manage a permanent stopped state because that would conflict with the approved operating schedule and routine daytime plans. The first apply should be scheduled inside the approved operating window; if deployment occurs outside it, the operator must stop the instance manually after verification.
 
+Because EC2 releases auto-assigned public IPv4 addresses while an instance is stopped, Terraform ignores drift on `aws_instance.host.associate_public_ip_address`. The next start assigns a new public IPv4 address for outbound internet access. Session Manager administration must not depend on a stable public address, and an Elastic IP is deliberately omitted to avoid unnecessary cost.
+
 ## Terraform State
 
 The Terraform environment is prepared for an S3 backend with native S3 lockfiles:

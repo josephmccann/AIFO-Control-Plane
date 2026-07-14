@@ -139,6 +139,14 @@ To avoid accidental continuous billing:
 3. Confirm EventBridge Scheduler start/stop schedules exist and are enabled.
 4. If the apply occurs outside the operating window, stop the instance manually after verification.
 
+## Terraform Plans While Stopped
+
+EC2 releases an auto-assigned public IPv4 address when the instance is stopped. While stopped, the AWS API can report `associate_public_ip_address = false` even though the subnet launch behavior and Terraform configuration still assign a public IPv4 address on the next start.
+
+Terraform intentionally ignores stopped-state drift for `aws_instance.host.associate_public_ip_address`. This avoids replacing the control-plane host, root volume, Scheduler targets, and related IAM policy only because the approved cost-control schedule stopped the instance. The security boundary does not change: the host still has no inbound security-group rules, no SSH key, IMDSv2 is required, and administration remains SSM-only.
+
+Do not add an Elastic IP only to make stopped Terraform plans visually stable. A fixed public IPv4 address is not required for Session Manager administration and would add an avoidable charge while preserving an address that should not be an operator dependency.
+
 ## Disk Hygiene
 
 The 100 GiB root volume is sufficient for the initial host only if Docker images, build caches, and model/tooling artifacts are bounded.

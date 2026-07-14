@@ -27,14 +27,14 @@ AI.FO currently needs:
 
 | Need | Current control-plane support | Gap |
 | --- | --- | --- |
-| Infrastructure as code | Terraform scaffold, ADRs, runbooks, remote state, and narrowed plan policy exist | Needs first apply approval |
+| Infrastructure as code | Terraform scaffold, ADRs, runbooks, remote state, narrowed plan policy, and partial hardened control-plane resources exist | Needs AWS account validation cleared before host completion |
 | Remote state | Bootstrap complete | None for planning |
 | CI plan | Workflow exists and successfully assumes the plan role through OIDC | None for planning |
 | Product database | Not provisioned | Decide RDS or alternative only when product hosting scope is approved |
 | Product object storage | Not provisioned | R2 currently documented; do not replace silently |
 | Product secrets | Not provisioned | Need AWS Secrets Manager or approved equivalent design |
 | Product runtime | Not provisioned | Future phase after deployment-readiness review |
-| Observability | Not provisioned | Need log, metric, alerting plan |
+| Observability | CloudTrail and Session Manager log resources partially provisioned | Need EC2 host, SSM test, metrics, and alerting plan |
 
 ## Current Integration Needs
 

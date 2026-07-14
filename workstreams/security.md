@@ -13,16 +13,16 @@ Keep the control plane aligned with no-static-keys, least privilege, no public i
 - SSM-only administration.
 - IMDSv2 required.
 - Terraform state excluded from Git.
-- Current branch proposes CloudTrail management events, encrypted CloudTrail S3 storage, encrypted Session Manager logging, and Scheduler least-privilege controls before first host deployment.
+- CloudTrail management events, encrypted CloudTrail S3 storage, encrypted Session Manager logging, and Scheduler prerequisite controls are partially deployed.
 
 ## Gaps
 
-- CloudTrail, Session Manager logging, and Scheduler resources are proposed but not deployed.
+- EC2 host and Scheduler start/stop schedules are not deployed because AWS account validation blocked EC2 launch.
 - Product secrets architecture not designed.
 - Apply role final permissions not designed.
 
 ## Next Work
 
-- Review the pre-deployment hardening plan.
+- Re-plan after AWS validation clears and verify residual resources before any renewed apply.
 - Add least-privilege apply role design after apply boundary is approved.
 - Add credential and secret scanning to CI.

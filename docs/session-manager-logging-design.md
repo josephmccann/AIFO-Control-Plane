@@ -6,7 +6,7 @@ Date: 2026-07-14
 
 For the initial control-plane host, use CloudWatch Logs for Session Manager logging with a 30-day retention period and a customer-managed KMS key. Do not enable S3 session log duplication in the first version unless a compliance review requires it.
 
-This design is implemented in Terraform but has not been applied.
+This design is implemented in Terraform and its log group, KMS key, and Session Manager preferences document were created during the approved 2026-07-14 partial control-plane apply. Session logging has not been end-to-end tested because the EC2 host was not created.
 
 ## Rationale
 

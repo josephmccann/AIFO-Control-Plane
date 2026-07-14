@@ -25,22 +25,24 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-025 | Close or supersede PR #1 | Closed as superseded | Done |
 | WQ-026 | Configure GitHub environments and repository variables | Environments and variables configured; first plan succeeded through OIDC | Done; required reviewers unavailable for `terraform-apply` |
 | WQ-027 | Align root volume cost model and deployment controls | GitHub plan reviewed in PR #4 | Done |
+| WQ-029 | Add pre-deployment audit controls | PR #5 merged at `c4c998bb10289c91dc47013a0069adc0961b461f`; GitHub plan passed | Done |
+| WQ-030 | Apply GitHub OIDC plan-role read-policy update | Applied `0 added, 1 changed, 0 destroyed`; read-only check passed | Done |
 
 ## In Progress
 
 | ID | Work Item | Validation | Notes |
 | --- | --- | --- | --- |
-| WQ-029 | Add pre-deployment audit controls | Local validation and GitHub plan required | This PR |
+| WQ-031 | Record partial hardened control-plane apply | Documentation PR required | This PR |
 
 ## Blocked
 
 | ID | Work Item | Blocker | Recommendation |
 | --- | --- | --- | --- |
-| WQ-022 | First hardened control-plane apply | Requires reviewed plan, cost acceptance, default schedule acceptance, and human approval | Do not apply yet |
+| WQ-022 | Finish hardened control-plane apply | AWS `PendingVerification` blocked EC2 `RunInstances`; post-failure plan shows `4 to add, 0 to change, 0 to destroy` | Wait for account validation, re-plan, and require renewed approval before any apply |
 | WQ-023 | Product runtime hosting | Requires product migration decision and spending approval | Defer |
 
 ## Next
 
-- Review revised hardened control-plane plan.
-- Accept or revise the default 08:00-16:00 Monday-Friday schedule.
-- Decide whether to approve first local IAM Identity Center apply.
+- Wait for AWS account regional validation to clear.
+- Re-run control-plane plan and confirm the residual resources are only the EC2 host and dependent Scheduler policy/schedules.
+- Decide whether to approve a resumed local IAM Identity Center apply.

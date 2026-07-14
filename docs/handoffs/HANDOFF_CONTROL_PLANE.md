@@ -32,7 +32,7 @@ Operating-model merge commit:
 6f8064b9de3aaa0f099013170c3c007e41fd266f
 ```
 
-Bootstrap infrastructure has been deployed. The control-plane host and product runtime have not been deployed.
+Bootstrap infrastructure has been deployed. Pre-deployment audit/logging/network prerequisites were partially deployed during the approved 2026-07-14 change window. The control-plane host and product runtime have not been deployed.
 
 GitHub planning is configured and has succeeded through OIDC. GitHub required reviewers are unavailable on the current repository plan, so `terraform-apply` exists but must remain unused and no apply workflow may be created.
 
@@ -69,7 +69,7 @@ Bootstrap roots are separate:
 
 The plan role is used by the `terraform-plan` environment. The apply role is reserved for a future approval boundary and currently has only Terraform state access. No apply workflow exists.
 
-The pre-deployment hardening branch updates the plan role policy definition with additional read-only actions for CloudTrail, KMS, CloudWatch Logs, EventBridge Scheduler, SQS, SSM, and S3 lifecycle/ownership refresh. That bootstrap OIDC update is not applied and does not grant infrastructure mutation permissions.
+The plan role policy now includes additional read-only actions for CloudTrail, KMS, CloudWatch Logs, EventBridge Scheduler, SQS, SSM, and S3 lifecycle/ownership refresh. The apply role was not modified and still has only Terraform state access.
 
 Bootstrap resources:
 
@@ -77,6 +77,29 @@ Bootstrap resources:
 - OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
 - Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
 - Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
+
+Partial control-plane resources created during the approved 2026-07-14 change window:
+
+- CloudTrail: `arn:aws:cloudtrail:us-west-2:350480401760:trail/aifo-control-plane-management-events`
+- CloudTrail log bucket: `aifo-control-plane-cloudtrail-350480401760-us-west-2`
+- VPC: `vpc-0f73b1daaa9fc17ab`
+- Public subnet: `subnet-03ce35314c75b8e1f`
+- Security group: `sg-0190e01bae800bb1a`
+- S3 gateway endpoint: `vpce-058114f11531d5fdd`
+- EC2 role/profile: `aifo-control-plane-ec2-ssm-role`, `aifo-control-plane-ec2-profile`
+- Session Manager log group: `/aifo/control-plane/session-manager`
+- Session Manager KMS key: `arn:aws:kms:us-west-2:350480401760:key/e36ac1c5-105c-42c1-92f9-06fcf02cb772`
+- Scheduler group and role: `aifo-control-plane-host`, `aifo-control-plane-scheduler-role`
+- Scheduler DLQ: `https://sqs.us-west-2.amazonaws.com/350480401760/aifo-control-plane-scheduler-dlq`
+
+Blocked resources:
+
+- EC2 instance: not created.
+- EBS root volume: not created.
+- Scheduler start and stop schedules: not created.
+- Scheduler inline policy: not created.
+
+Blocker: AWS returned `PendingVerification` for EC2 `RunInstances` in `us-west-2`. Do not retry apply until account validation clears and a renewed approval gate is granted.
 
 ## Current Cost Finding
 
@@ -90,13 +113,12 @@ The control plane does not currently host AI.FO product runtime. Product hosting
 
 ## Deployment Prerequisites
 
-1. Review the CloudTrail, Session Manager logging, and Scheduler resources in the plan.
-2. Accept or revise the default 08:00-16:00 Monday-Friday host schedule against the $250 budget.
-3. Review the GitHub Actions plan.
-4. Review the EC2 start/stop runbook.
-5. Decide whether to include the read-only GitHub plan role policy update in the next approval packet so future GitHub plans can refresh the hardening resources.
-6. Apply locally with IAM Identity Center only after an explicit approval packet.
-7. Do not add an apply workflow unless GitHub reviewer protection or an equivalent approval boundary is available.
+1. Wait for AWS account validation to clear or open an AWS Support account-management case.
+2. Re-run `terraform plan` for `terraform/environments/control-plane`.
+3. Confirm the residual plan contains only the EC2 instance, Scheduler inline policy, and Scheduler start/stop schedules.
+4. Apply locally with IAM Identity Center only after a renewed explicit approval packet.
+5. After EC2 creation, verify SSM online registration, test one Session Manager session, and manually stop the instance.
+6. Do not add an apply workflow unless GitHub reviewer protection or an equivalent approval boundary is available.
 
 ## Guardrails
 

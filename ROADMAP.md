@@ -39,23 +39,20 @@ Completed resources:
 
 ## Phase 2: Hardened Control-Plane Host
 
-Status: In PR; blocked pending reviewed plan, operating schedule acceptance, and explicit apply approval.
+Status: Partially applied; blocked by AWS account regional validation for EC2 launch.
 
 - Keep `terraform-apply` unused because required reviewers are unavailable on the current GitHub plan.
 - Keep apply workflow absent.
-- Review plan for no inbound access, IMDSv2, SSM-only administration, and expected costs.
-- Review 100 GiB root volume fit.
-- Review multi-Region CloudTrail management-events baseline with a dedicated encrypted S3 log bucket.
-- Review encrypted CloudWatch Logs Session Manager logging with 30-day retention.
-- Review EventBridge Scheduler start/stop automation for the single Terraform-managed host.
-- Review start/stop runbook.
-- Accept or revise the default 08:00-16:00 Monday-Friday operating schedule.
+- CloudTrail, Session Manager logging, VPC/network, IAM prerequisites, Scheduler group, Scheduler role, and Scheduler DLQ are created.
+- EC2 host, 100 GiB root volume, Scheduler inline policy, and Scheduler start/stop schedules are not created.
+- Post-failure Terraform plan shows `4 to add, 0 to change, 0 to destroy`.
+- Wait for AWS account validation to clear, then re-plan and require renewed approval before any resumed apply.
 
-Decision gate: human approval before any local IAM Identity Center apply.
+Decision gate: renewed human approval before any local IAM Identity Center apply.
 
 ## Phase 3: Hardening
 
-Status: Partially planned; pre-deployment audit controls are in Phase 2 because they should exist before the first host deployment.
+Status: Planned after host deployment completes.
 
 - Patch management.
 - Cost alerts and recurring cost model.

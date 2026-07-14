@@ -2,16 +2,16 @@
 
 ## Now
 
-- Review pre-deployment hardening PR.
-- Confirm the revised GitHub Actions plan includes CloudTrail, Session Manager logging, EventBridge Scheduler, a 100 GiB root volume, and no destroys.
-- Keep control-plane apply blocked pending separate approval.
+- Record the partial hardened control-plane apply.
+- Keep control-plane apply blocked while AWS account regional validation prevents EC2 launch.
+- Do not run destroy.
 
 ## Next
 
-- Review cost, no ingress, SSM-only access, IMDSv2, CloudTrail logging, Session Manager logging, Scheduler controls, and 100 GiB storage in the plan.
-- Accept or revise the default 08:00-16:00 Monday-Friday operating schedule.
-- Prepare first control-plane apply approval packet.
-- Perform first apply only from an authenticated IAM Identity Center session if approved.
+- Wait for AWS account validation to clear or open AWS Support if it persists.
+- Re-run a read-only control-plane plan.
+- Expected residual plan is the EC2 instance, Scheduler inline policy, and Scheduler start/stop schedules only.
+- Resume apply only after renewed explicit approval.
 
 ## Later
 

@@ -2,7 +2,7 @@
 
 Initial AWS infrastructure repository for the AI.FO control plane.
 
-This repository has completed the approved bootstrap for Terraform remote state and GitHub Actions OIDC. It does not include an apply workflow, and the control-plane host and product runtime have not been deployed.
+This repository has completed the approved bootstrap for Terraform remote state and GitHub Actions OIDC. It does not include an apply workflow. A supervised 2026-07-14 control-plane apply partially created audit, logging, network, IAM, and scheduler prerequisite resources, then stopped when AWS returned `PendingVerification` during EC2 launch. The control-plane host and product runtime have not been deployed.
 
 The control plane exists to support the current AI.FO product. Start with [docs/product-runtime-inventory.md](docs/product-runtime-inventory.md) before changing infrastructure design.
 
@@ -19,7 +19,7 @@ The control plane exists to support the current AI.FO product. Start with [docs/
 - Intended host: Ubuntu EC2, 8 vCPU, 32 GB RAM
 - Current default host candidate: `m7i-flex.2xlarge`
 - Current default root volume: 100 GiB encrypted gp3
-- Current deployment status: bootstrap infrastructure deployed; control-plane host and product runtime not deployed
+- Current deployment status: bootstrap deployed; audit/logging/network prerequisites partially deployed; control-plane host and product runtime not deployed
 
 ## Repository Layout
 
@@ -72,7 +72,7 @@ The deployable `control-plane` environment defines:
 - EC2 detailed monitoring disabled by default for cost discipline
 - Multi-Region CloudTrail management-events baseline with S3 log delivery
 - Session Manager logging to encrypted CloudWatch Logs with 30-day retention
-- EventBridge Scheduler start/stop automation for weekday operating hours
+- EventBridge Scheduler start/stop automation for weekday operating hours. Scheduler group, role, and DLQ exist; start/stop schedules wait for the EC2 instance ID.
 
 The host uses a public IPv4 address because the initial workload needs outbound internet access for package installation, GitHub clones, container pulls, and external API calls to services such as OpenAI, Anthropic, and Google. With zero inbound security-group rules and no SSH key, public addressing gives required egress without the recurring cost of a NAT Gateway. A later phase can migrate the host into private subnets once the extra cost and operational complexity are justified.
 
@@ -192,9 +192,9 @@ Bootstrap infrastructure has been deployed from this repository:
 - Terraform plan and apply roles.
 - Terraform state access and plan read policies.
 
-The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment apply remains blocked pending plan review, default schedule acceptance or revision, and explicit human approval.
+The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment is partially applied and currently blocked by AWS account regional validation for EC2 `RunInstances` in `us-west-2`.
 
-Before a future control-plane deployment, complete the remaining readiness items in [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md), review the security model, review the start/stop runbook, and run a reviewed plan.
+Before resuming control-plane deployment, wait for AWS validation to clear, run a reviewed plan, confirm it proposes only the EC2 instance and dependent Scheduler resources, and obtain renewed explicit approval.
 
 ## Operating Model
 

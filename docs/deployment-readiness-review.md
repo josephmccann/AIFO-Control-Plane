@@ -1,12 +1,13 @@
 # Deployment Readiness Review
 
-Status: Bootstrap complete. Control-plane host deployment is not ready.
+Status: Bootstrap complete. Partial control-plane prerequisites deployed. Control-plane host deployment is blocked by AWS account regional validation.
 
 This checklist tracks bootstrap completion and the remaining gates before the first control-plane host deployment. It is not approval to deploy the host or product runtime.
 
 Merged operating-model PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
 Bootstrap status PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/3
 Last successful GitHub plan run before this PR: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29371131579
+Pre-deployment hardening PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/5
 
 ## Completed Preparation
 
@@ -50,52 +51,69 @@ Last successful GitHub plan run before this PR: https://github.com/josephmccann/
 - [x] Apply trust subject verified: `repo:josephmccann/AIFO-Control-Plane:environment:terraform-apply`.
 - [x] OIDC audience verified: `sts.amazonaws.com`.
 - [x] Apply role verified with only Terraform state access and no inline policies.
+- [x] GitHub OIDC plan-role read-policy update applied on 2026-07-14.
+- [x] Plan-role read-only verification passed.
+
+## Partial Control-Plane Apply
+
+- [x] Refreshed plan matched approval: `33 to add, 0 to change, 0 to destroy`.
+- [x] CloudTrail management-events trail created and logging enabled.
+- [x] Dedicated CloudTrail S3 log bucket created with public access blocked, versioning, encryption, lifecycle, and TLS-only policy.
+- [x] VPC, public subnet, internet gateway, route table, S3 gateway endpoint, and no-ingress security group created.
+- [x] Session Manager CloudWatch log group, KMS key, and preferences document created.
+- [x] Scheduler group, Scheduler role, and Scheduler DLQ created.
+- [ ] EC2 host created.
+- [ ] Scheduler inline policy created.
+- [ ] Scheduler start schedule created.
+- [ ] Scheduler stop schedule created.
+
+Apply stopped when EC2 `RunInstances` returned AWS `PendingVerification` for `us-west-2`. Post-failure plan: `4 to add, 0 to change, 0 to destroy`.
 
 ## Not Deployed
 
 - [ ] Control-plane EC2 host.
-- [ ] Control-plane VPC/network environment.
+- [x] Control-plane VPC/network environment.
 - [ ] Product runtime infrastructure.
-- [ ] CloudTrail Terraform resources.
-- [ ] Session Manager logging Terraform resources.
-- [ ] EventBridge Scheduler Terraform resources.
+- [x] CloudTrail Terraform resources.
+- [x] Session Manager logging Terraform resources.
+- [ ] EventBridge Scheduler start/stop schedules.
 - [ ] Apply workflow.
 
-## Required Before First Control-Plane Plan
+## Required Before Resumed Control-Plane Plan
 
 - [x] Remote state exists.
 - [x] OIDC plan role exists.
 - [x] GitHub repository variables set.
 - [x] `terraform-plan` environment exists; no manual approval required for automated planning.
 - [x] Read-only CloudTrail inspection completed; no trails were returned in `us-west-2`.
-- [ ] `manage_budget = false` confirmed unless importing budget.
-- [ ] No product runtime resources included.
-- [ ] Bootstrap plan role read-policy update reviewed if GitHub post-deployment planning is required. Current code proposes read-only additions only and does not modify the apply role.
+- [x] `manage_budget = false` confirmed unless importing budget.
+- [x] No product runtime resources included.
+- [x] Bootstrap plan role read-policy update applied; read-only verification passed and apply role was not modified.
 
-## Required Before First Apply
+## Required Before Resumed Apply
 
-- [ ] Confirm no apply workflow exists.
-- [ ] Confirm `terraform-apply` remains unused because GitHub required reviewers are unavailable on the current repository plan.
-- [ ] Apply role infrastructure permissions reviewed before any future apply workflow; current apply role must remain state-access-only.
-- [ ] Terraform plan artifact reviewed.
-- [ ] Rollback runbook current.
-- [ ] Emergency access runbook current.
-- [ ] EC2 start/stop runbook reviewed.
-- [ ] Default host instance schedule accepted or revised: 08:00-16:00 Monday-Friday in `America/Los_Angeles`.
-- [ ] Confirm first apply will occur inside the operating window or include immediate manual stop after verification.
-- [ ] Confirm Session Manager logging Terraform is included before first host apply.
-- [ ] Confirm CloudTrail management-events Terraform is included before first host apply.
-- [ ] Confirm Scheduler DLQ review path.
-- [ ] Cost impact accepted.
-- [ ] Explicit human approval recorded.
+- [x] Confirm no apply workflow exists.
+- [x] Confirm `terraform-apply` remains unused because GitHub required reviewers are unavailable on the current repository plan.
+- [x] Apply role remains state-access-only.
+- [x] Original Terraform plan artifact reviewed.
+- [x] Rollback runbook current.
+- [x] Emergency access runbook current.
+- [x] EC2 start/stop runbook reviewed.
+- [x] Default host instance schedule accepted: 08:00-16:00 Monday-Friday in `America/Los_Angeles`.
+- [x] Session Manager logging Terraform included.
+- [x] CloudTrail management-events Terraform included.
+- [x] Scheduler DLQ created.
+- [x] Initial cost impact accepted for the approved change window.
+- [x] Explicit human approval recorded for the attempted apply.
+- [ ] AWS account regional validation cleared for EC2 launch.
+- [ ] Residual Terraform plan reviewed and confirmed to contain only the EC2 instance, Scheduler inline policy, and Scheduler start/stop schedules.
+- [ ] Renewed explicit human approval recorded before any resumed apply.
 
 ## Current Blockers
 
 - GitHub required environment reviewers are unavailable on the current repository plan.
 - `terraform-apply` exists but cannot enforce reviewer protection and must remain unused.
-- Default host schedule acceptance unresolved.
-- First apply timing unresolved.
 - Apply role has no infrastructure mutation permissions by design; future permissions require review.
-- GitHub plan role read policy needs a separate approved bootstrap update before post-deployment GitHub refresh can read CloudTrail, KMS, Logs, Scheduler, SQS, and SSM resources.
 - Apply workflow intentionally absent.
 - Control-plane apply must use an authenticated IAM Identity Center session after an explicit approval packet is reviewed.
+- AWS `PendingVerification` currently blocks EC2 launch in `us-west-2`; do not retry apply until validation clears and a renewed approval gate is granted.

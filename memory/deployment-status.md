@@ -131,6 +131,7 @@ Partial control-plane resources:
 CloudTrail:
 
 - Trail exists and is logging.
+- Latest delivery succeeded at `2026-07-14T23:09:07Z`.
 - Multi-Region enabled.
 - Global service events enabled.
 - Log-file validation enabled.
@@ -169,7 +170,7 @@ Scheduler:
 - GitHub OIDC bootstrap changed exactly one approved resource: `aws_iam_policy.plan_read_access`.
 - Hardened control-plane environment is not converged; post-failure plan shows `4 to add, 0 to change, 0 to destroy`.
 - AWS account regional resource validation blocked EC2 launch in `us-west-2`.
-- CloudTrail status does not yet show a successful log delivery attempt; logging has started, but delivery success may lag initial creation.
+- CloudTrail latest delivery attempt succeeded at `2026-07-14T23:09:07Z`.
 - `terraform-plan` GitHub environment exists but has no protection rules.
 - `terraform-apply` GitHub environment exists but cannot enforce required reviewers on the current GitHub repository plan.
 - GitHub required reviewers failed with a GitHub platform limitation; do not weaken AWS OIDC trust to compensate.

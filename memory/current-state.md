@@ -95,7 +95,7 @@ Partial hardened control-plane resources:
 - Terraform post-failure plan shows `4 to add, 0 to change, 0 to destroy`.
 - Remaining resources are the EC2 instance, Scheduler inline policy, start schedule, and stop schedule.
 - No SSM managed node exists and no Session Manager connection test was possible.
-- CloudTrail logging is enabled, but latest delivery success is not yet populated immediately after trail creation.
+- CloudTrail logging is enabled and latest delivery attempt succeeded at `2026-07-14T23:09:07Z`.
 - Bootstrap Terraform state files were generated locally under ignored paths and must not be committed.
 - Always-on `m7i-flex.2xlarge` operation exceeds the $250 budget; scheduled operation is required unless a budget exception is approved.
 

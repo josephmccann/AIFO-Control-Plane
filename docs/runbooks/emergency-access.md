@@ -32,3 +32,7 @@ aws ssm start-session --target INSTANCE_ID --region us-west-2
 ```
 
 If SSM is unavailable, diagnose IAM role, SSM agent, route table, DNS, and HTTPS egress. Do not add SSH ingress.
+
+## Session Logging Guidance
+
+When Session Manager logging is enabled, assume commands and output can be retained. Do not print secrets, tokens, `.env` files, QBO credentials, product customer data, or AI provider keys in an interactive session.

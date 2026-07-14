@@ -74,6 +74,8 @@ The host uses a public IPv4 address because the initial workload needs outbound 
 
 Current AWS pricing review shows an always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget before EBS and public IPv4 are counted. See [docs/ec2-instance-recommendation.md](docs/ec2-instance-recommendation.md). Do not treat the default instance type as approval for continuous operation.
 
+The current cost model is documented in [docs/cost-model.md](docs/cost-model.md).
+
 ## Local Validation
 
 Install Terraform `>= 1.10.0`, then run:

@@ -63,8 +63,8 @@ The EC2 host baseline includes:
 Future hardening should add:
 
 - Centralized patch policy.
-- CloudWatch agent configuration.
-- Session log retention policy.
+- CloudWatch agent configuration if host metrics/logs require it.
+- Session Manager logging with short CloudWatch Logs retention, per [session-manager-logging-design.md](session-manager-logging-design.md).
 - Host-level vulnerability scanning.
 - EDR or equivalent workload protection if required.
 

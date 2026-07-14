@@ -24,6 +24,7 @@ Status: Not deployed.
 - Protected GitHub environments documented.
 - Exact human execution steps prepared.
 - EC2 instance recommendation documented against current AWS pricing.
+- Cost model documented against the $250 monthly budget.
 
 Decision gate: human approval before AWS resource creation or `terraform apply`.
 

@@ -9,6 +9,7 @@ Provide enough observability for operations, audit, cost control, and recovery w
 - No monitoring resources deployed.
 - EC2 detailed monitoring defaults to false.
 - Expected future sources: CloudTrail, SSM session history, CloudWatch logs, GitHub Actions logs, AWS Budgets.
+- Session Manager logging design recommends CloudWatch Logs with 30-day retention.
 
 ## Gaps
 
@@ -19,6 +20,6 @@ Provide enough observability for operations, audit, cost control, and recovery w
 
 ## Next Work
 
-- Design low-cost Session Manager logging.
+- Implement Session Manager logging after bootstrap approval.
 - Define log retention boundaries.
 - Document product telemetry privacy boundaries before AWS runtime.

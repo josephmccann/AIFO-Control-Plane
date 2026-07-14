@@ -4,6 +4,22 @@ Status: Not ready for deployment.
 
 This checklist prepares the first AWS bootstrap and control-plane deployment review. It is not approval to deploy.
 
+Review PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
+
+## Completed Preparation
+
+- [x] Product runtime inventory created.
+- [x] Control-plane fit assessment created.
+- [x] Founder principle traceability matrix created.
+- [x] Assumption register created.
+- [x] Execution plan created.
+- [x] PR #1 handoffs reconciled.
+- [x] ADR framework created.
+- [x] Bootstrap runbook created.
+- [x] Cost model created.
+- [x] Session Manager logging design created.
+- [x] Offline Terraform validation passed.
+
 ## Required Before Remote-State Bootstrap
 
 - [ ] AWS account ID confirmed.
@@ -33,6 +49,7 @@ This checklist prepares the first AWS bootstrap and control-plane deployment rev
 - [ ] CloudTrail status verified.
 - [ ] `manage_budget = false` confirmed unless importing budget.
 - [ ] Host instance cost decision made.
+- [ ] Decide whether Session Manager logging Terraform should be included before first host apply or immediately after.
 - [ ] No product runtime resources included.
 
 ## Required Before First Apply
@@ -52,3 +69,5 @@ This checklist prepares the first AWS bootstrap and control-plane deployment rev
 - GitHub protected environments not configured.
 - Host cost decision unresolved.
 - Apply workflow intentionally absent.
+- PR #2 not reviewed or merged.
+- PR #1 supersession decision unresolved.

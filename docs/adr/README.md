@@ -13,3 +13,4 @@ Use `0000-adr-template.md` for new records. Do not replace current-state docs or
 | [0003](0003-native-s3-terraform-locking.md) | Accepted | Use native S3 lockfiles for Terraform state locking |
 | [0004](0004-github-oidc-plan-apply-boundary.md) | Accepted | Use separate GitHub OIDC plan and apply roles scoped to protected environments |
 | [0005](0005-ec2-instance-selection.md) | Accepted | Default to `m7i-flex.2xlarge` only as the best x86 8 vCPU / 32 GiB candidate, with budget caveat |
+| [0006](0006-session-manager-logging.md) | Accepted for design | Use CloudWatch Logs with short retention for initial Session Manager logging design |

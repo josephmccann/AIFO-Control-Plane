@@ -4,6 +4,7 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Ignored stopped-state Terraform drift for the EC2 host auto-assigned public IPv4 address to avoid replacing the scheduled SSM-only host after approved stop/start cycles.
 - Applied the GitHub OIDC plan-role read-policy update after approval; the apply role remains state-access-only.
 - Recorded the partial hardened control-plane apply attempt blocked by AWS `PendingVerification` during EC2 launch.
 - Documented the created CloudTrail, Session Manager logging, network, IAM, Scheduler group, and Scheduler DLQ resources, plus remaining unapplied EC2 and Scheduler schedule resources.

@@ -154,6 +154,13 @@ resource "aws_instance" "host" {
   })
 
   lifecycle {
+    ignore_changes = [
+      # EC2 reports false while stopped because the auto-assigned public IPv4
+      # is released. The next start assigns a new public IPv4; do not replace
+      # the scheduled SSM-only host for this stopped-state observation.
+      associate_public_ip_address,
+    ]
+
     precondition {
       condition     = var.root_volume_size_gb >= 50
       error_message = "The control-plane host root volume must be at least 50 GiB."

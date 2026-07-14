@@ -44,6 +44,24 @@ variable "enable_detailed_monitoring" {
   default     = false
 }
 
+variable "session_manager_logging_enabled" {
+  type        = bool
+  description = "Whether to attach permissions required for Session Manager CloudWatch/KMS logging."
+  default     = false
+}
+
+variable "session_manager_log_group_arn" {
+  type        = string
+  description = "CloudWatch Logs log group ARN for Session Manager logs."
+  default     = null
+}
+
+variable "session_manager_kms_key_arn" {
+  type        = string
+  description = "KMS key ARN used for Session Manager data and log encryption."
+  default     = null
+}
+
 variable "tags" {
   type        = map(string)
   description = "Tags applied to compute resources."

@@ -44,6 +44,13 @@ Review the plan for:
 - no NAT Gateway;
 - no interface endpoints;
 - `manage_budget = false` unless importing the budget deliberately.
+- CloudTrail management-events trail with no data event selectors.
+- Dedicated CloudTrail S3 bucket with encryption, public access blocked, lifecycle retention, and CloudTrail-only write policy.
+- Session Manager CloudWatch log group with KMS encryption and 30-day retention.
+- `SSM-SessionManagerRunShell` preferences document.
+- EventBridge Scheduler start and stop schedules scoped to the single EC2 instance.
+- Scheduler DLQ and retry policy.
+- No apply workflow or apply-role mutation permissions.
 
 ## Apply Boundary
 
@@ -57,3 +64,9 @@ terraform -chdir=terraform/environments/control-plane apply -input=false
 ```
 
 The reviewed plan must be regenerated immediately before apply and must match the approved resource set.
+
+## First Host Deployment Operating Posture
+
+Create the host running, not immediately stopped, so cloud-init, SSM registration, Session Manager logging, and emergency access can be verified before handing the host to the schedule.
+
+To avoid accidental continuous billing, schedule the first apply inside the 08:00-16:00 Monday-Friday `America/Los_Angeles` operating window. If the apply must happen outside that window, run the manual stop command in [ec2-start-stop.md](ec2-start-stop.md) immediately after verification.

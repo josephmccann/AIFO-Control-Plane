@@ -22,6 +22,9 @@ The current 8 vCPU / 32 GiB host target is not compatible with continuous 24/7 O
 | Public IPv4 | $0.005/hour while assigned | AWS VPC pricing |
 | gp3 storage | $0.08/GB-month | AWS EBS pricing |
 | S3 Standard storage | $0.0265/GB-month for first 50 TB in us-west-2 | AWS S3 pricing |
+| KMS customer-managed key | $1.00/key-month | AWS KMS pricing |
+| EventBridge Scheduler | 14 million invocations/month free tier, then $1.00/million | AWS EventBridge pricing |
+| SQS Standard | 1 million requests/month free tier | AWS SQS pricing |
 
 Sources:
 
@@ -29,6 +32,9 @@ Sources:
 - AWS VPC pricing: https://aws.amazon.com/vpc/pricing/
 - AWS EBS pricing: https://aws.amazon.com/ebs/pricing/
 - AWS S3 pricing: https://aws.amazon.com/s3/pricing/
+- AWS KMS pricing: https://aws.amazon.com/kms/pricing/
+- AWS EventBridge pricing: https://aws.amazon.com/eventbridge/pricing/
+- AWS SQS pricing: https://aws.amazon.com/sqs/pricing/
 
 ## Baseline Monthly Scenarios
 
@@ -50,6 +56,21 @@ Assumptions:
 | `m7a.2xlarge`, always on | 730 | $338.49 | $3.65 | $8.00 | $350.14 | Over by $100.14 before other costs |
 | `m8g.2xlarge`, always on | 730 | $262.10 | $3.65 | $8.00 | $273.75 | Over by $23.75 before other costs and Arm validation |
 | `m7i-flex.xlarge`, always on | 730 | $139.81 | $3.65 | $8.00 | $151.46 | Under, but below target capacity |
+
+## Pre-Deployment Hardening Costs
+
+The audit and operating-control baseline adds small fixed or usage-based costs:
+
+| Item | Monthly estimate | Notes |
+| --- | ---: | --- |
+| CloudTrail management events | $0.00 for first management-event copy | S3 storage and requests still apply |
+| CloudTrail S3 log storage | Less than $1 expected initially | Depends on API volume; 365-day lifecycle limits growth |
+| Session Manager KMS key | $1.00 | One customer-managed key for session data and log group encryption |
+| Session Manager CloudWatch Logs | Usage-based, expected less than $1 initially | 30-day retention; operator shell output volume drives cost |
+| EventBridge Scheduler | $0.00 expected | Two recurring schedules are far below free tier |
+| Scheduler SQS DLQ | $0.00 expected | Only failed invocations create messages; free tier expected |
+
+Expected added monthly cost before heavy session logging is approximately `$1-$3`, dominated by the KMS key and small log storage/ingestion.
 
 ## Operating Schedules
 
@@ -92,6 +113,7 @@ The most cost-disciplined initial path is:
 | Continuous 8 vCPU / 32 GiB operation exceeds budget | Critical | Human cost decision before apply |
 | Data transfer is excluded | Medium | Review after first plan and before product runtime |
 | CloudWatch Logs can grow with session or application logs | Medium | Add retention limits before enabling logs |
+| KMS key adds fixed monthly cost | Low | Use one key and review need before adding more keys |
 | Public IPv4 costs are small but recurring | Low | Remove public IPv4 when private egress is justified |
 | EBS snapshots and unattached volumes can accumulate | Medium | Add backup lifecycle policy before snapshots |
 

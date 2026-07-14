@@ -14,3 +14,17 @@ monthly_budget_usd           = 250
 budget_notification_emails   = []
 enable_termination_protection = true
 enable_detailed_monitoring    = false
+
+cloudtrail_log_retention_days                = 365
+cloudtrail_noncurrent_version_retention_days = 30
+
+session_manager_log_group_name              = "/aifo/control-plane/session-manager"
+session_manager_log_retention_days          = 30
+session_manager_kms_deletion_window_days    = 30
+
+ec2_schedule_enabled                      = true
+ec2_schedule_timezone                     = "America/Los_Angeles"
+ec2_start_schedule_expression             = "cron(0 8 ? * MON-FRI *)"
+ec2_stop_schedule_expression              = "cron(0 16 ? * MON-FRI *)"
+ec2_schedule_maximum_retry_attempts       = 3
+ec2_schedule_maximum_event_age_in_seconds = 3600

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for design; not implemented.
+Accepted for first control-plane deployment
 
 ## Current Product Requirement Supported
 
@@ -18,11 +18,12 @@ Principles 1, 6, 7, 14, 18, and 20: trust, preserved state of knowledge, decisio
 - AWS documents CloudWatch Logs and S3 as session log destinations.
 - AWS notes that logging is not available for Session Manager sessions that connect through port forwarding or SSH.
 - The current control-plane host is not a product runtime and should not handle customer data yet.
+- Read-only inspection on 2026-07-14 found no existing `SSM-SessionManagerRunShell` account preferences document in `us-west-2`.
 
 ## Assumptions
 
 - 30-day CloudWatch retention is sufficient for initial troubleshooting and audit. Confidence: medium.
-- Customer-managed KMS is not required before customer data or compliance commitments exist. Confidence: medium.
+- Customer-managed KMS is justified for explicit encrypted log group and session-data encryption before first host deployment. Confidence: medium.
 
 ## Unknowns
 
@@ -40,7 +41,7 @@ Principles 1, 6, 7, 14, 18, and 20: trust, preserved state of knowledge, decisio
 
 ## Decision
 
-Design the initial Session Manager logging path around CloudWatch Logs with 30-day retention. Defer S3 duplication and customer-managed KMS until a compliance, customer, or product-runtime requirement justifies the added retention and key-management burden.
+Implement the initial Session Manager logging path with CloudWatch Logs, 30-day retention, a customer-managed KMS key for the log group and Session Manager session data, and no S3 session-log duplication.
 
 ## Why This Decision Is Appropriate Now
 
@@ -50,14 +51,14 @@ It provides an audit trail for administrative sessions while minimizing retained
 
 - No session logging.
 - CloudWatch Logs plus S3 archive.
-- CloudWatch Logs with customer-managed KMS from day one.
+- CloudWatch Logs without a customer-managed KMS key.
 - SSH-over-SSM.
 
 ## Why Alternatives Were Rejected Or Deferred
 
 - No logging weakens auditability.
 - S3 archive increases retention risk and operational burden before retention requirements are known.
-- Customer-managed KMS adds policy complexity and monthly cost before there is a defined requirement.
+- CloudWatch Logs without a customer-managed KMS key would not satisfy the explicit encrypted log group requirement as strongly.
 - SSH-over-SSM is not the normal path because AWS documents logging limitations for SSH and port forwarding sessions.
 
 ## Security Effects
@@ -74,7 +75,7 @@ CloudWatch Logs availability becomes part of the audit path, not the host access
 
 ## Cost Effects
 
-CloudWatch Logs cost depends on ingestion and storage. Short retention reduces accumulation. S3 archive and customer-managed KMS monthly costs are deferred.
+CloudWatch Logs cost depends on ingestion and storage. Short retention reduces accumulation. The customer-managed KMS key adds approximately $1/month plus any chargeable KMS requests. S3 archive costs are deferred.
 
 ## Operational Burden
 
@@ -102,7 +103,7 @@ Retention, destination, and KMS choices can be changed through Terraform before 
 
 ## Rollback Or Migration Path
 
-Disable Session Manager logging preferences, reduce retention, add S3 archive, or add KMS encryption through a reviewed Terraform change.
+Disable Session Manager logging preferences, reduce retention, add S3 archive, or change KMS configuration through a reviewed Terraform change.
 
 ## Evidence That Would Cause Reconsideration
 

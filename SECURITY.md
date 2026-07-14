@@ -62,16 +62,19 @@ AI.FO works with accounting data, QBO connections, AI prompts, verification, tel
 - The apply role has only Terraform state access and no infrastructure mutation permissions.
 - No apply workflow exists or may be created under the current GitHub approval limitation.
 - Product runtime secrets, database, and storage are not yet provisioned in AWS.
+- Current branch proposes CloudTrail management-event logging, Session Manager CloudWatch logging with KMS encryption, and EventBridge Scheduler start/stop automation before the first host deployment. These resources are not deployed until an explicit apply approval is granted.
 
 ## Required Pre-Deployment Review
 
 Before any control-plane apply:
 
-- verify CloudTrail status;
+- verify the proposed CloudTrail trail, log bucket, lifecycle, and log-file validation settings;
 - verify the AWS account ID and region;
 - review Terraform plan output;
 - confirm remote-state bucket name and lockfile behavior;
 - confirm EC2 schedule and cost against the $250 budget;
+- confirm Session Manager logging retention and sensitive-output limitations;
+- confirm Scheduler start/stop targets only the Terraform-managed host;
 - confirm no public ingress rules are introduced;
 - confirm rollback and emergency access runbooks are current.
 - apply only with an authenticated IAM Identity Center session after an explicit approval packet.

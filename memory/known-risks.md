@@ -8,4 +8,5 @@
 | High | Public IPv4 host has no ingress but still has internet-routable address | Zero SG ingress, SSM-only, IMDSv2 | Review private subnet migration later |
 | Medium | 100 GiB root volume can fill if Docker/model caches are not pruned | Start/stop runbook includes disk hygiene; root volume configurable | Measure disk usage after deployment |
 | Medium | Product PR #186 may change connector infrastructure requirements | Labeled as near-term, not baseline | Re-review after merge |
-| Medium | Current control-plane has no Session Manager log retention design | Runbook notes future work | Add monitoring work item |
+| Medium | Session Manager transcript logging can capture sensitive terminal output | CloudWatch Logs retention is 30 days; S3 duplication omitted; runbooks warn operators | Review after first sessions and before handling customer data |
+| Low | Scheduler stop action can interrupt active work at 16:00 Pacific | Manual override documented; next scheduled stop still applies | Use manual stop/start consciously and adjust schedule through Terraform if the working pattern changes |

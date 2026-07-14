@@ -2,12 +2,12 @@
 
 | ID | Decision | Owner | Needed By | Blocking |
 | --- | --- | --- | --- | --- |
-| OD-004 | Choose the first host operating schedule or approve a budget exception | Human + Infrastructure | Before first apply | Yes |
+| OD-004 | Accept the default first host operating schedule or approve an alternative/budget exception | Human + Infrastructure | Before first apply | Yes |
 | OD-005 | Decide whether product runtime moves to AWS and when | Human + Product + Infrastructure | Before product hosting design | Yes |
 | OD-006 | Decide AWS product database architecture | Product + Infrastructure | Before AWS product runtime | Yes |
 | OD-007 | Decide whether to retain Cloudflare R2 or migrate uploads to S3 | Product + Infrastructure | Before AWS product runtime | Yes |
 | OD-008 | Decide product secrets manager and rotation model | Product + Infrastructure | Before AWS product runtime | Yes |
-| OD-011 | Approve control-plane environment apply | Human + Infrastructure | After reviewed plan and cost decision | Yes |
+| OD-011 | Approve hardened control-plane environment apply | Human + Infrastructure | After reviewed plan, cost acceptance, and schedule acceptance | Yes |
 | OD-012 | Decide whether to upgrade GitHub plan or choose another approval boundary for future apply automation | Human + Infrastructure | Before any apply workflow exists | Yes |
 
 ## Recently Resolved

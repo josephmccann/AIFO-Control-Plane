@@ -36,6 +36,11 @@ flowchart TD
     TerraformPlan --> Lock[(S3 .tflock lockfile)]
 
     subgraph AWS[AWS us-west-2]
+        CloudTrail[CloudTrail management events]
+        TrailBucket[(Encrypted CloudTrail S3 bucket)]
+        SessionLogs[(Encrypted Session Manager log group)]
+        Scheduler[EventBridge Scheduler]
+        SchedulerDLQ[(SQS DLQ)]
         VPC[VPC]
         PublicSubnet[Public subnet]
         IGW[Internet Gateway]
@@ -50,6 +55,10 @@ flowchart TD
     PublicSubnet --> S3Endpoint
     Host --> InstanceRole
     Host --> External[GitHub, registries, package mirrors, external APIs]
+    Host --> SessionLogs
+    Scheduler --> Host
+    Scheduler --> SchedulerDLQ
+    CloudTrail --> TrailBucket
 ```
 
 ## Network
@@ -84,6 +93,8 @@ The control-plane host is modeled as a single Ubuntu EC2 instance:
 - Encrypted GP3 root volume
 - Termination protection enabled by default
 - Detailed monitoring disabled by default until monitoring requirements justify it
+- Session Manager session logging enabled through account preferences
+- EventBridge Scheduler starts the host at 08:00 and stops it at 16:00 Monday-Friday in `America/Los_Angeles`
 
 Instance type candidates pending pricing and availability verification:
 
@@ -108,6 +119,22 @@ Bootstrap Terraform defines:
 Both GitHub Actions roles trust only the exact repository and GitHub environment subject. GitHub required environment reviewers are unavailable on the current repository plan, so the `terraform-apply` environment exists but must remain unused. No apply workflow may be created until reviewer protection is available or a replacement approval boundary is accepted.
 
 Until then, a control-plane apply must be run only from an authenticated IAM Identity Center session after a reviewed approval packet.
+
+## Audit And Operations
+
+The first deployable control-plane plan now includes:
+
+- Multi-Region CloudTrail trail for management events only.
+- CloudTrail log-file validation enabled.
+- Dedicated S3 bucket for CloudTrail logs with server-side encryption, versioning, public access blocked, TLS-only access, CloudTrail-only writes, and 365-day lifecycle expiration.
+- No CloudTrail data events.
+- CloudWatch Logs group for Session Manager session logs with customer-managed KMS encryption and 30-day retention.
+- SSM Session Manager preferences document `SSM-SessionManagerRunShell`.
+- EC2 instance-role inline policy permitting session log writes and use of the Session Manager KMS key.
+- EventBridge Scheduler schedules for host start/stop, scoped to the single instance ARN.
+- Scheduler dead-letter queue with SQS-managed encryption and 14-day message retention.
+
+The EC2 host is created running for first-session verification. Terraform does not manage a permanent stopped state because that would conflict with the approved operating schedule and routine daytime plans. The first apply should be scheduled inside the approved operating window; if deployment occurs outside it, the operator must stop the instance manually after verification.
 
 ## Terraform State
 
@@ -134,6 +161,9 @@ Cost-sensitive design choices:
 - Root volume defaults are explicit and configurable.
 - Detailed EC2 monitoring defaults to disabled.
 - The example root volume is 100 GiB gp3.
+- CloudTrail logs expire after 365 days.
+- Session Manager logs expire after 30 days.
+- Session Manager uses one customer-managed KMS key; this is a deliberate fixed cost for explicit encryption and auditability.
 
 Operating schedules for the default host:
 

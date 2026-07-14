@@ -8,6 +8,7 @@
 - Use Session Manager instead of SSH.
 - Keep Terraform state and plans out of source control.
 - Make cost and blast radius visible before deployment.
+- Capture management-plane audit evidence before the first host is deployed.
 
 ## Identity and Access
 
@@ -61,12 +62,19 @@ The EC2 host baseline includes:
 - SSM managed instance role.
 - Session Manager as the administrative access path.
 - Cloud-init rewrite of Ubuntu package sources from HTTP to HTTPS where applicable.
+- Session Manager session logging to encrypted CloudWatch Logs.
+- Instance-role permissions for only the configured Session Manager log group and KMS key.
+
+Implemented pre-deployment hardening adds:
+
+- Multi-Region CloudTrail management events with log-file validation.
+- Dedicated encrypted S3 bucket for CloudTrail logs with 365-day lifecycle expiration.
+- EventBridge Scheduler start/stop automation scoped to the single host.
 
 Future hardening should add:
 
 - Centralized patch policy.
 - CloudWatch agent configuration if host metrics/logs require it.
-- Session Manager logging with short CloudWatch Logs retention, per [session-manager-logging-design.md](session-manager-logging-design.md).
 - Host-level vulnerability scanning.
 - EDR or equivalent workload protection if required.
 
@@ -106,9 +114,10 @@ Expected audit sources:
 - AWS CloudTrail for IAM, STS, EC2, SSM, and Terraform activity
 - GitHub Actions logs for plan workflow execution
 - Session Manager session history
-- CloudWatch Logs for future Session Manager stream output
+- CloudWatch Logs for Session Manager stream output
+- EventBridge Scheduler and SQS DLQ state for scheduled start/stop failures
 
-CloudTrail organization or account-level configuration should be verified before first deployment.
+CloudTrail is implemented as an account-level multi-Region trail. An organization trail is deferred until AWS Organizations scope is confirmed.
 
 ## Product Data Boundary
 
@@ -126,10 +135,14 @@ The current control plane does not host product runtime or customer data. Future
 | State exposure | S3 backend with encryption, versioning, and lockfiles |
 | Credential leakage | `.gitignore`, no long-lived keys, no committed secrets |
 | Unbounded spend | Manual AWS budget already exists; Terraform import path documented |
+| Missing activity audit | Multi-Region CloudTrail management events and Session Manager logging |
+| Forgotten host runtime | EventBridge Scheduler start/stop plus manual override runbook |
 
 ## Pre-Deployment Security Checklist
 
-- Confirm CloudTrail is enabled.
+- Confirm CloudTrail management trail is in the reviewed plan.
+- Confirm Session Manager log group, KMS key, and preferences document are in the reviewed plan.
+- Confirm EventBridge Scheduler start/stop targets only the control-plane host.
 - Confirm remote-state bucket and GitHub OIDC bootstrap verification.
 - Confirm `terraform-apply` remains unused while required reviewers are unavailable.
 - Confirm `AWS_TERRAFORM_PLAN_ROLE_ARN`, `TF_BACKEND_BUCKET`, and `TF_BACKEND_KEY` repository variables.

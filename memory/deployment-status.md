@@ -4,7 +4,7 @@
 
 Remote-state and GitHub OIDC bootstrap are complete in AWS account `350480401760`.
 
-No control-plane EC2 host, product runtime resources, CloudTrail resources, apply workflow, or additional apply-role permissions have been created.
+No control-plane EC2 host, product runtime resources, CloudTrail resources, Session Manager logging resources, EventBridge Scheduler resources, apply workflow, or additional apply-role permissions have been created.
 
 GitHub planning configuration is complete:
 
@@ -16,7 +16,7 @@ GitHub planning configuration is complete:
 
 ## Last Validated State
 
-Pre-bootstrap validation passed on 2026-07-14:
+Bootstrap validation passed on 2026-07-14:
 
 - `PATH="$PWD/build/bin:$PATH" AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 ./scripts/validate.sh`
 - Refreshed remote-state plan produced only approved creates: `6 to add, 0 to change, 0 to destroy`.
@@ -24,6 +24,10 @@ Pre-bootstrap validation passed on 2026-07-14:
 - Post-apply remote-state plan exit code: `0`.
 - Post-apply GitHub OIDC plan exit code: `0`.
 - First GitHub control-plane plan run succeeded: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29371131579.
+
+The current pre-deployment hardening branch proposes additional first-deployment resources for CloudTrail, Session Manager logging, and EventBridge Scheduler. Those resources have not been applied.
+
+The branch also proposes a bootstrap OIDC update for the GitHub plan role read-only policy so future post-deployment plans can refresh the new CloudTrail, KMS, Logs, Scheduler, SQS, and SSM resources. This is not an apply-role permission change and has not been applied.
 
 Skipped:
 
@@ -87,10 +91,12 @@ OIDC and IAM:
 
 - No Terraform drift detected for the two bootstrap roots after apply.
 - CloudTrail was not changed; read-only inspection returned no trails in `us-west-2`.
+- Session Manager logging was not changed; read-only inspection returned no existing `SSM-SessionManagerRunShell` account preference document and no existing `/aifo/control-plane/session-manager` log group.
 - `terraform-plan` GitHub environment exists but has no protection rules.
 - `terraform-apply` GitHub environment exists but cannot enforce required reviewers on the current GitHub repository plan.
 - GitHub required reviewers failed with a GitHub platform limitation; do not weaken AWS OIDC trust to compensate.
 - Bootstrap Terraform state exists locally under ignored paths; do not commit local state or plan files.
+- The GitHub plan role read-only policy update is pending separate approval; until applied, post-deployment GitHub plan refresh may lack read permissions for the new hardening resources.
 
 ## External Resources Known To Exist
 
@@ -112,12 +118,13 @@ The manual AWS Budget is not imported into Terraform state.
 
 ## Next Deployment Gate
 
-Review the revised cost-aligned plan and approve or reject a scheduled manual control-plane apply.
+Review the revised pre-deployment hardening plan and approve or reject a supervised local control-plane apply.
 
 Required next actions:
 
-1. Confirm the revised plan proposes 14 additions, 0 changes, 0 destroys, and a 100 GiB gp3 root volume.
-2. Choose the initial operating schedule, preferably 8 hours per weekday.
+1. Confirm the revised plan proposes the hardened first-deployment resources with no destroys.
+2. Accept or revise the default operating schedule: 08:00-16:00 Monday-Friday in `America/Los_Angeles`.
 3. Review the EC2 start/stop runbook.
-4. Create `terraform/environments/control-plane/backend.hcl` locally from the example when running local plans.
-5. Do not run the control-plane environment apply until a separate approval gate.
+4. Review whether to apply the read-only GitHub plan role policy update before or with the first host deployment approval packet.
+5. Create `terraform/environments/control-plane/backend.hcl` locally from the example when running local plans.
+6. Do not run the control-plane environment apply until a separate approval gate.

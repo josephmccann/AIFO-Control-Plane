@@ -4,9 +4,9 @@ Date: 2026-07-14
 
 ## Recommendation
 
-For the initial control-plane host, use CloudWatch Logs for Session Manager logging with a 30-day retention period. Do not enable S3 session log duplication or a customer-managed KMS key in the first version unless a compliance review requires it.
+For the initial control-plane host, use CloudWatch Logs for Session Manager logging with a 30-day retention period and a customer-managed KMS key. Do not enable S3 session log duplication in the first version unless a compliance review requires it.
 
-This is a design recommendation only. No logging resources have been created.
+This design is implemented in Terraform but has not been applied.
 
 ## Rationale
 
@@ -27,24 +27,25 @@ The privacy risk is that shell transcripts can contain sensitive command output 
 | Log group | `/aifo/control-plane/session-manager` |
 | Retention | 30 days |
 | S3 logging | Disabled initially |
-| Customer-managed KMS key | Deferred |
+| Customer-managed KMS key | Enabled |
 | SSH-over-SSM logging | Do not use SSH-over-SSM as the normal path because AWS notes logging limitations for SSH/port forwarding sessions |
 
 ## Why Not S3 Initially
 
 S3 is useful for longer retention and immutable archive patterns. It is deferred because the current host is not a product runtime, logs may contain sensitive operator output, and CloudWatch with short retention is enough for the first control-plane host.
 
-## Why Not Customer-Managed KMS Initially
+## Why Customer-Managed KMS Now
 
-CloudWatch Logs provides encryption at rest by default. A customer-managed KMS key adds policy management, key recovery, and monthly key cost. Use a customer-managed key later if customer, compliance, or security review requires stronger key separation.
+CloudWatch Logs provides encryption at rest by default. A customer-managed KMS key adds policy management, key recovery, and monthly key cost, but it is justified here because the deployment requirement calls for an encrypted log group and the first host should be auditable before deployment.
 
 ## Terraform Implementation Path
 
-Future implementation should add:
+The Terraform implementation adds:
 
 - CloudWatch log group with retention.
 - SSM Session Manager preferences document.
-- IAM permissions for the instance role and human operators if KMS is introduced.
+- KMS key for the log group and Session Manager session data.
+- IAM permissions for the instance role to write session logs and use the KMS key.
 - Runbook steps to verify logs after the first approved session.
 
 Do not implement this with ad hoc console edits except as an explicitly documented emergency change.

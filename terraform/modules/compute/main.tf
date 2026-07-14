@@ -27,6 +27,47 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+data "aws_iam_policy_document" "session_manager_logging" {
+  count = var.session_manager_logging_enabled ? 1 : 0
+
+  statement {
+    sid = "DescribeCloudWatchLogsForSessionManager"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "WriteSessionLogs"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+    resources = ["${var.session_manager_log_group_arn}:*"]
+  }
+
+  statement {
+    sid = "UseSessionManagerKmsKey"
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey",
+      "kms:Encrypt",
+      "kms:GenerateDataKey*",
+    ]
+    resources = [var.session_manager_kms_key_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "session_manager_logging" {
+  count = var.session_manager_logging_enabled ? 1 : 0
+
+  name   = "${var.name_prefix}-session-manager-logging"
+  role   = aws_iam_role.host.id
+  policy = data.aws_iam_policy_document.session_manager_logging[0].json
+}
+
 resource "aws_iam_instance_profile" "host" {
   name = "${var.name_prefix}-ec2-profile"
   role = aws_iam_role.host.name
@@ -116,6 +157,14 @@ resource "aws_instance" "host" {
     precondition {
       condition     = var.root_volume_size_gb >= 50
       error_message = "The control-plane host root volume must be at least 50 GiB."
+    }
+
+    precondition {
+      condition = (
+        !var.session_manager_logging_enabled ||
+        (var.session_manager_log_group_arn != null && var.session_manager_kms_key_arn != null)
+      )
+      error_message = "Session Manager logging requires session_manager_log_group_arn and session_manager_kms_key_arn."
     }
   }
 }

@@ -6,6 +6,14 @@ This runbook applies only after the control-plane EC2 host has been deployed thr
 
 The default `m7i-flex.2xlarge` host is cost-approved only for scheduled operation under the current $250 monthly budget. Stopping the host outside the approved work window reduces compute and auto-assigned public IPv4 charges while retaining EBS storage charges.
 
+Terraform defines EventBridge Scheduler automation for the default operating window:
+
+- Start: 08:00 Monday-Friday.
+- Stop: 16:00 Monday-Friday.
+- Time zone: `America/Los_Angeles`.
+- Target: only the Terraform-managed control-plane instance ID.
+- Failed invocations: Scheduler retry policy plus SQS dead-letter queue.
+
 ## Preconditions
 
 - Control-plane host exists.
@@ -28,6 +36,8 @@ aws ec2 describe-instances \
 ```
 
 ## Start
+
+Use this command as the emergency override to start the instance outside the normal schedule:
 
 ```bash
 aws ec2 start-instances \
@@ -62,6 +72,8 @@ aws ssm start-session \
 ```
 
 ## Stop
+
+Use this command as the emergency override to stop the instance outside the normal schedule.
 
 Before stopping:
 
@@ -98,13 +110,34 @@ aws ec2 wait instance-stopped \
 
 Do not use forced stop unless the instance is stuck and data-integrity risk has been accepted.
 
+## Manual Override Interaction With The Schedule
+
+Manual starts and stops do not disable EventBridge Scheduler.
+
+- If the host is manually started outside the 08:00-16:00 weekday window, the next scheduled stop still stops it.
+- If the host is manually stopped during the weekday operating window, the next scheduled start is the next matching weekday at 08:00.
+- If emergency work extends beyond 16:00, expect the scheduled stop to run. Start the instance again manually only if the work remains approved.
+- If the schedule must be suspended for incident work, change `ec2_schedule_enabled = false` in Terraform and apply only after explicit approval.
+- Because the stop schedule is Monday-Friday, a weekend manual start must be paired with a manual stop when emergency work ends.
+
 ## Approved Manual Schedules
 
 | Schedule | Start | Stop | Time zone | Estimated monthly cost |
 | --- | --- | --- | --- | ---: |
-| 8 hours per weekday | 09:00 Monday-Friday | 17:00 Monday-Friday | America/Los_Angeles | $76.30 |
+| 8 hours per weekday | 08:00 Monday-Friday | 16:00 Monday-Friday | America/Los_Angeles | $76.30 |
 | 12 hours per day | 08:00 daily | 20:00 daily | America/Los_Angeles | $149.64 |
 | Always on | N/A | N/A | N/A | $291.27, not approved under the current budget |
+
+## Initial Deployment State
+
+The host should be created running during the first approved apply so cloud-init and SSM connectivity can be verified immediately. Do not add Terraform-managed permanent stopped state for this host; it conflicts with the operating schedule and would make routine daytime Terraform plans attempt to stop the instance.
+
+To avoid accidental continuous billing:
+
+1. Run the first apply inside the approved weekday operating window when practical.
+2. Verify SSM access and Session Manager logging.
+3. Confirm EventBridge Scheduler start/stop schedules exist and are enabled.
+4. If the apply occurs outside the operating window, stop the instance manually after verification.
 
 ## Disk Hygiene
 

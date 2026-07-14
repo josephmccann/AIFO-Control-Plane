@@ -35,8 +35,9 @@ AI.FO is led by a solo founder. The company needs leverage, not unnecessary oper
 - `AIFO-Platform-Admin` is assigned for human administration.
 - Manual monthly AWS budget exists at $250.
 - Private GitHub repository exists.
-- Terraform scaffold exists and has passed earlier offline validation.
-- No deployment has occurred.
+- Terraform bootstrap infrastructure has been deployed for remote state and GitHub OIDC after explicit approval.
+- The control-plane host and product runtime have not been deployed.
+- A pre-deployment hardening PR proposes CloudTrail, Session Manager logging, and automated EC2 scheduling before the first host deployment.
 
 ## Decision Discipline
 
@@ -56,4 +57,4 @@ Every material infrastructure decision must record:
 
 ## Current Company-Level Risk
 
-The largest immediate infrastructure risk is spending founder time and budget on systems that do not yet support the working product or design-partner path. The second-largest risk is under-documenting security and operational boundaries before additional AWS resources, the control-plane host, or product runtime are created.
+The largest immediate infrastructure risk is accidental ongoing cost from an 8 vCPU / 32 GiB control-plane host running continuously. The second-largest risk is deploying the host before audit, Session Manager logging, and operating-schedule controls are reviewed. Product runtime infrastructure remains deferred until the product deployment scope is explicitly approved.

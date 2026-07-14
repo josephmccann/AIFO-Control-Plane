@@ -24,24 +24,23 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-024 | Merge PR #2 | Squash-merged at `6f8064b9de3aaa0f099013170c3c007e41fd266f` | Done |
 | WQ-025 | Close or supersede PR #1 | Closed as superseded | Done |
 | WQ-026 | Configure GitHub environments and repository variables | Environments and variables configured; first plan succeeded through OIDC | Done; required reviewers unavailable for `terraform-apply` |
+| WQ-027 | Align root volume cost model and deployment controls | GitHub plan reviewed in PR #4 | Done |
 
 ## In Progress
 
 | ID | Work Item | Validation | Notes |
 | --- | --- | --- | --- |
-| WQ-027 | Align root volume cost model and deployment controls | Local validation and GitHub plan required | This PR |
+| WQ-029 | Add pre-deployment audit controls | Local validation and GitHub plan required | This PR |
 
 ## Blocked
 
 | ID | Work Item | Blocker | Recommendation |
 | --- | --- | --- | --- |
-| WQ-022 | First control-plane apply | Requires state, OIDC, plan review, cost decision, and human approval | Do not apply yet |
+| WQ-022 | First hardened control-plane apply | Requires reviewed plan, cost acceptance, default schedule acceptance, and human approval | Do not apply yet |
 | WQ-023 | Product runtime hosting | Requires product migration decision and spending approval | Defer |
-| WQ-014 | Implement Session Manager logging Terraform | Requires logging cost review and explicit approval to modify AWS | Implement after first-plan readiness is complete |
-| WQ-028 | Add EventBridge Scheduler start/stop automation | Requires deployed host, selected schedule, IAM review, and apply approval | Prepare after first host deployment |
 
 ## Next
 
-- Review revised control-plane plan.
-- Select initial schedule.
+- Review revised hardened control-plane plan.
+- Accept or revise the default 08:00-16:00 Monday-Friday schedule.
 - Decide whether to approve first local IAM Identity Center apply.

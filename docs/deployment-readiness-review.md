@@ -20,6 +20,9 @@ Last successful GitHub plan run before this PR: https://github.com/josephmccann/
 - [x] Bootstrap runbook created.
 - [x] Cost model created.
 - [x] Session Manager logging design created.
+- [x] CloudTrail management-events baseline designed and implemented in Terraform.
+- [x] Session Manager logging implemented in Terraform.
+- [x] EventBridge Scheduler start/stop automation implemented in Terraform.
 - [x] Offline Terraform validation passed.
 - [x] GitHub plan workflow configured.
 - [x] PR #2 squash-merged to `main`.
@@ -53,9 +56,10 @@ Last successful GitHub plan run before this PR: https://github.com/josephmccann/
 - [ ] Control-plane EC2 host.
 - [ ] Control-plane VPC/network environment.
 - [ ] Product runtime infrastructure.
+- [ ] CloudTrail Terraform resources.
 - [ ] Session Manager logging Terraform resources.
+- [ ] EventBridge Scheduler Terraform resources.
 - [ ] Apply workflow.
-- [ ] EventBridge Scheduler start/stop automation.
 
 ## Required Before First Control-Plane Plan
 
@@ -63,9 +67,10 @@ Last successful GitHub plan run before this PR: https://github.com/josephmccann/
 - [x] OIDC plan role exists.
 - [x] GitHub repository variables set.
 - [x] `terraform-plan` environment exists; no manual approval required for automated planning.
-- [ ] CloudTrail status accepted or remediated; read-only inspection returned no trails in `us-west-2`.
+- [x] Read-only CloudTrail inspection completed; no trails were returned in `us-west-2`.
 - [ ] `manage_budget = false` confirmed unless importing budget.
 - [ ] No product runtime resources included.
+- [ ] Bootstrap plan role read-policy update reviewed if GitHub post-deployment planning is required. Current code proposes read-only additions only and does not modify the apply role.
 
 ## Required Before First Apply
 
@@ -76,8 +81,11 @@ Last successful GitHub plan run before this PR: https://github.com/josephmccann/
 - [ ] Rollback runbook current.
 - [ ] Emergency access runbook current.
 - [ ] EC2 start/stop runbook reviewed.
-- [ ] Host instance schedule selected; `m7i-flex.2xlarge` is approved only for scheduled operation under the current $250 budget.
-- [ ] Decide whether Session Manager logging Terraform should be included before first host apply or immediately after.
+- [ ] Default host instance schedule accepted or revised: 08:00-16:00 Monday-Friday in `America/Los_Angeles`.
+- [ ] Confirm first apply will occur inside the operating window or include immediate manual stop after verification.
+- [ ] Confirm Session Manager logging Terraform is included before first host apply.
+- [ ] Confirm CloudTrail management-events Terraform is included before first host apply.
+- [ ] Confirm Scheduler DLQ review path.
 - [ ] Cost impact accepted.
 - [ ] Explicit human approval recorded.
 
@@ -85,7 +93,9 @@ Last successful GitHub plan run before this PR: https://github.com/josephmccann/
 
 - GitHub required environment reviewers are unavailable on the current repository plan.
 - `terraform-apply` exists but cannot enforce reviewer protection and must remain unused.
-- Host schedule decision unresolved.
+- Default host schedule acceptance unresolved.
+- First apply timing unresolved.
 - Apply role has no infrastructure mutation permissions by design; future permissions require review.
+- GitHub plan role read policy needs a separate approved bootstrap update before post-deployment GitHub refresh can read CloudTrail, KMS, Logs, Scheduler, SQS, and SSM resources.
 - Apply workflow intentionally absent.
 - Control-plane apply must use an authenticated IAM Identity Center session after an explicit approval packet is reviewed.

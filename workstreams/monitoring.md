@@ -6,20 +6,18 @@ Provide enough observability for operations, audit, cost control, and recovery w
 
 ## Current State
 
-- No monitoring resources deployed.
+- No monitoring resources deployed beyond GitHub Actions history and AWS bootstrap verification.
 - EC2 detailed monitoring defaults to false.
 - Expected future sources: CloudTrail, SSM session history, CloudWatch logs, GitHub Actions logs, AWS Budgets.
-- Session Manager logging design recommends CloudWatch Logs with 30-day retention.
+- Current branch proposes CloudTrail management events, Session Manager CloudWatch Logs with 30-day retention, and EventBridge Scheduler DLQ retention before first host deployment.
 
 ## Gaps
 
-- Session logs not streamed to CloudWatch.
-- Log retention not defined.
+- Proposed audit and session log resources are not deployed.
 - Cost anomaly or budget alerting not imported.
 - Product runtime telemetry not mapped to AWS.
 
 ## Next Work
 
-- Implement Session Manager logging after bootstrap approval.
-- Define log retention boundaries.
+- Review and approve or reject the audit/logging/scheduler plan.
 - Document product telemetry privacy boundaries before AWS runtime.

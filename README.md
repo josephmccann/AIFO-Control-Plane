@@ -70,6 +70,9 @@ The deployable `control-plane` environment defines:
 - Security group egress for HTTPS and DNS only
 - Optional AWS Budget management, disabled by default
 - EC2 detailed monitoring disabled by default for cost discipline
+- Multi-Region CloudTrail management-events baseline with S3 log delivery
+- Session Manager logging to encrypted CloudWatch Logs with 30-day retention
+- EventBridge Scheduler start/stop automation for weekday operating hours
 
 The host uses a public IPv4 address because the initial workload needs outbound internet access for package installation, GitHub clones, container pulls, and external API calls to services such as OpenAI, Anthropic, and Google. With zero inbound security-group rules and no SSH key, public addressing gives required egress without the recurring cost of a NAT Gateway. A later phase can migrate the host into private subnets once the extra cost and operational complexity are justified.
 
@@ -152,6 +155,8 @@ Review the values before any future plan or apply. Do not commit `terraform.tfva
 
 The default root volume is 100 GiB encrypted gp3. This is intended for the operating system, Terraform/AWS/Git tooling, product checkout, and bounded Docker or build cache. It is not intended for persistent product databases, uploaded accounting files, large local model weights, or unbounded container/image caches.
 
+The default operating schedule is 08:00-16:00 Monday-Friday in `America/Los_Angeles`. The schedules are configurable, target only the Terraform-managed control-plane host, and send failed invocations to a dead-letter queue.
+
 ## Budget Management
 
 `manage_budget` defaults to `false` because an AWS Budget already exists manually.
@@ -187,7 +192,7 @@ Bootstrap infrastructure has been deployed from this repository:
 - Terraform plan and apply roles.
 - Terraform state access and plan read policies.
 
-The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment apply remains blocked pending plan review, scheduled-operation decision, and explicit human approval.
+The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment apply remains blocked pending plan review, default schedule acceptance or revision, and explicit human approval.
 
 Before a future control-plane deployment, complete the remaining readiness items in [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md), review the security model, review the start/stop runbook, and run a reviewed plan.
 

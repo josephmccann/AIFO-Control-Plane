@@ -28,11 +28,36 @@ Use root only when the action cannot be performed through IAM Identity Center. R
 After host deployment, connect through Session Manager:
 
 ```bash
-aws ssm start-session --target INSTANCE_ID --region us-west-2
+aws ssm start-session \
+  --profile aifo-admin \
+  --region us-west-2 \
+  --target INSTANCE_ID
 ```
 
 If SSM is unavailable, diagnose IAM role, SSM agent, route table, DNS, and HTTPS egress. Do not add SSH ingress.
 
 ## Session Logging Guidance
 
-When Session Manager logging is enabled, assume commands and output can be retained. Do not print secrets, tokens, `.env` files, QBO credentials, product customer data, or AI provider keys in an interactive session.
+Session Manager logging is implemented in Terraform for the first host deployment. Assume commands and output can be retained in CloudWatch Logs for 30 days. Do not print secrets, tokens, `.env` files, QBO credentials, product customer data, or AI provider keys in an interactive session.
+
+## Emergency Start/Stop Override
+
+To start the host outside schedule for emergency work:
+
+```bash
+aws ec2 start-instances \
+  --profile aifo-admin \
+  --region us-west-2 \
+  --instance-ids INSTANCE_ID
+```
+
+To stop the host after emergency work:
+
+```bash
+aws ec2 stop-instances \
+  --profile aifo-admin \
+  --region us-west-2 \
+  --instance-ids INSTANCE_ID
+```
+
+Manual starts and stops do not disable EventBridge Scheduler. The next scheduled stop still applies.

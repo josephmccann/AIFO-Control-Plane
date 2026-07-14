@@ -84,6 +84,102 @@ variable "enable_detailed_monitoring" {
   default     = false
 }
 
+variable "cloudtrail_log_retention_days" {
+  type        = number
+  description = "Days before CloudTrail S3 log objects expire."
+  default     = 365
+
+  validation {
+    condition     = var.cloudtrail_log_retention_days >= 90
+    error_message = "cloudtrail_log_retention_days must be at least 90."
+  }
+}
+
+variable "cloudtrail_noncurrent_version_retention_days" {
+  type        = number
+  description = "Days before noncurrent CloudTrail S3 object versions expire."
+  default     = 30
+
+  validation {
+    condition     = var.cloudtrail_noncurrent_version_retention_days >= 1
+    error_message = "cloudtrail_noncurrent_version_retention_days must be at least 1."
+  }
+}
+
+variable "session_manager_log_group_name" {
+  type        = string
+  description = "CloudWatch Logs log group name for Session Manager session logs."
+  default     = "/aifo/control-plane/session-manager"
+}
+
+variable "session_manager_log_retention_days" {
+  type        = number
+  description = "CloudWatch Logs retention period for Session Manager session logs."
+  default     = 30
+
+  validation {
+    condition     = contains([7, 14, 30, 60, 90, 120, 150, 180, 365], var.session_manager_log_retention_days)
+    error_message = "session_manager_log_retention_days must be a supported CloudWatch Logs retention value."
+  }
+}
+
+variable "session_manager_kms_deletion_window_days" {
+  type        = number
+  description = "Waiting period before deleting the Session Manager KMS key."
+  default     = 30
+
+  validation {
+    condition     = var.session_manager_kms_deletion_window_days >= 7 && var.session_manager_kms_deletion_window_days <= 30
+    error_message = "session_manager_kms_deletion_window_days must be between 7 and 30."
+  }
+}
+
+variable "ec2_schedule_enabled" {
+  type        = bool
+  description = "Whether EventBridge Scheduler start and stop schedules are enabled."
+  default     = true
+}
+
+variable "ec2_schedule_timezone" {
+  type        = string
+  description = "IANA timezone for EC2 start and stop schedules."
+  default     = "America/Los_Angeles"
+}
+
+variable "ec2_start_schedule_expression" {
+  type        = string
+  description = "EventBridge Scheduler expression for starting the control-plane host."
+  default     = "cron(0 8 ? * MON-FRI *)"
+}
+
+variable "ec2_stop_schedule_expression" {
+  type        = string
+  description = "EventBridge Scheduler expression for stopping the control-plane host."
+  default     = "cron(0 16 ? * MON-FRI *)"
+}
+
+variable "ec2_schedule_maximum_retry_attempts" {
+  type        = number
+  description = "Maximum retry attempts for EventBridge Scheduler EC2 start/stop targets."
+  default     = 3
+
+  validation {
+    condition     = var.ec2_schedule_maximum_retry_attempts >= 0 && var.ec2_schedule_maximum_retry_attempts <= 185
+    error_message = "ec2_schedule_maximum_retry_attempts must be between 0 and 185."
+  }
+}
+
+variable "ec2_schedule_maximum_event_age_in_seconds" {
+  type        = number
+  description = "Maximum event age for EventBridge Scheduler EC2 start/stop target retries."
+  default     = 3600
+
+  validation {
+    condition     = var.ec2_schedule_maximum_event_age_in_seconds >= 60 && var.ec2_schedule_maximum_event_age_in_seconds <= 86400
+    error_message = "ec2_schedule_maximum_event_age_in_seconds must be between 60 and 86400."
+  }
+}
+
 variable "monthly_budget_usd" {
   type        = number
   description = "Monthly AWS budget limit in USD."

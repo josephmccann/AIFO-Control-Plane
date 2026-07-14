@@ -40,6 +40,8 @@ GitHub planning is configured and has succeeded through OIDC. GitHub required re
 
 The initial control-plane environment defines:
 
+- Multi-Region CloudTrail management-events trail with log-file validation.
+- Dedicated encrypted CloudTrail S3 log bucket with public access blocked and lifecycle expiration.
 - VPC with DNS support.
 - One public subnet in one Availability Zone by default.
 - Internet Gateway and outbound default route.
@@ -53,6 +55,9 @@ The initial control-plane environment defines:
 - IMDSv2 required.
 - 100 GiB encrypted gp3 root volume.
 - Termination protection enabled by default.
+- Session Manager logging to encrypted CloudWatch Logs with 30-day retention.
+- EventBridge Scheduler start and stop schedules targeting only the Terraform-managed host.
+- Scheduler dead-letter queue.
 - Optional Terraform-managed AWS Budget, default disabled.
 
 ## Bootstrap Architecture
@@ -64,6 +69,8 @@ Bootstrap roots are separate:
 
 The plan role is used by the `terraform-plan` environment. The apply role is reserved for a future approval boundary and currently has only Terraform state access. No apply workflow exists.
 
+The pre-deployment hardening branch updates the plan role policy definition with additional read-only actions for CloudTrail, KMS, CloudWatch Logs, EventBridge Scheduler, SQS, SSM, and S3 lifecycle/ownership refresh. That bootstrap OIDC update is not applied and does not grant infrastructure mutation permissions.
+
 Bootstrap resources:
 
 - State bucket: `aifo-terraform-state-350480401760-us-west-2`
@@ -73,7 +80,9 @@ Bootstrap resources:
 
 ## Current Cost Finding
 
-Current AWS Price List data for us-west-2 shows `m7i-flex.2xlarge` compute at $0.38304/hour. With a 100 GiB gp3 root volume and public IPv4, estimated monthly totals are $76.30 for 8 hours per weekday, $149.64 for 12 hours per day, and $291.27 always on before data transfer, logs, snapshots, and taxes. Continuous operation exceeds the $250 budget target unless size, schedule, commitment pricing, or budget are changed.
+Current AWS Price List data for us-west-2 shows `m7i-flex.2xlarge` compute at $0.38304/hour. With a 100 GiB gp3 root volume and public IPv4, estimated monthly totals are $76.30 for 8 hours per weekday, $149.64 for 12 hours per day, and $291.27 always on before data transfer, logs, snapshots, taxes, and the low-volume audit baseline. Continuous operation exceeds the $250 budget target unless size, schedule, commitment pricing, or budget are changed.
+
+The pre-deployment audit controls are expected to add about $1-$3/month at low activity, primarily from one customer-managed KMS key plus small S3 and CloudWatch Logs usage.
 
 ## Product Fit Boundary
 
@@ -81,12 +90,13 @@ The control plane does not currently host AI.FO product runtime. Product hosting
 
 ## Deployment Prerequisites
 
-1. Verify or explicitly accept CloudTrail status.
-2. Decide host schedule against the $250 budget.
+1. Review the CloudTrail, Session Manager logging, and Scheduler resources in the plan.
+2. Accept or revise the default 08:00-16:00 Monday-Friday host schedule against the $250 budget.
 3. Review the GitHub Actions plan.
 4. Review the EC2 start/stop runbook.
-5. Apply locally with IAM Identity Center only after an explicit approval packet.
-6. Do not add an apply workflow unless GitHub reviewer protection or an equivalent approval boundary is available.
+5. Decide whether to include the read-only GitHub plan role policy update in the next approval packet so future GitHub plans can refresh the hardening resources.
+6. Apply locally with IAM Identity Center only after an explicit approval packet.
+7. Do not add an apply workflow unless GitHub reviewer protection or an equivalent approval boundary is available.
 
 ## Guardrails
 

@@ -4,6 +4,9 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Added Terraform modules for a multi-Region CloudTrail management-events baseline, encrypted Session Manager logging, and EventBridge Scheduler EC2 start/stop automation.
+- Added ADR-0008 for the CloudTrail management-events baseline and ADR-0009 for automated EC2 operating schedules.
+- Updated runbooks, deployment readiness, memory, roadmap, and handoffs for the hardened first-deployment plan.
 - Changed the control-plane default root EBS volume from 200 GiB to 100 GiB.
 - Documented 8-hours-per-weekday, 12-hours-per-day, and always-on operating schedules with revised cost estimates.
 - Documented that `m7i-flex.2xlarge` is approved only for scheduled operation under the current $250 monthly budget.

@@ -37,28 +37,28 @@ Completed resources:
 - State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
 - Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
 
-## Phase 2: Cost-Aligned Control-Plane Host
+## Phase 2: Hardened Control-Plane Host
 
-Status: Blocked pending reviewed cost-aligned plan, operating schedule decision, and explicit apply approval.
+Status: In PR; blocked pending reviewed plan, operating schedule acceptance, and explicit apply approval.
 
 - Keep `terraform-apply` unused because required reviewers are unavailable on the current GitHub plan.
 - Keep apply workflow absent.
 - Review plan for no inbound access, IMDSv2, SSM-only administration, and expected costs.
 - Review 100 GiB root volume fit.
+- Review multi-Region CloudTrail management-events baseline with a dedicated encrypted S3 log bucket.
+- Review encrypted CloudWatch Logs Session Manager logging with 30-day retention.
+- Review EventBridge Scheduler start/stop automation for the single Terraform-managed host.
 - Review start/stop runbook.
-- Select 8-hours-per-weekday or 12-hours-per-day operating schedule.
+- Accept or revise the default 08:00-16:00 Monday-Friday operating schedule.
 
 Decision gate: human approval before any local IAM Identity Center apply.
 
 ## Phase 3: Hardening
 
-Status: Planned.
+Status: Partially planned; pre-deployment audit controls are in Phase 2 because they should exist before the first host deployment.
 
-- Session Manager logging.
-- CloudWatch log retention.
 - Patch management.
 - Cost alerts and recurring cost model.
-- EventBridge Scheduler start/stop automation after first host deployment.
 - Backup and restore drills for Terraform state.
 - Least-privilege policy refinement based on observed plan requirements.
 - Static analysis additions such as `actionlint`, `shellcheck`, and Terraform security linting.

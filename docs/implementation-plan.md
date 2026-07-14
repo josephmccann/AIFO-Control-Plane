@@ -32,7 +32,7 @@ Current status: bootstrap is complete, repository variables are configured, and 
 - Copy `terraform.tfvars.example` to `terraform.tfvars` locally.
 - Confirm `manage_budget = false` while the manually created AWS Budget remains unmanaged by Terraform.
 - Review EC2 instance type and expected runtime.
-- Decide whether 8 hours per weekday or 12 hours per day is approved, because continuous operation puts the default 8 vCPU / 32 GiB host above the $250 monthly budget after 100 GiB EBS and public IPv4 are counted.
+- Accept or revise the default 08:00-16:00 Monday-Friday operating schedule, because continuous operation puts the default 8 vCPU / 32 GiB host above the $250 monthly budget after 100 GiB EBS and public IPv4 are counted.
 - Verify pricing and regional availability for:
   - `m7i-flex.2xlarge`
   - `m7i.2xlarge`
@@ -48,6 +48,10 @@ Current status: bootstrap is complete, repository variables are configured, and 
   - No interface VPC endpoints
   - S3 gateway endpoint only
   - 100 GiB encrypted gp3 root volume
+  - CloudTrail management events with no data event selectors
+  - Dedicated CloudTrail S3 log bucket with lifecycle expiration
+  - Session Manager logging to encrypted CloudWatch Logs
+  - EventBridge Scheduler start and stop schedules scoped to the single EC2 instance
 
 ## Phase 3: Budget Import
 
@@ -77,6 +81,9 @@ When explicitly approved later:
 - Use IAM Identity Center credentials only.
 - Capture the reviewed plan artifact.
 - Verify Session Manager access after apply.
+- Verify CloudTrail delivery and log-file validation configuration after apply.
+- Verify Scheduler start/stop targets only the Terraform-managed host.
+- Stop the instance manually after verification if the apply occurs outside the approved operating window.
 
 ## Phase 5: Private Subnet Migration
 
@@ -92,12 +99,11 @@ Candidate migration work:
 
 ## Phase 6: Hardening
 
-- Add CloudWatch log retention and Session Manager logging.
 - Add AWS Config or Security Hub baseline if required.
 - Add patch management for the Ubuntu host.
 - Add CI security checks such as Checkov or tfsec.
 - Add least-privilege custom IAM policy for the apply role.
-- Add EventBridge Scheduler start/stop automation if the 8 vCPU / 32 GiB instance remains the target.
+- Review CloudTrail data events only after product runtime AWS data stores exist.
 
 ## Phase 7: Operations
 

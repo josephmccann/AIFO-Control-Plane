@@ -19,6 +19,7 @@ module "compute" {
   ubuntu_ami_ssm_parameter      = var.ubuntu_ami_ssm_parameter
   root_volume_size_gb           = var.root_volume_size_gb
   enable_termination_protection = var.enable_termination_protection
+  enable_detailed_monitoring    = var.enable_detailed_monitoring
   tags                          = local.common_tags
 }
 

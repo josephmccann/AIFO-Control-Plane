@@ -4,6 +4,8 @@ Initial AWS infrastructure repository for the AI.FO control plane.
 
 This repository is scaffolded for validation and planning only. It does not include an apply workflow, and the bootstrap scripts do not create AWS resources.
 
+The control plane exists to support the current AI.FO product. Start with [docs/product-runtime-inventory.md](docs/product-runtime-inventory.md) before changing infrastructure design.
+
 ## Baseline
 
 - AWS region: `us-west-2`
@@ -15,6 +17,8 @@ This repository is scaffolded for validation and planning only. It does not incl
 - Host default: public IPv4 address, zero inbound security-group rules
 - Egress default: HTTPS to the internet, DNS to the VPC resolver
 - Intended host: Ubuntu EC2, 8 vCPU, 32 GB RAM
+- Current default host candidate: `m7i-flex.2xlarge`
+- Current deployment status: no AWS resources created by this repository
 
 ## Repository Layout
 
@@ -25,21 +29,30 @@ This repository is scaffolded for validation and planning only. It does not incl
 │   └── terraform-validate.yml
 ├── docs/
 │   ├── architecture.md
+│   ├── adr/
+│   ├── control-plane-fit-assessment.md
+│   ├── deployment-readiness-review.md
+│   ├── ec2-instance-recommendation.md
 │   ├── implementation-plan.md
+│   ├── product-runtime-inventory.md
+│   ├── runbooks/
 │   └── security-model.md
+├── memory/
 ├── scripts/
 │   ├── bootstrap-github-oidc.sh
 │   ├── bootstrap-local.sh
 │   └── validate.sh
-└── terraform/
-    ├── bootstrap/
-    │   ├── github-oidc/
-    │   └── remote-state/
-    ├── environments/control-plane/
-    └── modules/
-        ├── budget/
-        ├── compute/
-        └── network/
+├── terraform/
+│   ├── bootstrap/
+│   │   ├── github-oidc/
+│   │   └── remote-state/
+│   ├── environments/control-plane/
+│   └── modules/
+│       ├── budget/
+│       ├── compute/
+│       └── network/
+├── workqueue/
+└── workstreams/
 ```
 
 ## What Terraform Defines
@@ -55,8 +68,11 @@ The deployable `control-plane` environment defines:
 - Security group with no ingress rules
 - Security group egress for HTTPS and DNS only
 - Optional AWS Budget management, disabled by default
+- EC2 detailed monitoring disabled by default for cost discipline
 
 The host uses a public IPv4 address because the initial workload needs outbound internet access for package installation, GitHub clones, container pulls, and external API calls to services such as OpenAI, Anthropic, and Google. With zero inbound security-group rules and no SSH key, public addressing gives required egress without the recurring cost of a NAT Gateway. A later phase can migrate the host into private subnets once the extra cost and operational complexity are justified.
+
+Current AWS pricing review shows an always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget before EBS and public IPv4 are counted. See [docs/ec2-instance-recommendation.md](docs/ec2-instance-recommendation.md). Do not treat the default instance type as approval for continuous operation.
 
 ## Local Validation
 
@@ -146,3 +162,12 @@ The default instance type is `m7i-flex.2xlarge` because it targets 8 vCPU and 32
 No infrastructure has been deployed from this repository.
 
 Before a future deployment, complete the implementation plan in [docs/implementation-plan.md](docs/implementation-plan.md), review the security model, and create the required remote-state and OIDC bootstrap resources through an approved process.
+
+## Operating Model
+
+- ADRs: [docs/adr/](docs/adr/)
+- Runbooks: [docs/runbooks/](docs/runbooks/)
+- Current state: [memory/current-state.md](memory/current-state.md)
+- Work queue: [workqueue/README.md](workqueue/README.md)
+- Contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security posture: [SECURITY.md](SECURITY.md)

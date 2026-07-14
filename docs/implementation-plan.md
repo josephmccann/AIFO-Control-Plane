@@ -21,6 +21,7 @@ Manual or separately approved bootstrap work:
 - Configure protected GitHub environments:
   - `terraform-plan`
   - `terraform-apply`
+- Confirm the apply environment requires manual approval before any apply workflow exists.
 
 This phase must not use long-lived AWS keys. Use IAM Identity Center credentials or an approved break-glass process.
 
@@ -29,6 +30,7 @@ This phase must not use long-lived AWS keys. Use IAM Identity Center credentials
 - Copy `terraform.tfvars.example` to `terraform.tfvars` locally.
 - Confirm `manage_budget = false` while the manually created AWS Budget remains unmanaged by Terraform.
 - Review EC2 instance type and expected runtime.
+- Decide whether continuous 24/7 operation is approved, because current pricing puts the default 8 vCPU / 32 GiB host above the $250 monthly budget before EBS and public IPv4.
 - Verify pricing and regional availability for:
   - `m7i-flex.2xlarge`
   - `m7i.2xlarge`
@@ -92,6 +94,7 @@ Candidate migration work:
 - Add patch management for the Ubuntu host.
 - Add CI security checks such as Checkov or tfsec.
 - Add least-privilege custom IAM policy for the apply role.
+- Add cost model and host stop/start strategy if the 8 vCPU / 32 GiB instance remains the target.
 
 ## Phase 7: Operations
 
@@ -99,3 +102,14 @@ Candidate migration work:
 - Add runbooks for Session Manager access and incident response.
 - Add cost review cadence.
 - Add change management expectations for future infrastructure expansion.
+
+## Phase 8: Product Runtime Migration Design
+
+This phase must be product-gated and separately approved.
+
+- Decide PostgreSQL hosting and backup/restore.
+- Decide whether R2 remains product upload storage.
+- Decide secrets manager and rotation path.
+- Decide frontend/API runtime platform.
+- Preserve deterministic financial-engine authority and AI narrative boundaries.
+- Support the product validation commands listed in `docs/product-runtime-inventory.md`.

@@ -78,6 +78,12 @@ variable "enable_termination_protection" {
   default     = true
 }
 
+variable "enable_detailed_monitoring" {
+  type        = bool
+  description = "Enable EC2 detailed monitoring. Defaults to false for the cost-conscious initial control-plane host."
+  default     = false
+}
+
 variable "monthly_budget_usd" {
   type        = number
   description = "Monthly AWS budget limit in USD."

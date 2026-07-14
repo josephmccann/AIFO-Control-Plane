@@ -19,6 +19,7 @@ override.tf.json
 *.crt
 terraform/environments/*/terraform.tfvars
 terraform/environments/*/*.auto.tfvars
+terraform/environments/*/backend.hcl
 terraform/bootstrap/*/terraform.tfvars
 terraform/bootstrap/*/*.auto.tfvars
 

@@ -5,6 +5,8 @@ Operational rules for AI agents working in this repository.
 ## Scope
 
 - Work only inside this repository.
+- Treat all prior charter, product-context, founder-principle, and approval-gate instructions as binding unless the user explicitly changes them.
+- Inspect the existing AI.FO product context before material infrastructure design. The current inventory is `docs/product-runtime-inventory.md`.
 - Do not deploy infrastructure unless the user explicitly asks for deployment in a later task.
 - Do not run `terraform apply`, `terraform destroy`, or any command that creates, updates, or deletes AWS resources.
 - Do not create, rotate, print, or store long-lived AWS access keys.
@@ -50,5 +52,8 @@ Use `scripts/validate.sh` as the standard local validation entrypoint.
 
 - Keep changes narrow and consistent with the existing structure.
 - Update docs when changing security, networking, IAM, or deployment behavior.
+- Add or update ADRs under `docs/adr/` for material decisions.
+- Keep `memory/` and `workqueue/` current for long-running work.
 - Prefer explicit deny-by-default infrastructure patterns.
 - Treat cost, access, auditability, and rollback as first-class design constraints.
+- Do not build product runtime infrastructure until the current product requirement and migration decision are documented.

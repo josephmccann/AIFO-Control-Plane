@@ -24,3 +24,7 @@ use_lockfile = true
 ```
 
 DynamoDB locking is not part of the initial backend.
+
+Bootstrap and apply steps are documented in [../docs/runbooks/bootstrap.md](../docs/runbooks/bootstrap.md). No bootstrap root should be applied without explicit human approval.
+
+The initial control-plane host defaults to `m7i-flex.2xlarge`, but current AWS pricing review shows continuous operation exceeds the $250 monthly budget before storage and public IPv4. Review [../docs/ec2-instance-recommendation.md](../docs/ec2-instance-recommendation.md) before first apply.

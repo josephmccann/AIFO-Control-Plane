@@ -7,9 +7,10 @@ vpc_cidr = "10.80.0.0/20"
 az_count = 1
 
 control_plane_instance_type = "m7i-flex.2xlarge"
-root_volume_size_gb         = 200
+root_volume_size_gb         = 100
 
 manage_budget                = false
 monthly_budget_usd           = 250
 budget_notification_emails   = []
 enable_termination_protection = true
+enable_detailed_monitoring    = false

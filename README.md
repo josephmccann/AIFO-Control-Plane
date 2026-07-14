@@ -18,6 +18,7 @@ The control plane exists to support the current AI.FO product. Start with [docs/
 - Egress default: HTTPS to the internet, DNS to the VPC resolver
 - Intended host: Ubuntu EC2, 8 vCPU, 32 GB RAM
 - Current default host candidate: `m7i-flex.2xlarge`
+- Current default root volume: 100 GiB encrypted gp3
 - Current deployment status: bootstrap infrastructure deployed; control-plane host and product runtime not deployed
 
 ## Repository Layout
@@ -72,7 +73,7 @@ The deployable `control-plane` environment defines:
 
 The host uses a public IPv4 address because the initial workload needs outbound internet access for package installation, GitHub clones, container pulls, and external API calls to services such as OpenAI, Anthropic, and Google. With zero inbound security-group rules and no SSH key, public addressing gives required egress without the recurring cost of a NAT Gateway. A later phase can migrate the host into private subnets once the extra cost and operational complexity are justified.
 
-Current AWS pricing review shows an always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget before EBS and public IPv4 are counted. See [docs/ec2-instance-recommendation.md](docs/ec2-instance-recommendation.md). Do not treat the default instance type as approval for continuous operation.
+Current AWS pricing review shows an always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget after compute, 100 GiB EBS, and public IPv4 are counted. See [docs/ec2-instance-recommendation.md](docs/ec2-instance-recommendation.md). Under the current budget, `m7i-flex.2xlarge` is approved only for scheduled operation after an apply approval packet is reviewed; it is not approved for continuous operation.
 
 The current cost model is documented in [docs/cost-model.md](docs/cost-model.md).
 
@@ -102,7 +103,7 @@ Two workflows are included:
 
 There is no apply workflow.
 
-The plan workflow runs in the protected GitHub environment `terraform-plan` and expects repository variables:
+The plan workflow runs in the GitHub environment `terraform-plan` and expects repository variables:
 
 | Variable | Purpose |
 | --- | --- |
@@ -112,9 +113,13 @@ The plan workflow runs in the protected GitHub environment `terraform-plan` and 
 
 Do not add AWS access keys as GitHub secrets.
 
-Until those repository variables exist, the plan job is skipped instead of failing. This keeps documentation and validation PRs reviewable while preserving the OIDC-only deployment boundary.
+The repository variables are configured for planning:
 
-Bootstrap created the AWS plan role, but the required repository variables have not been created yet.
+- `AWS_TERRAFORM_PLAN_ROLE_ARN=arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
+- `TF_BACKEND_BUCKET=aifo-terraform-state-350480401760-us-west-2`
+- `TF_BACKEND_KEY=control-plane/terraform.tfstate`
+
+GitHub required environment reviewers are unavailable on the current repository plan. The `terraform-apply` environment exists but has no required reviewer protection and must remain unused. Do not create an apply workflow. Until GitHub reviewer protection is available or a replacement approval boundary is accepted, control-plane applies must be performed only from an authenticated IAM Identity Center session after a reviewed approval packet.
 
 ## Terraform State
 
@@ -145,6 +150,8 @@ cp terraform/environments/control-plane/terraform.tfvars.example \
 
 Review the values before any future plan or apply. Do not commit `terraform.tfvars` if it contains environment-specific or sensitive values.
 
+The default root volume is 100 GiB encrypted gp3. This is intended for the operating system, Terraform/AWS/Git tooling, product checkout, and bounded Docker or build cache. It is not intended for persistent product databases, uploaded accounting files, large local model weights, or unbounded container/image caches.
+
 ## Budget Management
 
 `manage_budget` defaults to `false` because an AWS Budget already exists manually.
@@ -165,7 +172,7 @@ Review the resulting plan before any future apply.
 
 ## Instance Type Candidates
 
-The default instance type is `m7i-flex.2xlarge` because it targets 8 vCPU and 32 GiB RAM. Before first deployment, verify pricing and availability for:
+The default instance type is `m7i-flex.2xlarge` because it targets 8 vCPU and 32 GiB RAM. Under the current $250 monthly budget it is approved only for scheduled operation, not continuous operation. Before first deployment, verify pricing and availability for:
 
 - `m7i-flex.2xlarge`
 - `m7i.2xlarge`
@@ -180,9 +187,9 @@ Bootstrap infrastructure has been deployed from this repository:
 - Terraform plan and apply roles.
 - Terraform state access and plan read policies.
 
-The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment apply remains blocked pending GitHub environment/repository variable setup, plan review, cost decision, and explicit human approval.
+The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment apply remains blocked pending plan review, scheduled-operation decision, and explicit human approval.
 
-Before a future control-plane deployment, complete the remaining readiness items in [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md), review the security model, configure GitHub environments and repository variables, and run a reviewed plan.
+Before a future control-plane deployment, complete the remaining readiness items in [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md), review the security model, review the start/stop runbook, and run a reviewed plan.
 
 ## Operating Model
 

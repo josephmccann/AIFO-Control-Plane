@@ -27,9 +27,9 @@ AI.FO currently needs:
 
 | Need | Current control-plane support | Gap |
 | --- | --- | --- |
-| Infrastructure as code | Terraform scaffold, ADRs, runbooks, and narrowed plan policy exist | Needs approved bootstrap and future apply policy design |
-| Remote state | Bootstrap code exists | Needs approved execution |
-| CI plan | Workflow exists | Needs OIDC role and protected environment |
+| Infrastructure as code | Terraform scaffold, ADRs, runbooks, remote state, and narrowed plan policy exist | Needs first apply approval |
+| Remote state | Bootstrap complete | None for planning |
+| CI plan | Workflow exists and successfully assumes the plan role through OIDC | None for planning |
 | Product database | Not provisioned | Decide RDS or alternative only when product hosting scope is approved |
 | Product object storage | Not provisioned | R2 currently documented; do not replace silently |
 | Product secrets | Not provisioned | Need AWS Secrets Manager or approved equivalent design |
@@ -64,13 +64,12 @@ The control plane must preserve the ability to run:
 ## Immediate Infrastructure Gaps
 
 1. No product runtime architecture ADR.
-2. No cost model beyond the EC2 recommendation.
+2. No deployed start/stop automation.
 3. No product secrets architecture.
 4. No monitoring architecture or Session Manager log retention.
-5. CloudTrail status has not been verified.
-6. GitHub protected environments are not configured.
-7. Remote-state and OIDC bootstrap have not been approved or executed.
-8. No apply workflow exists by design.
+5. CloudTrail status has not been remediated; read-only inspection returned no trails in `us-west-2`.
+6. GitHub required reviewers are unavailable on the current repository plan, so apply automation is blocked.
+7. No apply workflow exists by design.
 
 ## Infrastructure Not To Build Yet
 
@@ -86,4 +85,4 @@ Do not build these until product migration requirements and approval gates are m
 
 ## Fit Conclusion
 
-The current scaffold is a suitable first control-plane baseline, but it must remain scoped. The next work should validate this branch, open it for review, and resolve the bootstrap and cost approval gates before any AWS resource is created.
+The current scaffold is a suitable first control-plane baseline, but it must remain scoped. Bootstrap and planning are complete. The next gate is a reviewed, cost-aligned control-plane host plan, an operating schedule decision, and explicit human approval before any apply.

@@ -18,16 +18,19 @@ Principles 1, 6, 8, 14, 20, and 22: trust, preserved decision state, human autho
 - GitHub OIDC subject claims can include an environment claim.
 - AWS trust policies can restrict audience and subject claims.
 - Current repository includes only validate and plan workflows, not apply.
+- The `terraform-plan` and `terraform-apply` GitHub environments exist.
+- Required environment reviewers are unavailable on the current GitHub repository plan.
+- The first GitHub plan workflow successfully assumed the plan role through OIDC.
 
 ## Assumptions
 
-- Protected environments named `terraform-plan` and `terraform-apply` are acceptable. Confidence: medium.
+- GitHub environments named `terraform-plan` and `terraform-apply` are acceptable. Confidence: high.
 - The exact repository is `josephmccann/AIFO-Control-Plane`. Confidence: high.
 
 ## Unknowns
 
 - Final apply role permission set.
-- Required human reviewers for `terraform-apply`.
+- Whether GitHub required reviewers will become available through a plan upgrade or repository ownership change.
 
 ## Information Sources Reviewed
 
@@ -37,7 +40,9 @@ Principles 1, 6, 8, 14, 20, and 22: trust, preserved decision state, human autho
 
 ## Decision
 
-Use separate GitHub Actions roles for plan and apply. Restrict each OIDC trust policy to the exact repository and protected environment. Create no apply workflow until the approval boundary, permissions, rollback, and recovery procedures are reviewed.
+Use separate GitHub Actions roles for plan and apply. Restrict each OIDC trust policy to the exact repository and GitHub environment subject. Create no apply workflow until the approval boundary, permissions, rollback, and recovery procedures are reviewed.
+
+Because required environment reviewers are unavailable, keep `terraform-apply` unused and leave the apply role without infrastructure mutation permissions.
 
 ## Why This Decision Is Appropriate Now
 

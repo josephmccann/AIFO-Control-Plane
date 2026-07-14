@@ -7,12 +7,15 @@ Date: 2026-07-14
 - Repository: `josephmccann/AIFO-Control-Plane`
 - Baseline commit: `4da93f1b674abf108e8c0e1bcb1d97c7a122baed`
 - Operating-model merge commit: `6f8064b9de3aaa0f099013170c3c007e41fd266f`
-- Current documentation branch: `docs/bootstrap-execution-status`
+- Bootstrap-status merge commit: `f96710c44b249976cac66cafd4ca8d60f3f6d598`
+- Current documentation branch: `agent/cost-alignment-deployment-control`
 - Pull request #2 was squash-merged into `main`.
+- Pull request #3 was squash-merged into `main`.
 - PR #1 was closed as superseded.
 - Remote-state bootstrap was applied on 2026-07-14 after explicit approval.
 - GitHub OIDC bootstrap was applied on 2026-07-14 after explicit approval.
-- No control-plane EC2 host, product runtime resources, GitHub repository variables, GitHub environments, or CloudTrail resources were created or modified in the bootstrap execution.
+- GitHub planning configuration was completed after PR #3: `terraform-plan` and `terraform-apply` environments exist, repository variables are configured, and the plan workflow succeeded through OIDC.
+- No control-plane EC2 host, product runtime resources, CloudTrail resources, apply workflow, or apply-role infrastructure permissions have been created.
 
 ## Product Context
 
@@ -27,7 +30,7 @@ Date: 2026-07-14
 - GitHub OIDC bootstrap root exists and has been applied with local bootstrap state.
 - Control-plane environment exists.
 - Initial network is one public subnet in one Availability Zone.
-- Initial host has public IPv4, zero inbound rules, SSM-only administration, IMDSv2, encrypted root volume, and controlled HTTPS/DNS egress.
+- Initial host has public IPv4, zero inbound rules, SSM-only administration, IMDSv2, 100 GiB encrypted gp3 root volume, and controlled HTTPS/DNS egress.
 - Product runtime infrastructure is not yet provisioned.
 
 ## Bootstrap Resources Created
@@ -65,11 +68,13 @@ GitHub OIDC:
 ## Current Warnings
 
 - `terraform-plan` GitHub environment exists but has no protection rules.
-- `terraform-apply` GitHub environment has not been created.
-- GitHub repository variables have not been created.
+- `terraform-apply` GitHub environment exists, but GitHub required reviewers are unavailable on the current repository plan.
+- `terraform-apply` must remain unused and no apply workflow may be created.
+- Repository variables for planning are configured.
 - CloudTrail was not changed and read-only inspection returned no trails in `us-west-2`.
 - Bootstrap Terraform state files were generated locally under ignored paths and must not be committed.
+- Always-on `m7i-flex.2xlarge` operation exceeds the $250 budget; scheduled operation is required unless a budget exception is approved.
 
 ## Current Branch Changes
 
-- Deployment-status documentation updated with sanitized bootstrap execution results.
+- Cost alignment and deployment-control documentation updated.

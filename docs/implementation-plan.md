@@ -16,21 +16,23 @@ Manual or separately approved bootstrap work:
 - Use native S3 lockfiles with `use_lockfile = true`.
 - Create or verify the GitHub Actions OIDC provider.
 - Create separate GitHub Actions Terraform plan and apply roles.
-- Restrict each role trust policy to the exact repository and protected GitHub environment.
+- Restrict each role trust policy to the exact repository and GitHub environment subject.
 - Store role ARN and backend identifiers as GitHub repository variables.
-- Configure protected GitHub environments:
+- Configure GitHub environments:
   - `terraform-plan`
   - `terraform-apply`
-- Confirm the apply environment requires manual approval before any apply workflow exists.
+- Confirm whether the apply environment can require manual approval before any apply workflow exists.
 
 This phase must not use long-lived AWS keys. Use IAM Identity Center credentials or an approved break-glass process.
+
+Current status: bootstrap is complete, repository variables are configured, and GitHub planning works. GitHub required reviewers are unavailable on the current repository plan, so `terraform-apply` must remain unused and no apply workflow may be created.
 
 ## Phase 2: First Terraform Plan
 
 - Copy `terraform.tfvars.example` to `terraform.tfvars` locally.
 - Confirm `manage_budget = false` while the manually created AWS Budget remains unmanaged by Terraform.
 - Review EC2 instance type and expected runtime.
-- Decide whether continuous 24/7 operation is approved, because current pricing puts the default 8 vCPU / 32 GiB host above the $250 monthly budget before EBS and public IPv4.
+- Decide whether 8 hours per weekday or 12 hours per day is approved, because continuous operation puts the default 8 vCPU / 32 GiB host above the $250 monthly budget after 100 GiB EBS and public IPv4 are counted.
 - Verify pricing and regional availability for:
   - `m7i-flex.2xlarge`
   - `m7i.2xlarge`
@@ -45,6 +47,7 @@ This phase must not use long-lived AWS keys. Use IAM Identity Center credentials
   - Outbound HTTPS and DNS only
   - No interface VPC endpoints
   - S3 gateway endpoint only
+  - 100 GiB encrypted gp3 root volume
 
 ## Phase 3: Budget Import
 
@@ -68,10 +71,10 @@ This repository does not perform this phase yet.
 
 When explicitly approved later:
 
-- Add a protected apply workflow or perform a supervised local apply.
-- Require the `terraform-apply` protected GitHub environment.
+- Perform a supervised local apply with IAM Identity Center while GitHub required reviewers are unavailable.
+- Keep the `terraform-apply` GitHub environment unused.
 - Require manual approval.
-- Use OIDC or IAM Identity Center credentials only.
+- Use IAM Identity Center credentials only.
 - Capture the reviewed plan artifact.
 - Verify Session Manager access after apply.
 
@@ -94,7 +97,7 @@ Candidate migration work:
 - Add patch management for the Ubuntu host.
 - Add CI security checks such as Checkov or tfsec.
 - Add least-privilege custom IAM policy for the apply role.
-- Add cost model and host stop/start strategy if the 8 vCPU / 32 GiB instance remains the target.
+- Add EventBridge Scheduler start/stop automation if the 8 vCPU / 32 GiB instance remains the target.
 
 ## Phase 7: Operations
 

@@ -228,7 +228,7 @@ Not yet established in control plane:
 | Product README says `AI_INTEGRATIONS_ANTHROPIC_API_KEY` is required; verifier can short-circuit when unset in `.env.example` | Full demo validation requires both Anthropic and GMI | Separate development and validation requirements |
 | Product docs reference Replit deployment | Control-plane is AWS-focused | Treat AWS product hosting as a future migration, not current fact |
 | Product PR #186 adds connector/account surfaces | Not merged into current product baseline | Design connector infrastructure only as near-term deferred work |
-| Handoff PR #1 said protected environments for future plan/apply workflows | PR #1 was superseded; current plan workflow declares `environment: terraform-plan`; environment protection and repo variables still need GitHub configuration | Configure GitHub environments and repository variables before first GitHub plan |
+| Handoff PR #1 said protected environments for future plan/apply workflows | PR #1 was superseded; `terraform-plan` and `terraform-apply` environments now exist, repository variables are configured, and GitHub required reviewers are unavailable on the current repository plan | Keep `terraform-apply` unused and perform any approved first apply through IAM Identity Center |
 
 ## Infrastructure Traceability
 

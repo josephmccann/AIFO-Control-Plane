@@ -100,34 +100,26 @@ terraform -chdir=terraform/bootstrap/github-oidc apply -input=false
 
 ## GitHub Repository Configuration
 
-Create protected environments in GitHub before using OIDC:
+GitHub environments are configured:
 
 - `terraform-plan`
 - `terraform-apply`
 
-The apply environment must require manual reviewer approval before any future apply workflow exists.
+The plan environment is used for automated planning. The apply environment exists, but GitHub required environment reviewers are unavailable on the current repository plan. It must remain unused and no apply workflow may be created.
 
 Current status:
 
 - `terraform-plan` exists but has no protection rules.
-- `terraform-apply` has not been created.
-- Repository variables have not been created.
+- `terraform-apply` exists but has no required reviewer protection.
+- Repository variables have been created.
 
-Set repository variables now that OIDC bootstrap is complete:
+Repository variables configured after OIDC bootstrap:
 
-```bash
-gh variable set AWS_TERRAFORM_PLAN_ROLE_ARN \
-  --repo josephmccann/AIFO-Control-Plane \
-  --body "arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan"
-
-gh variable set TF_BACKEND_BUCKET \
-  --repo josephmccann/AIFO-Control-Plane \
-  --body "aifo-terraform-state-350480401760-us-west-2"
-
-gh variable set TF_BACKEND_KEY \
-  --repo josephmccann/AIFO-Control-Plane \
-  --body "control-plane/terraform.tfstate"
-```
+| Variable | Value |
+| --- | --- |
+| `AWS_TERRAFORM_PLAN_ROLE_ARN` | `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan` |
+| `TF_BACKEND_BUCKET` | `aifo-terraform-state-350480401760-us-west-2` |
+| `TF_BACKEND_KEY` | `control-plane/terraform.tfstate` |
 
 Do not set AWS access keys as GitHub secrets.
 

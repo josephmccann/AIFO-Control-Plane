@@ -4,7 +4,15 @@
 
 Remote-state and GitHub OIDC bootstrap are complete in AWS account `350480401760`.
 
-No control-plane EC2 host, product runtime resources, GitHub repository variables, GitHub environments, CloudTrail resources, apply workflow, or additional apply-role permissions were created.
+No control-plane EC2 host, product runtime resources, CloudTrail resources, apply workflow, or additional apply-role permissions have been created.
+
+GitHub planning configuration is complete:
+
+- `terraform-plan` environment exists and is intentionally unblocked for automated planning.
+- `terraform-apply` environment exists, but required reviewers are unavailable on the current GitHub repository plan.
+- Repository variables are configured for the plan workflow.
+- The plan workflow successfully assumed `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan` through OIDC.
+- `terraform-apply` must remain unused; no apply workflow may be created under the current GitHub approval limitation.
 
 ## Last Validated State
 
@@ -15,6 +23,7 @@ Pre-bootstrap validation passed on 2026-07-14:
 - Refreshed GitHub OIDC plan produced only approved creates: `8 to add, 0 to change, 0 to destroy`.
 - Post-apply remote-state plan exit code: `0`.
 - Post-apply GitHub OIDC plan exit code: `0`.
+- First GitHub control-plane plan run succeeded: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29371131579.
 
 Skipped:
 
@@ -79,8 +88,8 @@ OIDC and IAM:
 - No Terraform drift detected for the two bootstrap roots after apply.
 - CloudTrail was not changed; read-only inspection returned no trails in `us-west-2`.
 - `terraform-plan` GitHub environment exists but has no protection rules.
-- `terraform-apply` GitHub environment has not been created.
-- GitHub repository variables have not been created.
+- `terraform-apply` GitHub environment exists but cannot enforce required reviewers on the current GitHub repository plan.
+- GitHub required reviewers failed with a GitHub platform limitation; do not weaken AWS OIDC trust to compensate.
 - Bootstrap Terraform state exists locally under ignored paths; do not commit local state or plan files.
 
 ## External Resources Known To Exist
@@ -97,20 +106,18 @@ The manual AWS Budget is not imported into Terraform state.
 ## Apply Workflows
 
 - No apply workflow exists.
-- Future apply workflow must use protected environment `terraform-apply`.
-- Human approval is required before creation or use.
+- No apply workflow may be created while `terraform-apply` cannot enforce required reviewers.
+- The apply role must remain state-access-only until a future apply boundary is reviewed and approved.
+- Control-plane applies must use an authenticated IAM Identity Center session after an explicit approval packet is reviewed.
 
 ## Next Deployment Gate
 
-Configure GitHub environments and repository variables before first GitHub plan.
+Review the revised cost-aligned plan and approve or reject a scheduled manual control-plane apply.
 
 Required next actions:
 
-1. Configure `terraform-plan` protection rules.
-2. Create and protect `terraform-apply` with required reviewers before any future apply workflow exists.
-3. Add repository variables:
-   - `AWS_TERRAFORM_PLAN_ROLE_ARN=arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
-   - `TF_BACKEND_BUCKET=aifo-terraform-state-350480401760-us-west-2`
-   - `TF_BACKEND_KEY=control-plane/terraform.tfstate`
+1. Confirm the revised plan proposes 14 additions, 0 changes, 0 destroys, and a 100 GiB gp3 root volume.
+2. Choose the initial operating schedule, preferably 8 hours per weekday.
+3. Review the EC2 start/stop runbook.
 4. Create `terraform/environments/control-plane/backend.hcl` locally from the example when running local plans.
 5. Do not run the control-plane environment apply until a separate approval gate.

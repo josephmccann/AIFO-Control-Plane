@@ -10,7 +10,7 @@ The repository currently supports validation and planning only. There is no appl
 - human approval;
 - confirmed rollback path;
 - updated ADRs and runbooks;
-- protected `terraform-apply` GitHub environment;
+- authenticated IAM Identity Center session while GitHub required reviewers are unavailable;
 - no long-lived credentials.
 
 ## First Plan Sequence
@@ -40,10 +40,20 @@ Review the plan for:
 - SSM instance role only;
 - HTTPS and DNS egress only;
 - S3 gateway endpoint;
+- 100 GiB encrypted gp3 root volume;
 - no NAT Gateway;
 - no interface endpoints;
 - `manage_budget = false` unless importing the budget deliberately.
 
 ## Apply Boundary
 
-Do not apply until the human approval gate is satisfied. A future apply workflow must use the `terraform-apply` protected environment with required reviewers.
+Do not apply until the human approval gate is satisfied. Because GitHub required environment reviewers are unavailable on the current repository plan, do not create an apply workflow and do not use `terraform-apply`. The current apply path is a supervised local apply using IAM Identity Center after an explicit approval packet.
+
+Approved local apply command shape:
+
+```bash
+AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 \
+terraform -chdir=terraform/environments/control-plane apply -input=false
+```
+
+The reviewed plan must be regenerated immediately before apply and must match the approved resource set.

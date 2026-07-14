@@ -5,10 +5,10 @@ Creates the GitHub Actions OIDC provider and separate AWS IAM roles for Terrafor
 Trust policies are restricted to:
 
 - The exact GitHub repository.
-- A named protected GitHub environment for plan.
-- A separate named protected GitHub environment for apply.
+- A named GitHub environment for plan.
+- A separate named GitHub environment for apply.
 
-There is no apply workflow in this repository yet. The apply role exists for the future approval boundary and should receive least-privilege infrastructure permissions only when an approved apply process is added.
+There is no apply workflow in this repository yet. The `terraform-apply` environment exists, but GitHub required reviewers are unavailable on the current repository plan. The apply role exists for a future approval boundary and should receive least-privilege infrastructure permissions only when an approved apply process is added.
 
 The plan role receives:
 

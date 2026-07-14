@@ -23,10 +23,13 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-021 | Execute GitHub OIDC bootstrap | Applied exactly approved OIDC/IAM resources; post-apply plan exit code `0` | Done |
 | WQ-024 | Merge PR #2 | Squash-merged at `6f8064b9de3aaa0f099013170c3c007e41fd266f` | Done |
 | WQ-025 | Close or supersede PR #1 | Closed as superseded | Done |
+| WQ-026 | Configure GitHub environments and repository variables | Environments and variables configured; first plan succeeded through OIDC | Done; required reviewers unavailable for `terraform-apply` |
 
 ## In Progress
 
-No work items are in progress.
+| ID | Work Item | Validation | Notes |
+| --- | --- | --- | --- |
+| WQ-027 | Align root volume cost model and deployment controls | Local validation and GitHub plan required | This PR |
 
 ## Blocked
 
@@ -35,8 +38,10 @@ No work items are in progress.
 | WQ-022 | First control-plane apply | Requires state, OIDC, plan review, cost decision, and human approval | Do not apply yet |
 | WQ-023 | Product runtime hosting | Requires product migration decision and spending approval | Defer |
 | WQ-014 | Implement Session Manager logging Terraform | Requires logging cost review and explicit approval to modify AWS | Implement after first-plan readiness is complete |
-| WQ-026 | Configure GitHub environments and repository variables | Requires explicit approval; user excluded this from bootstrap execution | Configure before first GitHub plan |
+| WQ-028 | Add EventBridge Scheduler start/stop automation | Requires deployed host, selected schedule, IAM review, and apply approval | Prepare after first host deployment |
 
 ## Next
 
-No unblocked work items remain before human approval gates.
+- Review revised control-plane plan.
+- Select initial schedule.
+- Decide whether to approve first local IAM Identity Center apply.

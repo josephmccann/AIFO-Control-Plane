@@ -112,6 +112,8 @@ The plan workflow runs in the protected GitHub environment `terraform-plan` and 
 
 Do not add AWS access keys as GitHub secrets.
 
+Until those repository variables exist, the plan job is skipped instead of failing. This keeps pre-bootstrap documentation and validation PRs reviewable while preserving the OIDC-only deployment boundary.
+
 ## Terraform State
 
 The S3 backend uses native S3 lockfiles:

@@ -21,6 +21,7 @@ jobs:
   plan:
     name: Plan control-plane Terraform
     runs-on: ubuntu-latest
+    if: ${{ vars.AWS_TERRAFORM_PLAN_ROLE_ARN != '' && vars.TF_BACKEND_BUCKET != '' && vars.TF_BACKEND_KEY != '' }}
     environment: terraform-plan
 
     steps:

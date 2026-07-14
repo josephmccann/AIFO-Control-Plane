@@ -14,6 +14,8 @@ All notable changes to this repository are recorded here.
 - Narrowed the GitHub Terraform plan role from AWS managed `ReadOnlyAccess` to a custom read policy with explicit extension hook.
 - Made EC2 detailed monitoring explicit and disabled by default.
 - Reduced example root volume size from 200 GiB to 100 GiB for the initial host.
+- Made shell scripts compatible with GitHub `shellcheck`.
+- Made the Terraform plan workflow skip before OIDC/backend repository variables are configured.
 
 ## 2026-07-14
 

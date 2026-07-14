@@ -17,10 +17,10 @@ echo "Checking Terraform formatting."
 terraform fmt -check -recursive "$ROOT_DIR/terraform"
 
 for tf_dir in "${TF_ROOTS[@]}"; do
-  echo "Initializing Terraform without backend: ${tf_dir#$ROOT_DIR/}"
+  echo "Initializing Terraform without backend: ${tf_dir#"$ROOT_DIR"/}"
   terraform -chdir="$tf_dir" init -backend=false -input=false
 
-  echo "Validating Terraform configuration: ${tf_dir#$ROOT_DIR/}"
+  echo "Validating Terraform configuration: ${tf_dir#"$ROOT_DIR"/}"
   terraform -chdir="$tf_dir" validate -no-color
 done
 

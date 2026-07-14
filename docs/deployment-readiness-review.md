@@ -19,6 +19,7 @@ Review PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
 - [x] Cost model created.
 - [x] Session Manager logging design created.
 - [x] Offline Terraform validation passed.
+- [x] GitHub plan workflow configured to skip before OIDC/backend variables exist.
 
 ## Required Before Remote-State Bootstrap
 
@@ -71,3 +72,4 @@ Review PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
 - Apply workflow intentionally absent.
 - PR #2 not reviewed or merged.
 - PR #1 supersession decision unresolved.
+- Terraform plan workflow will remain skipped until OIDC/backend repository variables exist.

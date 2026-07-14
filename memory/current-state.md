@@ -7,6 +7,7 @@ Date: 2026-07-14
 - Repository: `josephmccann/AIFO-Control-Plane`
 - Baseline commit: `4da93f1b674abf108e8c0e1bcb1d97c7a122baed`
 - Working branch: `docs/product-context-operating-model`
+- Pull request: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
 - No infrastructure has been deployed from this repository.
 - No `terraform apply` or `terraform destroy` has been run in this workstream.
 

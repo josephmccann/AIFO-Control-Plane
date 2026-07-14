@@ -4,6 +4,8 @@
 
 No AWS infrastructure has been deployed from this repository.
 
+Current review PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
+
 ## Last Validated State
 
 Offline validation passed on 2026-07-14:

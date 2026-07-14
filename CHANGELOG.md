@@ -4,6 +4,8 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Recorded the approved remote-state and GitHub OIDC bootstrap execution results.
+- Documented created bootstrap resources, Terraform outputs, verification results, warnings, and next GitHub setup actions.
 - Added product runtime inventory for the existing AI.FO-Demo product.
 - Added control-plane fit assessment, principle traceability matrix, assumption register, and execution plan.
 - Added repository operating model docs for contribution, security, roadmap, runbooks, memory, workstreams, and workqueue.

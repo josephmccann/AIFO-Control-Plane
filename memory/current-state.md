@@ -8,14 +8,18 @@ Date: 2026-07-14
 - Baseline commit: `4da93f1b674abf108e8c0e1bcb1d97c7a122baed`
 - Operating-model merge commit: `6f8064b9de3aaa0f099013170c3c007e41fd266f`
 - Bootstrap-status merge commit: `f96710c44b249976cac66cafd4ca8d60f3f6d598`
-- Current documentation branch: `agent/predeployment-audit-controls`
+- Pre-deployment hardening merge commit: `c4c998bb10289c91dc47013a0069adc0961b461f`
+- Current documentation branch: `agent/record-partial-control-plane-apply`
 - Pull request #2 was squash-merged into `main`.
 - Pull request #3 was squash-merged into `main`.
 - PR #1 was closed as superseded.
 - Remote-state bootstrap was applied on 2026-07-14 after explicit approval.
 - GitHub OIDC bootstrap was applied on 2026-07-14 after explicit approval.
 - GitHub planning configuration was completed after PR #3: `terraform-plan` and `terraform-apply` environments exist, repository variables are configured, and the plan workflow succeeded through OIDC.
-- No control-plane EC2 host, product runtime resources, CloudTrail resources, Session Manager logging resources, EventBridge Scheduler resources, apply workflow, or apply-role infrastructure permissions have been created.
+- GitHub plan role read-only policy update was applied on 2026-07-14 after explicit approval.
+- Hardened control-plane apply was attempted on 2026-07-14 after explicit approval and stopped on AWS `PendingVerification` during EC2 launch.
+- CloudTrail, Session Manager logging, VPC/network, security group, Scheduler group, Scheduler role, and Scheduler DLQ resources exist.
+- No control-plane EC2 host, EBS root volume, Scheduler start/stop schedules, product runtime resources, apply workflow, or apply-role infrastructure permissions have been created.
 
 ## Product Context
 
@@ -31,9 +35,9 @@ Date: 2026-07-14
 - Control-plane environment exists.
 - Initial network is one public subnet in one Availability Zone.
 - Initial host has public IPv4, zero inbound rules, SSM-only administration, IMDSv2, 100 GiB encrypted gp3 root volume, and controlled HTTPS/DNS egress.
-- Current branch proposes a multi-Region CloudTrail management-events baseline with a dedicated encrypted S3 log bucket and 365-day lifecycle expiration.
-- Current branch proposes Session Manager logging to an encrypted CloudWatch Logs log group with 30-day retention and a customer-managed KMS key.
-- Current branch proposes EventBridge Scheduler start/stop automation for the single Terraform-managed host, defaulting to 08:00-16:00 Monday-Friday in `America/Los_Angeles`, with a scheduler DLQ.
+- Multi-Region CloudTrail management-events baseline exists with a dedicated encrypted S3 log bucket and 365-day lifecycle expiration.
+- Session Manager logging exists with an encrypted CloudWatch Logs log group, 30-day retention, a customer-managed KMS key, and the `SSM-SessionManagerRunShell` preferences document.
+- EventBridge Scheduler group, role, and DLQ exist. Start/stop schedules do not exist yet because EC2 creation failed before an instance ID was available.
 - Product runtime infrastructure is not yet provisioned.
 
 ## Bootstrap Resources Created
@@ -55,6 +59,19 @@ GitHub OIDC:
 - State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
 - Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
 - Role attachments for plan state access, plan read access, and apply state access.
+- Plan read policy default version `v2` includes the approved read-only refresh permissions for the hardened control-plane resources.
+
+Partial hardened control-plane resources:
+
+- CloudTrail: `arn:aws:cloudtrail:us-west-2:350480401760:trail/aifo-control-plane-management-events`
+- CloudTrail bucket: `aifo-control-plane-cloudtrail-350480401760-us-west-2`
+- VPC: `vpc-0f73b1daaa9fc17ab`
+- Public subnet: `subnet-03ce35314c75b8e1f`
+- Security group: `sg-0190e01bae800bb1a`
+- S3 gateway endpoint: `vpce-058114f11531d5fdd`
+- Session Manager log group: `/aifo/control-plane/session-manager`
+- Session Manager KMS key: `arn:aws:kms:us-west-2:350480401760:key/e36ac1c5-105c-42c1-92f9-06fcf02cb772`
+- Scheduler DLQ: `https://sqs.us-west-2.amazonaws.com/350480401760/aifo-control-plane-scheduler-dlq`
 
 ## Bootstrap Verification
 
@@ -74,14 +91,15 @@ GitHub OIDC:
 - `terraform-apply` GitHub environment exists, but GitHub required reviewers are unavailable on the current repository plan.
 - `terraform-apply` must remain unused and no apply workflow may be created.
 - Repository variables for planning are configured.
-- CloudTrail was not changed and read-only inspection returned no trails in `us-west-2`.
-- Read-only inspection returned no existing `SSM-SessionManagerRunShell` account preference document and no existing `/aifo/control-plane/session-manager` log group.
+- AWS returned `PendingVerification` for EC2 `RunInstances` in `us-west-2`; no EC2 instance exists.
+- Terraform post-failure plan shows `4 to add, 0 to change, 0 to destroy`.
+- Remaining resources are the EC2 instance, Scheduler inline policy, start schedule, and stop schedule.
+- No SSM managed node exists and no Session Manager connection test was possible.
+- CloudTrail logging is enabled and latest delivery attempt succeeded at `2026-07-14T23:09:07Z`.
 - Bootstrap Terraform state files were generated locally under ignored paths and must not be committed.
 - Always-on `m7i-flex.2xlarge` operation exceeds the $250 budget; scheduled operation is required unless a budget exception is approved.
 
 ## Current Branch Changes
 
-- Pre-deployment audit controls proposed for the first host deployment.
-- Terraform modules added for CloudTrail, Session Manager logging, and EventBridge Scheduler.
-- GitHub plan role read policy expanded in code for the new read-only plan surface; it has not been applied and does not change the apply role.
-- Control-plane apply remains blocked pending reviewed plan, cost acceptance, and explicit human approval.
+- Deployment record updated for the partial hardened control-plane apply.
+- No further AWS mutation should occur until AWS regional account validation clears and a renewed approval gate is granted.

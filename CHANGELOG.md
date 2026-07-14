@@ -4,6 +4,9 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Applied the GitHub OIDC plan-role read-policy update after approval; the apply role remains state-access-only.
+- Recorded the partial hardened control-plane apply attempt blocked by AWS `PendingVerification` during EC2 launch.
+- Documented the created CloudTrail, Session Manager logging, network, IAM, Scheduler group, and Scheduler DLQ resources, plus remaining unapplied EC2 and Scheduler schedule resources.
 - Added Terraform modules for a multi-Region CloudTrail management-events baseline, encrypted Session Manager logging, and EventBridge Scheduler EC2 start/stop automation.
 - Added ADR-0008 for the CloudTrail management-events baseline and ADR-0009 for automated EC2 operating schedules.
 - Updated runbooks, deployment readiness, memory, roadmap, and handoffs for the hardened first-deployment plan.

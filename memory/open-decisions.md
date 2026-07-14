@@ -9,6 +9,7 @@
 | OD-008 | Decide product secrets manager and rotation model | Product + Infrastructure | Before AWS product runtime | Yes |
 | OD-011 | Approve hardened control-plane environment apply | Human + Infrastructure | After reviewed plan, cost acceptance, and schedule acceptance | Yes |
 | OD-012 | Decide whether to upgrade GitHub plan or choose another approval boundary for future apply automation | Human + Infrastructure | Before any apply workflow exists | Yes |
+| OD-013 | Decide whether to resume the partial control-plane apply after AWS validation clears | Human + Infrastructure | After read-only re-plan shows only expected residual resources | Yes |
 
 ## Recently Resolved
 
@@ -19,3 +20,4 @@
 | OD-003 | Configure GitHub environments `terraform-plan` and `terraform-apply` | Completed; required reviewers unavailable, so apply environment remains unused |
 | OD-010 | Configure GitHub repository variables for Terraform plan | Completed |
 | OD-009 | Determine whether PR #1 is superseded by this branch | PR #1 was closed as superseded; PR #2 was squash-merged |
+| OD-014 | Apply GitHub OIDC plan-role read-policy update | Applied on 2026-07-14; read-only verification passed |

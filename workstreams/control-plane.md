@@ -11,9 +11,9 @@ Build a secure, reproducible AWS control plane for AI.FO infrastructure operatio
 - GitHub OIDC plan/apply boundary.
 - SSM-only EC2 operator host.
 - Remote state and lockfile design.
-- Proposed CloudTrail management-events baseline.
-- Proposed Session Manager logging.
-- Proposed EventBridge Scheduler start/stop automation.
+- Deployed CloudTrail management-events baseline.
+- Deployed Session Manager logging.
+- Partially deployed EventBridge Scheduler automation: group, role, and DLQ exist; start/stop schedules wait for the EC2 instance.
 
 ## Out Of Scope For Now
 
@@ -25,6 +25,6 @@ Build a secure, reproducible AWS control plane for AI.FO infrastructure operatio
 ## Next Work
 
 - Validate branch changes.
-- Review the hardened first-deployment plan.
-- Prepare first control-plane apply approval packet.
-- Execute first control-plane apply only after explicit approval.
+- Record the partial apply.
+- Wait for AWS account validation to clear.
+- Resume apply only after renewed explicit approval.

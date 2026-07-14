@@ -15,7 +15,7 @@ variable "vpc_cidr" {
 
 variable "subnet_id" {
   type        = string
-  description = "Private subnet ID for the control-plane host."
+  description = "Public subnet ID for the initial control-plane host."
 }
 
 variable "instance_type" {
@@ -36,6 +36,12 @@ variable "root_volume_size_gb" {
 variable "enable_termination_protection" {
   type        = bool
   description = "Whether to enable EC2 termination protection."
+}
+
+variable "enable_detailed_monitoring" {
+  type        = bool
+  description = "Whether to enable EC2 detailed monitoring for the control-plane host."
+  default     = false
 }
 
 variable "tags" {

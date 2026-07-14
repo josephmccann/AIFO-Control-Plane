@@ -50,6 +50,12 @@ variable "apply_role_managed_policy_arns" {
   default     = []
 }
 
+variable "plan_role_additional_policy_arns" {
+  type        = list(string)
+  description = "Optional additional managed policy ARNs for the plan role. Keep empty unless a reviewed plan failure proves more read access is required."
+  default     = []
+}
+
 variable "tags" {
   type        = map(string)
   description = "Tags applied to bootstrap resources."

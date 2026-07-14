@@ -1,10 +1,11 @@
 aws_region            = "us-west-2"
-github_owner          = "GITHUB_OWNER"
-github_repository     = "AIFO-Control-Plane"
+github_owner             = "GITHUB_OWNER"
+github_repository        = "AIFO-Control-Plane"
 github_plan_environment  = "terraform-plan"
 github_apply_environment = "terraform-apply"
 
 state_bucket_name = "aifo-terraform-state-ACCOUNT_ID-us-west-2"
 state_key         = "control-plane/terraform.tfstate"
 
-apply_role_managed_policy_arns = []
+plan_role_additional_policy_arns = []
+apply_role_managed_policy_arns   = []

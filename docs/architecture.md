@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The AI.FO control plane provides a minimal AWS foundation for running a single administrative host and future platform services. This initial repository focuses on secure defaults, repeatable Terraform planning, and deployment guardrails.
+The AI.FO control plane provides a minimal AWS foundation for infrastructure operations. This initial repository focuses on secure defaults, repeatable Terraform planning, and deployment guardrails. It does not yet host the AI.FO product runtime.
 
 ## Constraints
 
@@ -18,6 +18,7 @@ The AI.FO control plane provides a minimal AWS foundation for running a single a
 - No long-lived AWS keys are allowed.
 - No committed secrets are allowed.
 - The initial host must reach the public internet for package installs, GitHub, container registries, and external APIs.
+- The existing AI.FO product runtime requirements must guide infrastructure design.
 
 ## High-Level Design
 
@@ -81,12 +82,15 @@ The control-plane host is modeled as a single Ubuntu EC2 instance:
 - IMDSv2 required
 - Encrypted GP3 root volume
 - Termination protection enabled by default
+- Detailed monitoring disabled by default until monitoring requirements justify it
 
 Instance type candidates pending pricing and availability verification:
 
 - `m7i-flex.2xlarge`
 - `m7i.2xlarge`
 - `m7a.2xlarge`
+
+Current recommendation: keep `m7i-flex.2xlarge` as the default x86 candidate, but do not approve continuous operation under the $250 monthly budget without a cost decision. See [ec2-instance-recommendation.md](ec2-instance-recommendation.md).
 
 ## IAM
 
@@ -125,29 +129,9 @@ Cost-sensitive design choices:
 - One subnet in one Availability Zone by default.
 - One EC2 host by default.
 - Root volume defaults are explicit and configurable.
+- Detailed EC2 monitoring defaults to disabled.
+- The example root volume is 100 GiB gp3.
 
 ## Architecture Decisions
 
-### ADR-001: Use Session Manager Instead of SSH
-
-**Status:** Accepted
-
-EC2 administration will use Systems Manager Session Manager. The host has no SSH key pair and no inbound security-group rules. This reduces public attack surface and removes SSH key management from the baseline.
-
-### ADR-002: Use GitHub Actions OIDC for CI/CD AWS Access
-
-**Status:** Accepted
-
-GitHub Actions will assume AWS roles through OIDC. Static AWS access keys are not allowed in GitHub secrets. Plan and apply roles are separate and scoped to protected GitHub environments.
-
-### ADR-003: Start With Public Subnet Egress Instead of NAT Gateway
-
-**Status:** Accepted
-
-The host needs outbound internet access to install packages, clone GitHub repositories, pull containers, and call external APIs. A public IPv4 address with no inbound rules satisfies that requirement at lower initial cost than NAT Gateway. Private subnet migration is deferred to a later phase.
-
-### ADR-004: Use Native S3 State Lockfiles
-
-**Status:** Accepted
-
-Terraform state uses the S3 backend with `use_lockfile = true`. DynamoDB locking is not used unless a future Terraform compatibility requirement forces it.
+Material decisions are recorded in [docs/adr/](adr/). The initial accepted ADRs cover product-gated scope, public IPv4 SSM-only host access, native S3 locking, GitHub OIDC plan/apply boundaries, and EC2 instance selection.

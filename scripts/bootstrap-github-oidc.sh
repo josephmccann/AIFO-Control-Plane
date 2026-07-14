@@ -40,7 +40,6 @@ if [[ -z "$AWS_ACCOUNT_ID" || -z "$GITHUB_REPOSITORY" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
-OUT_FILE="$OUT_DIR/github-oidc-trust-policy.json"
 
 render_policy() {
   local role_name="$1"

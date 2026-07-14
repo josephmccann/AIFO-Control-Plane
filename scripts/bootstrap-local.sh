@@ -19,7 +19,7 @@ require_tool() {
 require_tool terraform
 
 for tf_dir in "${TF_ROOTS[@]}"; do
-  echo "Initializing Terraform locally without a backend: ${tf_dir#$ROOT_DIR/}"
+  echo "Initializing Terraform locally without a backend: ${tf_dir#"$ROOT_DIR"/}"
   terraform -chdir="$tf_dir" init -backend=false -input=false
 done
 

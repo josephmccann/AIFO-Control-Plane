@@ -81,7 +81,7 @@ resource "aws_instance" "host" {
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.host.name
   vpc_security_group_ids      = [aws_security_group.host.id]
-  monitoring                  = true
+  monitoring                  = var.enable_detailed_monitoring
   disable_api_termination     = var.enable_termination_protection
   user_data_replace_on_change = true
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {

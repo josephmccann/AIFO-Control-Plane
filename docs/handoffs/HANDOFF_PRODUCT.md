@@ -1,0 +1,76 @@
+# AI.FO Product Handoff
+
+## Purpose
+
+Canonical starting context for product runtime, application architecture, financial truth boundaries, integrations, and deployment dependencies relevant to infrastructure.
+
+## Current Product Reality
+
+AI.FO is a working financial intelligence platform. It:
+
+- ingests QuickBooks Online reports and accounting CSV exports;
+- supports financial statements, AR, AP, sales, bank, transaction-detail, budget, subscription, and invoice-detail ingestion paths;
+- computes financial metrics, ratios, scenarios, constraints, trends, and registered business signals through deterministic code;
+- sends a server-built computed snapshot to the AI narrative layer;
+- prevents AI from recalculating or changing deterministic financial truth;
+- uses AI to synthesize CFO-grade narratives and verification;
+- includes intelligence briefs, cash and runway analysis, expense intelligence, scenario modeling, ratio analysis, decision framing, memo generation, upload workflows, auth, admin, and board reporting.
+
+## Current Stack
+
+- React 19
+- TypeScript
+- Vite
+- Tailwind
+- Radix UI
+- Recharts
+- Express 5
+- Node.js
+- Passport
+- PostgreSQL
+- Drizzle ORM
+- Vitest
+- Playwright
+- Cloudflare R2
+
+## Runtime Dependencies
+
+- PostgreSQL through `DATABASE_URL`.
+- Cloudflare R2 for production upload storage.
+- QuickBooks Online OAuth and sandbox sync.
+- Anthropic for narrative generation.
+- GMI Cloud or OpenAI-compatible verifier.
+- Session secret and auth storage.
+- CORS and API base URL configuration.
+
+## Operational Validation
+
+Important product commands include:
+
+```bash
+pnpm build
+pnpm run typecheck
+pnpm deploy:parity -- --target=local --base-url=http://localhost:8080
+pnpm validate:ai
+pnpm demo:smoke
+pnpm --filter api-server demo:smoke -- --sync-qbo
+pnpm qbo:seed-demo -- --dry-run
+pnpm lock:preflight
+git diff --check
+```
+
+## Current Open Product PRs Reviewed
+
+- PR #180, draft: founder/company context and constitutional documents.
+- PR #186, open: top value-add surfaces, account panel, connector store, Stripe adapter, external connectors migration.
+
+PR #186 is near-term context but not current baseline until merged.
+
+## Infrastructure Implications
+
+- Do not build product runtime infrastructure until the AWS migration scope is approved.
+- Do not replace R2 with S3 without a storage ADR.
+- Do not introduce databases, queues, or clusters for future connectors before merged product requirements exist.
+- Preserve deterministic financial-engine authority over financial truth.
+- Preserve observed/reported/derived/inferred/unknown distinctions in future telemetry and lineage design.
+- Future runtime infrastructure must support product validation commands without leaking secrets.

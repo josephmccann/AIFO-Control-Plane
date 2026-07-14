@@ -29,6 +29,7 @@ Required controls for GitHub roles:
 - Use a plan role for `terraform plan`.
 - Reserve a separate apply role for a future protected apply workflow.
 - Do not use static AWS access keys.
+- Keep the plan role to the minimum read surface required for Terraform refresh and plan. Add read actions only after observed failures and review.
 
 The current plan workflow uses the `terraform-plan` GitHub environment. A future apply workflow must use a separate protected `terraform-apply` environment with manual approval.
 
@@ -62,8 +63,8 @@ The EC2 host baseline includes:
 Future hardening should add:
 
 - Centralized patch policy.
-- CloudWatch agent configuration.
-- Session log retention policy.
+- CloudWatch agent configuration if host metrics/logs require it.
+- Session Manager logging with short CloudWatch Logs retention, per [session-manager-logging-design.md](session-manager-logging-design.md).
 - Host-level vulnerability scanning.
 - EDR or equivalent workload protection if required.
 
@@ -107,6 +108,10 @@ Expected audit sources:
 
 CloudTrail organization or account-level configuration should be verified before first deployment.
 
+## Product Data Boundary
+
+The current control plane does not host product runtime or customer data. Future infrastructure that handles accounting data, QBO tokens, uploads, AI prompts, verifier outputs, or decision records requires a product runtime ADR, secrets design, retention model, and privacy review.
+
 ## Threat Model
 
 | Threat | Control |
@@ -129,4 +134,5 @@ CloudTrail organization or account-level configuration should be verified before
 - Set `AWS_TERRAFORM_PLAN_ROLE_ARN`, `TF_BACKEND_BUCKET`, and `TF_BACKEND_KEY` as repository variables.
 - Confirm budget notification email recipients in the manually created budget.
 - Confirm the selected EC2 instance type is acceptable under the budget.
+- Confirm whether the host is always-on, scheduled, or downsized.
 - Confirm no host ingress is introduced.

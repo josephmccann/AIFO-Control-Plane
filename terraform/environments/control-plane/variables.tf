@@ -64,7 +64,7 @@ variable "ubuntu_ami_ssm_parameter" {
 variable "root_volume_size_gb" {
   type        = number
   description = "Root EBS volume size for the control-plane host."
-  default     = 200
+  default     = 100
 
   validation {
     condition     = var.root_volume_size_gb >= 50

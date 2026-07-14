@@ -25,13 +25,15 @@ Required controls for GitHub roles:
 
 - Trust only `token.actions.githubusercontent.com`.
 - Require audience `sts.amazonaws.com`.
-- Restrict the `sub` claim to the exact repository and protected GitHub environment.
+- Restrict the `sub` claim to the exact repository and GitHub environment.
 - Use a plan role for `terraform plan`.
-- Reserve a separate apply role for a future protected apply workflow.
+- Reserve a separate apply role for a future protected apply workflow, but keep it state-access-only until an approval boundary is available.
 - Do not use static AWS access keys.
 - Keep the plan role to the minimum read surface required for Terraform refresh and plan. Add read actions only after observed failures and review.
 
-The current plan workflow uses the `terraform-plan` GitHub environment. A future apply workflow must use a separate protected `terraform-apply` environment with manual approval.
+The current plan workflow uses the `terraform-plan` GitHub environment and successfully assumes the plan role through OIDC.
+
+The `terraform-apply` environment exists, but GitHub required environment reviewers are unavailable on the current repository plan. Because it cannot enforce manual reviewer approval, it must remain unused. Do not create an apply workflow. Until GitHub reviewer protection is available or a replacement approval boundary is accepted, control-plane applies must use an authenticated IAM Identity Center session after a reviewed approval packet.
 
 ## Network Security
 
@@ -95,7 +97,7 @@ Terraform state can contain sensitive infrastructure metadata. The intended back
 
 DynamoDB locking is not used in the initial version. Native S3 lockfiles require Terraform `>= 1.10.0`.
 
-State bootstrap is an explicit future step and is not automated by scripts in this repository.
+State bootstrap is complete and was applied only after explicit approval.
 
 ## Logging and Audit
 
@@ -120,7 +122,7 @@ The current control plane does not host product runtime or customer data. Future
 | Public IPv4 exposure | Security group has zero inbound rules |
 | Stolen CI credentials | OIDC short-lived credentials, no static keys |
 | Overbroad CI role | Separate plan role from future apply role |
-| Accidental deployment | No apply workflow, scripts avoid AWS mutations |
+| Accidental deployment | No apply workflow, `terraform-apply` unused, local apply requires approval packet |
 | State exposure | S3 backend with encryption, versioning, and lockfiles |
 | Credential leakage | `.gitignore`, no long-lived keys, no committed secrets |
 | Unbounded spend | Manual AWS budget already exists; Terraform import path documented |
@@ -128,10 +130,9 @@ The current control plane does not host product runtime or customer data. Future
 ## Pre-Deployment Security Checklist
 
 - Confirm CloudTrail is enabled.
-- Create remote state bucket through an approved bootstrap process.
-- Create GitHub OIDC provider, plan role, and apply role through an approved bootstrap process.
-- Configure protected GitHub environments `terraform-plan` and `terraform-apply`.
-- Set `AWS_TERRAFORM_PLAN_ROLE_ARN`, `TF_BACKEND_BUCKET`, and `TF_BACKEND_KEY` as repository variables.
+- Confirm remote-state bucket and GitHub OIDC bootstrap verification.
+- Confirm `terraform-apply` remains unused while required reviewers are unavailable.
+- Confirm `AWS_TERRAFORM_PLAN_ROLE_ARN`, `TF_BACKEND_BUCKET`, and `TF_BACKEND_KEY` repository variables.
 - Confirm budget notification email recipients in the manually created budget.
 - Confirm the selected EC2 instance type is acceptable under the budget.
 - Confirm whether the host is always-on, scheduled, or downsized.

@@ -2,23 +2,22 @@
 
 ## Now
 
-- Review and merge bootstrap execution status documentation.
-- Configure GitHub environments and repository variables after approval.
-- Run first GitHub Actions plan after repository variables are configured.
+- Review cost-alignment and deployment-control PR.
+- Confirm the revised GitHub Actions plan uses a 100 GiB root volume.
 - Keep control-plane apply blocked pending separate approval.
 
 ## Next
 
-- Configure GitHub protected environments and variables.
-- Run first Terraform plan through GitHub Actions.
-- Review cost, no ingress, SSM-only access, and IMDSv2.
+- Review cost, no ingress, SSM-only access, IMDSv2, and 100 GiB storage in the plan.
+- Choose the initial host operating schedule.
 - Prepare first control-plane apply approval packet.
+- Perform first apply only from an authenticated IAM Identity Center session if approved.
 
 ## Later
 
 - Add Session Manager logging and CloudWatch retention.
 - Add patch management.
-- Add cost model and stop/start strategy.
+- Add EventBridge Scheduler start/stop automation after the host exists and a schedule is approved.
 - Design product runtime architecture.
 - Design PostgreSQL, secrets, storage, and validation pipeline.
 - Evaluate private subnet migration.

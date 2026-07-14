@@ -75,6 +75,7 @@ The control-plane host is modeled as a single Ubuntu EC2 instance:
 
 - Default type: `m7i-flex.2xlarge`
 - Target capacity: 8 vCPU, 32 GiB RAM
+- Default root volume: 100 GiB encrypted gp3
 - Public IPv4 address for outbound internet access
 - No SSH key pair
 - No inbound security-group rules
@@ -90,7 +91,7 @@ Instance type candidates pending pricing and availability verification:
 - `m7i.2xlarge`
 - `m7a.2xlarge`
 
-Current recommendation: keep `m7i-flex.2xlarge` as the default x86 candidate, but do not approve continuous operation under the $250 monthly budget without a cost decision. See [ec2-instance-recommendation.md](ec2-instance-recommendation.md).
+Current recommendation: keep `m7i-flex.2xlarge` as the default x86 candidate, but approve it only for scheduled operation under the $250 monthly budget. Continuous operation requires a separate budget exception. See [ec2-instance-recommendation.md](ec2-instance-recommendation.md).
 
 ## IAM
 
@@ -102,9 +103,11 @@ Bootstrap Terraform defines:
 
 - GitHub OIDC provider.
 - Terraform plan role.
-- Terraform apply role reserved for a future protected apply workflow.
+- Terraform apply role exists for the future OIDC boundary but currently has only Terraform state access.
 
-Both GitHub Actions roles must trust only the exact repository and protected GitHub environment. The apply role is not used by any current workflow.
+Both GitHub Actions roles trust only the exact repository and GitHub environment subject. GitHub required environment reviewers are unavailable on the current repository plan, so the `terraform-apply` environment exists but must remain unused. No apply workflow may be created until reviewer protection is available or a replacement approval boundary is accepted.
+
+Until then, a control-plane apply must be run only from an authenticated IAM Identity Center session after a reviewed approval packet.
 
 ## Terraform State
 
@@ -131,6 +134,12 @@ Cost-sensitive design choices:
 - Root volume defaults are explicit and configurable.
 - Detailed EC2 monitoring defaults to disabled.
 - The example root volume is 100 GiB gp3.
+
+Operating schedules for the default host:
+
+- 8 hours per weekday: recommended first deployment posture.
+- 12 hours per day: acceptable if the longer work window is approved.
+- Always on: not approved under the current $250 budget.
 
 ## Architecture Decisions
 

@@ -20,7 +20,7 @@ Do not open a public issue for suspected vulnerabilities, leaked credentials, cu
 - No public SSH.
 - Systems Manager Session Manager for EC2 administration.
 - IMDSv2 required on EC2 instances.
-- Terraform state stored remotely only after approved bootstrap.
+- Terraform state stored remotely in the approved S3 backend.
 - GitHub Actions AWS access through OIDC and short-lived credentials.
 - Separate human, plan, apply, and EC2 runtime permissions.
 - Default deny for inbound network access.
@@ -52,22 +52,26 @@ AI.FO works with accounting data, QBO connections, AI prompts, verification, tel
 
 ## Current Security Status
 
-- Control-plane Terraform is scaffolded but not applied.
+- Bootstrap Terraform has been applied for remote state and GitHub OIDC.
+- Control-plane host Terraform has not been applied.
 - The EC2 host design has no inbound security-group rules and no SSH key.
 - The initial host uses public IPv4 only for outbound egress and cost avoidance.
 - The GitHub OIDC bootstrap root has created separate plan and apply roles.
-- The apply role has no managed policies by default.
+- The plan role is used by the GitHub plan workflow through OIDC.
+- The `terraform-apply` GitHub environment exists, but required reviewers are unavailable on the current repository plan and the environment must remain unused.
+- The apply role has only Terraform state access and no infrastructure mutation permissions.
+- No apply workflow exists or may be created under the current GitHub approval limitation.
 - Product runtime secrets, database, and storage are not yet provisioned in AWS.
 
 ## Required Pre-Deployment Review
 
-Before any AWS bootstrap or apply:
+Before any control-plane apply:
 
 - verify CloudTrail status;
 - verify the AWS account ID and region;
 - review Terraform plan output;
-- confirm protected GitHub environments;
 - confirm remote-state bucket name and lockfile behavior;
-- confirm EC2 instance cost against the $250 budget;
+- confirm EC2 schedule and cost against the $250 budget;
 - confirm no public ingress rules are introduced;
 - confirm rollback and emergency access runbooks are current.
+- apply only with an authenticated IAM Identity Center session after an explicit approval packet.

@@ -19,7 +19,8 @@ Operational rules for AI agents working in this repository.
 - GitHub Actions uses OIDC role assumption.
 - GitHub Actions must not use static AWS access keys.
 - GitHub Actions plan and apply roles must be separate.
-- OIDC trust must be scoped to the exact repository and protected GitHub environment.
+- OIDC trust must be scoped to the exact repository and GitHub environment subject.
+- The `terraform-apply` environment currently cannot enforce required reviewers and must remain unused until an approved replacement boundary exists.
 - Systems Manager Session Manager is the only intended administrative access path for EC2 hosts.
 - Public SSH is not allowed.
 

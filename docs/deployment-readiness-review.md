@@ -6,6 +6,7 @@ This checklist tracks bootstrap completion and the remaining gates before the fi
 
 Merged operating-model PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/2
 Bootstrap status PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/3
+Last successful GitHub plan run before this PR: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29371131579
 
 ## Completed Preparation
 
@@ -20,9 +21,13 @@ Bootstrap status PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/3
 - [x] Cost model created.
 - [x] Session Manager logging design created.
 - [x] Offline Terraform validation passed.
-- [x] GitHub plan workflow configured to skip until backend repository variables exist.
+- [x] GitHub plan workflow configured.
 - [x] PR #2 squash-merged to `main`.
 - [x] PR #1 closed as superseded.
+- [x] GitHub repository variables configured for planning.
+- [x] `terraform-plan` environment exists with no protection rules for automated planning.
+- [x] `terraform-apply` environment exists, but required reviewers are unavailable on the current GitHub plan.
+- [x] First GitHub Actions plan succeeded through OIDC.
 
 ## Completed Bootstrap
 
@@ -50,38 +55,37 @@ Bootstrap status PR: https://github.com/josephmccann/AIFO-Control-Plane/pull/3
 - [ ] Product runtime infrastructure.
 - [ ] Session Manager logging Terraform resources.
 - [ ] Apply workflow.
-- [ ] GitHub repository variables.
-- [ ] `terraform-apply` GitHub environment.
+- [ ] EventBridge Scheduler start/stop automation.
 
 ## Required Before First Control-Plane Plan
 
 - [x] Remote state exists.
 - [x] OIDC plan role exists.
-- [ ] GitHub repository variables set.
-- [ ] `terraform-plan` environment protection rules configured.
+- [x] GitHub repository variables set.
+- [x] `terraform-plan` environment exists; no manual approval required for automated planning.
 - [ ] CloudTrail status accepted or remediated; read-only inspection returned no trails in `us-west-2`.
 - [ ] `manage_budget = false` confirmed unless importing budget.
 - [ ] No product runtime resources included.
 
 ## Required Before First Apply
 
-- [ ] Apply workflow design reviewed.
-- [ ] `terraform-apply` environment created and requires approval.
-- [ ] Apply role infrastructure permissions reviewed before any future apply workflow.
+- [ ] Confirm no apply workflow exists.
+- [ ] Confirm `terraform-apply` remains unused because GitHub required reviewers are unavailable on the current repository plan.
+- [ ] Apply role infrastructure permissions reviewed before any future apply workflow; current apply role must remain state-access-only.
 - [ ] Terraform plan artifact reviewed.
 - [ ] Rollback runbook current.
 - [ ] Emergency access runbook current.
-- [ ] Host instance cost decision made; scheduled operation remains recommended for `m7i-flex.2xlarge`.
+- [ ] EC2 start/stop runbook reviewed.
+- [ ] Host instance schedule selected; `m7i-flex.2xlarge` is approved only for scheduled operation under the current $250 budget.
 - [ ] Decide whether Session Manager logging Terraform should be included before first host apply or immediately after.
 - [ ] Cost impact accepted.
 - [ ] Explicit human approval recorded.
 
 ## Current Blockers
 
-- GitHub repository variables not configured.
-- `terraform-plan` protection rules not configured.
-- `terraform-apply` environment not created or protected.
-- Host cost decision unresolved.
+- GitHub required environment reviewers are unavailable on the current repository plan.
+- `terraform-apply` exists but cannot enforce reviewer protection and must remain unused.
+- Host schedule decision unresolved.
 - Apply role has no infrastructure mutation permissions by design; future permissions require review.
 - Apply workflow intentionally absent.
-- Terraform plan workflow will remain skipped until OIDC/backend repository variables exist.
+- Control-plane apply must use an authenticated IAM Identity Center session after an explicit approval packet is reviewed.

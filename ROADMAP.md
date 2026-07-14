@@ -21,7 +21,9 @@ Status: Complete and applied.
 - Remote-state bootstrap root for S3 state and native lockfiles applied.
 - GitHub OIDC bootstrap root applied.
 - Separate Terraform plan and apply roles created.
-- Protected GitHub environments documented.
+- GitHub environments created.
+- Repository variables configured for Terraform plan.
+- First GitHub Actions plan succeeded through OIDC.
 - Exact human execution steps prepared.
 - EC2 instance recommendation documented against current AWS pricing.
 - Cost model documented against the $250 monthly budget.
@@ -35,18 +37,18 @@ Completed resources:
 - State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
 - Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
 
-## Phase 2: First Plan And Control-Plane Host
+## Phase 2: Cost-Aligned Control-Plane Host
 
-Status: Blocked pending GitHub setup, reviewed plan, cost decision, and explicit apply approval.
+Status: Blocked pending reviewed cost-aligned plan, operating schedule decision, and explicit apply approval.
 
-- Configure repository variables.
-- Configure `terraform-plan` protection rules.
-- Create and protect `terraform-apply`.
-- Run GitHub Actions Terraform plan.
+- Keep `terraform-apply` unused because required reviewers are unavailable on the current GitHub plan.
+- Keep apply workflow absent.
 - Review plan for no inbound access, IMDSv2, SSM-only administration, and expected costs.
-- Add protected apply workflow only after approval boundary is accepted.
+- Review 100 GiB root volume fit.
+- Review start/stop runbook.
+- Select 8-hours-per-weekday or 12-hours-per-day operating schedule.
 
-Decision gate: human approval before apply.
+Decision gate: human approval before any local IAM Identity Center apply.
 
 ## Phase 3: Hardening
 
@@ -56,6 +58,7 @@ Status: Planned.
 - CloudWatch log retention.
 - Patch management.
 - Cost alerts and recurring cost model.
+- EventBridge Scheduler start/stop automation after first host deployment.
 - Backup and restore drills for Terraform state.
 - Least-privilege policy refinement based on observed plan requirements.
 - Static analysis additions such as `actionlint`, `shellcheck`, and Terraform security linting.

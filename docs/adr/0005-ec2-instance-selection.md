@@ -26,11 +26,15 @@ Principles 14, 20, and 23: do not overclaim, produce best-in-class disciplined w
   - `m8g.2xlarge`: $262.10.
 - Public IPv4 and EBS add additional monthly cost.
 - A 100 GiB gp3 root volume is approximately $8.00 per month in us-west-2 based on the AWS EBS gp3 storage rate shown on the AWS pricing page.
+- With 100 GiB gp3 and public IPv4, `m7i-flex.2xlarge` is estimated at $76.30/month for 8 hours per weekday, $149.64/month for 12 hours per day, and $291.27/month always on before data transfer, logs, snapshots, and taxes.
+- The local AI.FO-Demo checkout measured 55 MiB on 2026-07-14 without dependency caches.
+- The current host cloud-init does not install local model weights, product databases, product uploads, or long-lived Docker images.
 
 ## Assumptions
 
 - x86_64 compatibility is preferred until product and agent tooling are validated on Arm. Confidence: medium.
-- The host will not run continuously until budget impact is explicitly accepted. Confidence: medium.
+- The host will not run continuously until budget impact is explicitly accepted. Confidence: high.
+- 100 GiB is enough for the initial control-plane host if Docker and model/tooling caches remain bounded. Confidence: medium.
 
 ## Unknowns
 
@@ -38,6 +42,7 @@ Principles 14, 20, and 23: do not overclaim, produce best-in-class disciplined w
 - Sustained CPU utilization and whether `m7i-flex` burst characteristics are acceptable.
 - Whether Arm-based `m8g.2xlarge` is compatible with all required tooling.
 - Whether a smaller instance or scheduled stop/start policy is acceptable.
+- Actual disk consumption after Docker, Node/pnpm, and agent tooling are installed.
 
 ## Information Sources Reviewed
 
@@ -52,6 +57,8 @@ Principles 14, 20, and 23: do not overclaim, produce best-in-class disciplined w
 ## Decision
 
 Keep `m7i-flex.2xlarge` as the default candidate among the requested x86 8 vCPU / 32 GiB options because it has the lowest current on-demand hourly price of the three requested x86 candidates. Do not treat it as budget-approved for continuous 24/7 operation.
+
+Set the default root volume to 100 GiB encrypted gp3. Use scheduled operation, preferably 8 hours per weekday, for the first deployment unless a separate budget exception is approved.
 
 ## Why This Decision Is Appropriate Now
 
@@ -71,7 +78,7 @@ It preserves the stated capacity target while making the budget conflict explici
 - `m7a.2xlarge` costs more than both Intel candidates in the current us-west-2 price data.
 - `m8g.2xlarge` is cheaper but requires Arm compatibility validation.
 - Smaller instances may not satisfy the current target.
-- Scheduling is likely needed but should be designed after operator usage is known.
+- Scheduling is required under the current budget; manual start/stop is acceptable for first deployment, with EventBridge Scheduler deferred until after the host exists.
 
 ## Security Effects
 
@@ -87,11 +94,11 @@ No customer data should be placed on the host without a future data-handling dec
 
 ## Cost Effects
 
-Always-on `m7i-flex.2xlarge` compute alone exceeds the $250 monthly budget. With public IPv4 and EBS, continuous operation is materially above budget.
+Always-on `m7i-flex.2xlarge` compute alone exceeds the $250 monthly budget. With public IPv4 and 100 GiB EBS, continuous operation is materially above budget.
 
 ## Operational Burden
 
-No additional operational burden now. Future cost control may require stop/start automation or rightsizing.
+Manual stop/start adds operator burden but keeps first deployment simple and low-cost. Future cost control should add EventBridge Scheduler after the host exists and a schedule is approved.
 
 ## Solo-Founder Recoverability
 
@@ -122,4 +129,5 @@ Change `control_plane_instance_type`, review the plan, schedule downtime if repl
 - Actual utilization is low enough to use a smaller instance.
 - Arm compatibility is validated, making `m8g.2xlarge` viable.
 - Sustained CPU makes `m7i-flex` inappropriate.
+- Docker/model tooling fills the 100 GiB root volume after cache cleanup.
 - Budget approval increases or a Savings Plan/Reserved Instance strategy is adopted.

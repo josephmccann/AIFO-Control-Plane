@@ -4,12 +4,12 @@ Date: 2026-07-14
 
 ## Recommendation
 
-Use `m7i-flex.2xlarge` as the default x86 8 vCPU / 32 GiB candidate for the initial control-plane host, but do not approve continuous 24/7 operation under the current $250 monthly AWS budget.
+Use `m7i-flex.2xlarge` as the default x86 8 vCPU / 32 GiB candidate for the initial control-plane host, but approve it only for scheduled operation under the current $250 monthly AWS budget.
 
 The practical recommendation before first apply is:
 
 1. keep `m7i-flex.2xlarge` as the Terraform default candidate;
-2. decide whether the host will be stopped when not in use, downsized, or funded above $250;
+2. run it on an approved schedule, preferably 8 hours per weekday for the first deployment;
 3. validate regional capacity immediately before deployment;
 4. revisit Arm-based `m8g.2xlarge` only after toolchain compatibility is tested.
 
@@ -24,7 +24,7 @@ Official AWS Price List data for Amazon EC2 On-Demand Linux in `us-west-2` was r
 | `m7a.2xlarge` | 8 | 32 GiB | AMD EPYC 9R14 | $0.46368 | $338.49 |
 | `m8g.2xlarge` | 8 | 32 GiB | AWS Graviton4 | $0.35904 | $262.10 |
 
-Additional recurring costs include EBS, public IPv4, data transfer, and any monitoring/logging additions.
+Additional recurring costs include EBS, public IPv4, data transfer, and any monitoring/logging additions. With a 100 GiB gp3 root volume and public IPv4, the current modeled totals are $76.30/month for 8 hours per weekday, $149.64/month for 12 hours per day, and $291.27/month always on.
 
 ## Interpretation
 
@@ -38,12 +38,12 @@ Among the requested x86 candidates, `m7i-flex.2xlarge` is the least expensive cu
 
 ## Budget Finding
 
-An always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget before EBS and public IPv4 are counted. The current budget and host target are therefore in tension.
+An always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget after EBS and public IPv4 are counted, before data transfer, logs, snapshots, and taxes. The current budget and host target are therefore in tension.
 
 Options:
 
+- approve an operating schedule;
 - approve the higher monthly spend;
-- run the host only when needed;
 - start with a smaller instance;
 - test `m8g.2xlarge` compatibility;
 - use Savings Plans or Reserved Instances only after usage is stable.

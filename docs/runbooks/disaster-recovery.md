@@ -2,7 +2,7 @@
 
 ## Current Scope
 
-The current control plane has not been deployed. Disaster recovery currently covers Git repository history, Terraform configuration, and future Terraform state.
+Bootstrap infrastructure has been deployed. Disaster recovery currently covers Git repository history, Terraform configuration, the S3 Terraform state bucket, and GitHub OIDC bootstrap resources. The control-plane host and product runtime have not been deployed.
 
 ## Recovery Priorities
 

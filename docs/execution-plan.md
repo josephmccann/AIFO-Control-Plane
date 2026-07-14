@@ -26,7 +26,7 @@ Build and maintain the AI.FO AWS control plane with enough discipline that a sta
 - Local product repository context from `AI.FO-Demo`.
 - Authenticated GitHub access for PR and branch state.
 - Official AWS documentation and Price List data for instance and cost decisions.
-- Human approval before AWS bootstrap, IAM changes, deployment, spending, or apply.
+- Human approval before any further AWS changes, IAM changes, deployment, spending, or apply.
 
 ## Decision Gates
 

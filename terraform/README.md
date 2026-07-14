@@ -15,7 +15,7 @@ terraform/
     └── network/
 ```
 
-The `control-plane` environment is the first deployable unit. Local validation should use `init -backend=false` until the remote state backend is created through an approved bootstrap process.
+The `control-plane` environment is the first deployable unit. Terraform remote state has been bootstrapped, but local validation can still use `init -backend=false` when remote state is not needed.
 
 The intended backend is S3 with native lockfiles:
 
@@ -25,6 +25,6 @@ use_lockfile = true
 
 DynamoDB locking is not part of the initial backend.
 
-Bootstrap and apply steps are documented in [../docs/runbooks/bootstrap.md](../docs/runbooks/bootstrap.md). No bootstrap root should be applied without explicit human approval.
+Bootstrap and apply steps are documented in [../docs/runbooks/bootstrap.md](../docs/runbooks/bootstrap.md). The remote-state and GitHub OIDC bootstrap roots were applied after explicit human approval on 2026-07-14. Do not run the control-plane environment apply without separate approval.
 
 The initial control-plane host defaults to `m7i-flex.2xlarge`, but current AWS pricing review shows continuous operation exceeds the $250 monthly budget before storage and public IPv4. Review [../docs/ec2-instance-recommendation.md](../docs/ec2-instance-recommendation.md) before first apply.

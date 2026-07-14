@@ -2,18 +2,17 @@
 
 ## Now
 
-- Finish product-gated operating model.
-- Validate all Terraform and workflows offline.
-- Prepare bootstrap execution steps without running them.
-- Open PR for review.
+- Review and merge bootstrap execution status documentation.
+- Configure GitHub environments and repository variables after approval.
+- Run first GitHub Actions plan after repository variables are configured.
+- Keep control-plane apply blocked pending separate approval.
 
 ## Next
 
-- Bootstrap remote state after approval.
-- Bootstrap GitHub OIDC after approval.
 - Configure GitHub protected environments and variables.
-- Run first Terraform plan.
+- Run first Terraform plan through GitHub Actions.
 - Review cost, no ingress, SSM-only access, and IMDSv2.
+- Prepare first control-plane apply approval packet.
 
 ## Later
 

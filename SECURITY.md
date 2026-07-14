@@ -2,7 +2,7 @@
 
 ## Scope
 
-This repository controls AWS infrastructure design for AI.FO. It currently contains Terraform, CI workflows, bootstrap plans, runbooks, and operating documentation. No infrastructure has been deployed from this repository.
+This repository controls AWS infrastructure design for AI.FO. Terraform remote-state and GitHub OIDC bootstrap infrastructure has been deployed. The control-plane host and product runtime have not been deployed.
 
 ## Reporting Security Issues
 
@@ -55,7 +55,7 @@ AI.FO works with accounting data, QBO connections, AI prompts, verification, tel
 - Control-plane Terraform is scaffolded but not applied.
 - The EC2 host design has no inbound security-group rules and no SSH key.
 - The initial host uses public IPv4 only for outbound egress and cost avoidance.
-- The GitHub OIDC bootstrap root defines separate plan and apply roles.
+- The GitHub OIDC bootstrap root has created separate plan and apply roles.
 - The apply role has no managed policies by default.
 - Product runtime secrets, database, and storage are not yet provisioned in AWS.
 

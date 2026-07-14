@@ -4,6 +4,8 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Recorded the approved remote-state and GitHub OIDC bootstrap execution results.
+- Documented created bootstrap resources, Terraform outputs, verification results, warnings, and next GitHub setup actions.
 - Added product runtime inventory for the existing AI.FO-Demo product.
 - Added control-plane fit assessment, principle traceability matrix, assumption register, and execution plan.
 - Added repository operating model docs for contribution, security, roadmap, runbooks, memory, workstreams, and workqueue.
@@ -15,7 +17,7 @@ All notable changes to this repository are recorded here.
 - Made EC2 detailed monitoring explicit and disabled by default.
 - Reduced example root volume size from 200 GiB to 100 GiB for the initial host.
 - Made shell scripts compatible with GitHub `shellcheck`.
-- Made the Terraform plan workflow skip before OIDC/backend repository variables are configured.
+- Made the Terraform plan workflow skip until OIDC/backend repository variables are configured.
 
 ## 2026-07-14
 

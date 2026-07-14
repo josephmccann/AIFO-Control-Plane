@@ -56,4 +56,4 @@ Every material infrastructure decision must record:
 
 ## Current Company-Level Risk
 
-The largest immediate infrastructure risk is spending founder time and budget on systems that do not yet support the working product or design-partner path. The second-largest risk is under-documenting security and operational boundaries before AWS resources are created.
+The largest immediate infrastructure risk is spending founder time and budget on systems that do not yet support the working product or design-partner path. The second-largest risk is under-documenting security and operational boundaries before additional AWS resources, the control-plane host, or product runtime are created.

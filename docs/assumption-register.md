@@ -9,7 +9,7 @@
 | A-005 | Cloudflare R2 remains the production upload-storage target until explicitly changed | Medium | Product README and secrets docs | Storage architecture decision | Product + Infrastructure | Before product hosting design |
 | A-006 | The manual AWS Budget should not be managed by Terraform yet | High | User stated budget exists manually | Import review if requested | Infrastructure | Before budget changes |
 | A-007 | GitHub environments `terraform-plan` and `terraform-apply` are acceptable names | Medium | Current workflow/docs use them | Human review during bootstrap | Infrastructure | Before OIDC bootstrap |
-| A-008 | PR #1 handoff docs are broadly factual but incomplete | High | Handoff content matches current scaffold but predates product inventory docs | Reconcile into control-plane docs | Infrastructure | Current branch |
+| A-008 | PR #1 handoff docs were broadly factual but incomplete | High | PR #1 was closed as superseded; PR #2 merged reconciled handoffs | None; retain as historical record | Infrastructure | Resolved |
 | A-009 | Product PR #186 connector architecture is not part of current deployed baseline | High | GitHub PR #186 is open | Re-check after merge | Product + Infrastructure | Weekly |
 | A-010 | Replit remains the current live demo deployment target | Medium | Product demo runbook references Replit | Confirm with founder before AWS product runtime work | Product + Infrastructure | Before product hosting design |
 | A-011 | Control-plane should avoid NAT Gateway until a product/private-subnet need is approved | High | Cost target and current egress requirements | Cost ADR | Infrastructure | Before network changes |

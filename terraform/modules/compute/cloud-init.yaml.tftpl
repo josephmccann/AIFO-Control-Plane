@@ -1,0 +1,19 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+ssh_pwauth: false
+disable_root: true
+package_update: false
+package_upgrade: false
+
+write_files:
+  - path: /etc/motd
+    permissions: "0644"
+    content: |
+      AI.FO control-plane host
+      Administrative access is through AWS Systems Manager Session Manager.
+      Public SSH is not configured.
+
+runcmd:
+  - [ sh, -lc, "find /etc/apt -type f \\( -name '*.list' -o -name '*.sources' \\) -exec sed -i -E 's#http://(archive|security).ubuntu.com/ubuntu#https://\\1.ubuntu.com/ubuntu#g' {} + || true" ]
+  - [ sh, -lc, "systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || systemctl enable --now amazon-ssm-agent || true" ]

@@ -1,0 +1,32 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl.bak
+
+# Local config
+.env
+.env.*
+*.pem
+*.key
+*.crt
+terraform/environments/*/terraform.tfvars
+terraform/environments/*/*.auto.tfvars
+terraform/bootstrap/*/terraform.tfvars
+terraform/bootstrap/*/*.auto.tfvars
+
+# Generated output
+build/
+dist/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

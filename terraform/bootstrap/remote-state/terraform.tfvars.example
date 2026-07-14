@@ -1,0 +1,3 @@
+aws_region        = "us-west-2"
+state_bucket_name = "aifo-terraform-state-ACCOUNT_ID-us-west-2"
+force_destroy     = false

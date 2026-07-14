@@ -2,7 +2,7 @@
 
 Initial AWS infrastructure repository for the AI.FO control plane.
 
-This repository is scaffolded for validation and planning only. It does not include an apply workflow, and the bootstrap scripts do not create AWS resources.
+This repository has completed the approved bootstrap for Terraform remote state and GitHub Actions OIDC. It does not include an apply workflow, and the control-plane host and product runtime have not been deployed.
 
 The control plane exists to support the current AI.FO product. Start with [docs/product-runtime-inventory.md](docs/product-runtime-inventory.md) before changing infrastructure design.
 
@@ -18,7 +18,7 @@ The control plane exists to support the current AI.FO product. Start with [docs/
 - Egress default: HTTPS to the internet, DNS to the VPC resolver
 - Intended host: Ubuntu EC2, 8 vCPU, 32 GB RAM
 - Current default host candidate: `m7i-flex.2xlarge`
-- Current deployment status: no AWS resources created by this repository
+- Current deployment status: bootstrap infrastructure deployed; control-plane host and product runtime not deployed
 
 ## Repository Layout
 
@@ -112,9 +112,19 @@ The plan workflow runs in the protected GitHub environment `terraform-plan` and 
 
 Do not add AWS access keys as GitHub secrets.
 
-Until those repository variables exist, the plan job is skipped instead of failing. This keeps pre-bootstrap documentation and validation PRs reviewable while preserving the OIDC-only deployment boundary.
+Until those repository variables exist, the plan job is skipped instead of failing. This keeps documentation and validation PRs reviewable while preserving the OIDC-only deployment boundary.
+
+Bootstrap created the AWS plan role, but the required repository variables have not been created yet.
 
 ## Terraform State
+
+Terraform remote state bootstrap is complete:
+
+- State bucket: `aifo-terraform-state-350480401760-us-west-2`
+- State key: `control-plane/terraform.tfstate`
+- Region: `us-west-2`
+- Encryption: enabled
+- Locking: native S3 lockfiles
 
 The S3 backend uses native S3 lockfiles:
 
@@ -163,9 +173,16 @@ The default instance type is `m7i-flex.2xlarge` because it targets 8 vCPU and 32
 
 ## Deployment Status
 
-No infrastructure has been deployed from this repository.
+Bootstrap infrastructure has been deployed from this repository:
 
-Before a future deployment, complete the implementation plan in [docs/implementation-plan.md](docs/implementation-plan.md), review the security model, and create the required remote-state and OIDC bootstrap resources through an approved process.
+- S3 remote-state bucket and supporting controls.
+- GitHub OIDC provider.
+- Terraform plan and apply roles.
+- Terraform state access and plan read policies.
+
+The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment apply remains blocked pending GitHub environment/repository variable setup, plan review, cost decision, and explicit human approval.
+
+Before a future control-plane deployment, complete the remaining readiness items in [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md), review the security model, configure GitHub environments and repository variables, and run a reviewed plan.
 
 ## Operating Model
 

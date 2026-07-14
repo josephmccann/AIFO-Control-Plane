@@ -26,13 +26,13 @@ Baseline commit:
 4da93f1b674abf108e8c0e1bcb1d97c7a122baed
 ```
 
-Current branch:
+Operating-model merge commit:
 
 ```text
-docs/product-context-operating-model
+6f8064b9de3aaa0f099013170c3c007e41fd266f
 ```
 
-No infrastructure has been deployed from this repository.
+Bootstrap infrastructure has been deployed. The control-plane host and product runtime have not been deployed.
 
 ## Current Architecture
 
@@ -57,10 +57,17 @@ The initial control-plane environment defines:
 
 Bootstrap roots are separate:
 
-- `terraform/bootstrap/remote-state/`: S3 state bucket with encryption, versioning, Block Public Access, and native lockfile support.
-- `terraform/bootstrap/github-oidc/`: GitHub OIDC provider plus separate plan and apply roles.
+- `terraform/bootstrap/remote-state/`: applied S3 state bucket with encryption, versioning, Block Public Access, and native lockfile support.
+- `terraform/bootstrap/github-oidc/`: applied GitHub OIDC provider plus separate plan and apply roles.
 
 The plan role is intended for `terraform-plan`. The apply role is reserved for a future `terraform-apply` protected environment. No apply workflow exists.
+
+Bootstrap resources:
+
+- State bucket: `aifo-terraform-state-350480401760-us-west-2`
+- OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
+- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
+- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
 
 ## Current Cost Finding
 
@@ -72,21 +79,17 @@ The control plane does not currently host AI.FO product runtime. Product hosting
 
 ## Deployment Prerequisites
 
-1. Confirm AWS account ID.
-2. Confirm backend bucket name and state key.
-3. Review and approve remote-state bootstrap plan.
-4. Review and approve GitHub OIDC bootstrap plan.
-5. Configure GitHub protected environments:
+1. Configure GitHub protected environments:
    - `terraform-plan`
    - `terraform-apply`
-6. Configure repository variables:
+2. Configure repository variables:
    - `AWS_TERRAFORM_PLAN_ROLE_ARN`
    - `TF_BACKEND_BUCKET`
    - `TF_BACKEND_KEY`
-7. Verify CloudTrail status.
-8. Decide host size/schedule against the $250 budget.
-9. Run first GitHub Actions plan.
-10. Add apply workflow only after the approval boundary is accepted.
+3. Verify or explicitly accept CloudTrail status.
+4. Decide host size/schedule against the $250 budget.
+5. Run first GitHub Actions plan.
+6. Add apply workflow only after the approval boundary is accepted.
 
 ## Guardrails
 

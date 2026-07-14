@@ -1,10 +1,10 @@
 # Bootstrap Runbook
 
-This runbook prepares AWS remote state and GitHub OIDC. It is not approval to execute. Running `terraform apply` or creating IAM resources requires explicit human approval.
+This runbook records the AWS remote state and GitHub OIDC bootstrap process. The bootstrap was completed after explicit approval on 2026-07-14. Running additional `terraform apply`, creating GitHub environments, creating repository variables, or deploying the control-plane host still requires explicit human approval.
 
 ## Preconditions
 
-- AWS account ID confirmed.
+- AWS account ID confirmed: `350480401760`.
 - IAM Identity Center session active for `AIFO-Platform-Admin`.
 - No long-lived AWS keys in the shell or GitHub.
 - GitHub repository confirmed as `josephmccann/AIFO-Control-Plane`.
@@ -13,7 +13,18 @@ This runbook prepares AWS remote state and GitHub OIDC. It is not approval to ex
   - `terraform-apply`
 - Terraform `>= 1.10.0` installed.
 
-## Remote State Plan
+## Completed Remote State Bootstrap
+
+- State bucket: `aifo-terraform-state-350480401760-us-west-2`
+- Apply result: `6 added, 0 changed, 0 destroyed`
+- Post-apply plan: no drift
+- Versioning: enabled
+- Encryption: `AES256`
+- Public access: blocked
+- Ownership controls: `BucketOwnerEnforced`
+- Bucket policy: denies insecure transport
+
+## Remote State Plan Pattern
 
 ```bash
 cp terraform/bootstrap/remote-state/terraform.tfvars.example \
@@ -24,7 +35,7 @@ Edit `terraform/bootstrap/remote-state/terraform.tfvars` locally:
 
 ```hcl
 aws_region        = "us-west-2"
-state_bucket_name = "aifo-terraform-state-ACCOUNT_ID-us-west-2"
+state_bucket_name = "aifo-terraform-state-350480401760-us-west-2"
 force_destroy     = false
 ```
 
@@ -35,13 +46,26 @@ terraform -chdir=terraform/bootstrap/remote-state init -input=false
 terraform -chdir=terraform/bootstrap/remote-state plan -input=false
 ```
 
-Human approval gate before:
+The bootstrap apply has already been completed. Human approval is required before any future apply:
 
 ```bash
 terraform -chdir=terraform/bootstrap/remote-state apply -input=false
 ```
 
-## GitHub OIDC Plan
+## Completed GitHub OIDC Bootstrap
+
+- OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
+- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
+- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
+- State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
+- Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
+- Plan trust subject: `repo:josephmccann/AIFO-Control-Plane:environment:terraform-plan`
+- Apply trust subject: `repo:josephmccann/AIFO-Control-Plane:environment:terraform-apply`
+- Audience: `sts.amazonaws.com`
+- Apply role permissions: state access only, no inline policies
+- Post-apply plan: no drift
+
+## GitHub OIDC Plan Pattern
 
 ```bash
 cp terraform/bootstrap/github-oidc/terraform.tfvars.example \
@@ -57,7 +81,7 @@ github_repository        = "AIFO-Control-Plane"
 github_plan_environment  = "terraform-plan"
 github_apply_environment = "terraform-apply"
 
-state_bucket_name = "aifo-terraform-state-ACCOUNT_ID-us-west-2"
+state_bucket_name = "aifo-terraform-state-350480401760-us-west-2"
 state_key         = "control-plane/terraform.tfstate"
 ```
 
@@ -68,7 +92,7 @@ terraform -chdir=terraform/bootstrap/github-oidc init -input=false
 terraform -chdir=terraform/bootstrap/github-oidc plan -input=false
 ```
 
-Human approval gate before:
+The bootstrap apply has already been completed. Human approval is required before any future apply:
 
 ```bash
 terraform -chdir=terraform/bootstrap/github-oidc apply -input=false
@@ -83,16 +107,22 @@ Create protected environments in GitHub before using OIDC:
 
 The apply environment must require manual reviewer approval before any future apply workflow exists.
 
-Set repository variables after OIDC bootstrap:
+Current status:
+
+- `terraform-plan` exists but has no protection rules.
+- `terraform-apply` has not been created.
+- Repository variables have not been created.
+
+Set repository variables now that OIDC bootstrap is complete:
 
 ```bash
 gh variable set AWS_TERRAFORM_PLAN_ROLE_ARN \
   --repo josephmccann/AIFO-Control-Plane \
-  --body "PLAN_ROLE_ARN"
+  --body "arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan"
 
 gh variable set TF_BACKEND_BUCKET \
   --repo josephmccann/AIFO-Control-Plane \
-  --body "aifo-terraform-state-ACCOUNT_ID-us-west-2"
+  --body "aifo-terraform-state-350480401760-us-west-2"
 
 gh variable set TF_BACKEND_KEY \
   --repo josephmccann/AIFO-Control-Plane \
@@ -101,7 +131,7 @@ gh variable set TF_BACKEND_KEY \
 
 Do not set AWS access keys as GitHub secrets.
 
-## Post-Bootstrap Verification
+## Control-Plane Plan Verification
 
 ```bash
 cp terraform/environments/control-plane/backend.hcl.example \

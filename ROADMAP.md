@@ -4,7 +4,7 @@ This roadmap is intentionally conservative. The control plane must support the a
 
 ## Phase 0: Repository Operating Model
 
-Status: In progress on `docs/product-context-operating-model`.
+Status: Complete.
 
 - Product runtime inventory.
 - Principle traceability matrix.
@@ -12,29 +12,36 @@ Status: In progress on `docs/product-context-operating-model`.
 - Control-plane fit assessment.
 - ADR framework.
 - Runbooks, memory, workstreams, and workqueue.
-- PR #1 handoff reconciliation.
+- PR #1 handoff reconciliation completed; PR #1 closed as superseded.
 
 ## Phase 1: Bootstrap Readiness
 
-Status: Not deployed.
+Status: Complete and applied.
 
-- Remote-state bootstrap root for S3 state and native lockfiles.
-- GitHub OIDC bootstrap root.
-- Separate Terraform plan and apply roles.
+- Remote-state bootstrap root for S3 state and native lockfiles applied.
+- GitHub OIDC bootstrap root applied.
+- Separate Terraform plan and apply roles created.
 - Protected GitHub environments documented.
 - Exact human execution steps prepared.
 - EC2 instance recommendation documented against current AWS pricing.
 - Cost model documented against the $250 monthly budget.
 
-Decision gate: human approval before AWS resource creation or `terraform apply`.
+Completed resources:
+
+- State bucket: `aifo-terraform-state-350480401760-us-west-2`
+- OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
+- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
+- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
+- State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
+- Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
 
 ## Phase 2: First Plan And Control-Plane Host
 
-Status: Deferred.
+Status: Blocked pending GitHub setup, reviewed plan, cost decision, and explicit apply approval.
 
-- Execute remote-state bootstrap.
-- Execute GitHub OIDC bootstrap.
 - Configure repository variables.
+- Configure `terraform-plan` protection rules.
+- Create and protect `terraform-apply`.
 - Run GitHub Actions Terraform plan.
 - Review plan for no inbound access, IMDSv2, SSM-only administration, and expected costs.
 - Add protected apply workflow only after approval boundary is accepted.

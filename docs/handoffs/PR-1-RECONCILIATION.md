@@ -36,6 +36,6 @@ The handoffs were compared against:
 
 This branch supersedes PR #1's handoff content by adding reconciled versions under the same `docs/handoffs/` path plus product inventory, operating model, ADRs, runbooks, memory, and workqueue.
 
-## Remaining Human Decision
+## Resolution
 
-Decide whether to close PR #1 after this branch is reviewed, or merge PR #1 first and then reconcile conflicts. Recommendation: close PR #1 as superseded after this branch's PR is opened.
+PR #1 was closed as superseded. PR #2 was squash-merged into `main` at `6f8064b9de3aaa0f099013170c3c007e41fd266f`.

@@ -18,7 +18,7 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-010 | Open PR | https://github.com/josephmccann/AIFO-Control-Plane/pull/2 | Done |
 | WQ-011 | Build cost model | `docs/cost-model.md` | Done |
 | WQ-012 | Design Session Manager logging | `docs/session-manager-logging-design.md`, ADR-0006 | Done |
-| WQ-013 | Prepare deployment-readiness review | `docs/deployment-readiness-review.md` | Done; readiness status is not ready pending human gates |
+| WQ-013 | Prepare deployment-readiness review | `docs/deployment-readiness-review.md` | Done; bootstrap complete, host deployment blocked by human gates |
 | WQ-020 | Execute remote-state bootstrap | Applied exactly approved S3 resources; post-apply plan exit code `0` | Done |
 | WQ-021 | Execute GitHub OIDC bootstrap | Applied exactly approved OIDC/IAM resources; post-apply plan exit code `0` | Done |
 | WQ-024 | Merge PR #2 | Squash-merged at `6f8064b9de3aaa0f099013170c3c007e41fd266f` | Done |
@@ -34,7 +34,7 @@ No work items are in progress.
 | --- | --- | --- | --- |
 | WQ-022 | First control-plane apply | Requires state, OIDC, plan review, cost decision, and human approval | Do not apply yet |
 | WQ-023 | Product runtime hosting | Requires product migration decision and spending approval | Defer |
-| WQ-014 | Implement Session Manager logging Terraform | Depends on bootstrap approval and logging cost review | Implement after remote state and OIDC plan path are approved |
+| WQ-014 | Implement Session Manager logging Terraform | Requires logging cost review and explicit approval to modify AWS | Implement after first-plan readiness is complete |
 | WQ-026 | Configure GitHub environments and repository variables | Requires explicit approval; user excluded this from bootstrap execution | Configure before first GitHub plan |
 
 ## Next

@@ -24,7 +24,7 @@ Ownership: Joe holds every merge and ratification gate. The "Agent" column names
 ## Dormant but live surfaces (no active workstream) — [FACT]
 
 - **getaifo.com marketing site** (GetAIFO-site): deployed and serving; no commits since 2026-06-22; no open PRs. Abandoned April lavender-redesign branches are the only unmerged visual work.
-- **Control-plane work queue**: "In Progress: None" — WQ-001…WQ-037 completed; the repo is in operational-refinement mode.
+- **Control-plane work queue**: "In Progress: None" — the WQ-001…WQ-037 series is completed **except WQ-023 (product runtime hosting) and WQ-035 (apply workflow automation), which remain Blocked** pending founder decisions (WQ-023 unblocks only after PR #13's review — see the dependency diagram below); the repo is in operational-refinement mode.
 - **AWS operator host**: deployed, stopped, scheduler-managed.
 
 ## Isolation map (who can collide with whom) — [FACT]

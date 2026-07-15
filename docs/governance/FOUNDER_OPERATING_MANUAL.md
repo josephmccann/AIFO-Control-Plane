@@ -88,9 +88,9 @@ have a canonical home. It links instead. In particular:
 
 ### 1.4 Authority hierarchy
 
-The following hierarchy is recommended for adoption with this manual. Each
-document class is authoritative for its own domain; the hierarchy resolves
-conflicts about doctrine and expectations.
+The following hierarchy was adopted with this manual on 2026-07-15 and is
+binding. Each document class is authoritative for its own domain; the
+hierarchy resolves conflicts about doctrine and expectations.
 
 | Rank | Document class | Authoritative for | On conflict |
 |------|----------------|-------------------|-------------|

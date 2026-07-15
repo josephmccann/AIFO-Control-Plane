@@ -9,7 +9,7 @@ Produce a repository-grounded founder decision package for safely moving the AI.
 ## Authoritative Inputs
 
 - Control-plane repository head inspected: `707e6298ed558fde06faea99b7e4b99b8b2b7adc`.
-- Product repository head inspected: `8df211e02f274d0a812771327c69b6d5b6c040d2`.
+- Product repository head inspected initially: `8df211e02f274d0a812771327c69b6d5b6c040d2`; refreshed after PR #186 merge to `3329c99beb0713269b54bc5fd6a7fb39bf44f398`.
 - Live AWS control-plane evidence collected read-only with profile `aifo-admin`.
 - Open and recently merged pull requests, recent commits, workflows, tests, application code, schema, migrations, integrations, and deployment configuration from both repositories.
 - Current official AWS, Cloudflare, Replit, Intuit, Anthropic, and GMI documentation where provider behavior or pricing is material.

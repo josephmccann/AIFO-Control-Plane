@@ -2,13 +2,15 @@
 
 Date: 2026-07-15
 
-Status: Decision requested; no deployment approval is implied
+Status: Strategic AWS migration direction approved; implementation parameters and deployment approvals remain pending
 
 ## 1. Executive Recommendation
 
-Approve a gated migration to a small AWS-managed product runtime and require it to pass the full migration-readiness checklist before AI.FO accepts real financial data from its first approximately 10 customer companies.
+Proceed with the approved strategic direction: a gated migration to a small AWS-managed product runtime that passes the full migration-readiness checklist before AI.FO accepts real financial data from its first approximately 10 customer companies.
 
-Use a dedicated AWS production member account; CloudFront/WAF and private S3 for the React frontend; two ECS Fargate API tasks behind an ALB; RDS PostgreSQL Multi-AZ; private S3 for uploads; PostgreSQL sessions; Secrets Manager/task roles; CloudWatch/CloudTrail/GuardDuty; and immutable, approval-gated releases. Keep the current Replit-associated runtime only for synthetic demonstration and rehearsal until cutover.
+The proposed implementation baseline uses a dedicated AWS production member account; CloudFront/WAF and private S3 for the React frontend; ECS Fargate API tasks behind an ALB; RDS PostgreSQL; private S3 uploads; PostgreSQL sessions; Secrets Manager/task roles; minimal AWS-native observability; and immutable, approval-gated releases. Keep the current Replit-associated runtime only for synthetic demonstration and rehearsal until cutover.
+
+Approved: AWS before real customer data, managed services, founder-operable recovery, no Kubernetes/premature microservices, and evidence-gated migration. Still Proposed: exact RDS size/availability shape, NAT topology, hostname, RPO/RTO, PITR retention, monthly budget, account boundary and every resource-level implementation detail. No deployment approval is implied.
 
 Do not launch the real cohort on the current runtime. The current evidence does not prove database restore, object recovery, customer deletion, deploy/schema rollback, production domain control, QBO key rotation, or acceptable verifier data handling.
 
@@ -17,11 +19,11 @@ Do not launch the real cohort on the current runtime. The current evidence does 
 - It has the strongest weighted result: 87.6/100 versus 59.4 for hardening current and 56.6 for hybrid.
 - It replaces hidden platform configuration with versioned artifacts, reviewed infrastructure plans and founder-executable recovery.
 - It removes Replit and R2 from production data custody while avoiding Kubernetes, microservices, Aurora and Redis.
-- It directly supports 15-minute RPO, 4-hour RTO, Multi-AZ service, immutable rollback and tested restore.
+- It can support the currently proposed recovery targets, Multi-AZ service, immutable rollback and tested restore; exact RPO/RTO and retention remain pending founder approval and evidence.
 - It creates a clean workload-identity path: GitHub OIDC and ECS roles, no static AWS keys, and no static object-store credentials.
 - It remains portable: React static assets, OCI images, PostgreSQL, Terraform and S3-compatible object semantics.
 
-AWS does not solve product-layer risk. Tenant isolation, QBO key rotation, session/logout/CSRF controls, upload quarantine, deletion, schema discipline, provider minimization and fail-closed verification must be implemented before production.
+AWS does not solve product-layer risk. Tenant isolation, QBO key rotation, session/logout/CSRF controls, upload quarantine, deletion, schema discipline, provider minimization and fail-closed verification must be implemented before production. The detailed dependency/acceptance/rollback plan is [Product Runtime Prerequisite Hardening](../superpowers/plans/2026-07-15-product-runtime-prerequisite-hardening.md).
 
 ## 3. What Must Happen Before The First Cohort
 
@@ -64,7 +66,7 @@ Production is isolated in a dedicated organization member account. Staging uses 
 - Current GMI customer-data use is a hard blocker.
 - Uploads are quarantined, signature/checksum/limit validated and malware-scanned before processing.
 
-## 7. Reliability And Recovery Summary
+## 7. Reliability And Recovery Summary (Proposed Parameters)
 
 - Availability objective: 99.5% monthly; two API tasks and Multi-AZ RDS.
 - RPO: 15 minutes database, zero acknowledged object loss after successful durable response.
@@ -73,7 +75,7 @@ Production is isolated in a dedicated organization member account. Staging uses 
 - Restore before first customer and quarterly; founder recovery every six months.
 - Prior image/frontend rollback under 30 minutes; database failures use tested forward-fix or PITR, not wishful code-only rollback.
 
-## 8. Cost Summary
+## 8. Cost Summary (Planning Range, Not Approved Budget)
 
 - Expected product-runtime beta: `$400-$550/month`.
 - Reasonable operating upper bound: `$800/month` before founder review.
@@ -98,7 +100,9 @@ No production data, token, DNS or callback moves during the architecture mission
 7. No complete customer deletion or backup-expiry workflow exists.
 8. Upload type/integrity/malware controls are incomplete.
 9. Logging can expose identifiers/provider content and is not centrally durable.
-10. Current deployment and nightly validation depend on external platform/founder-workstation state outside Git.
+10. The merged Stripe connector uses one deployment-wide restricted key assigned to one company; this is not a 10-company authorization model.
+11. Commercial plan/billing/support metadata is deployment-wide environment configuration, not authoritative per-company state.
+12. Current deployment and nightly validation depend on external platform/founder-workstation state outside Git.
 
 ## 11. Alternatives Rejected Or Deferred
 
@@ -113,23 +117,25 @@ No production data, token, DNS or callback moves during the architecture mission
 
 | Decision | Recommendation | Alternatives | Consequence | Latest safe decision date |
 | --- | --- | --- | --- | --- |
-| Migration timing | AWS before real customer data | Harden current; permanent hybrid | Delays onboarding but avoids unproven custody/recovery | Before any real customer signs data-access onboarding; target T-12 weeks |
 | Production account | Dedicated AWS member account | Shared management account | Better blast-radius/recovery; modest bootstrap burden | Before production Terraform design, T-10 weeks |
-| Compute/frontend | CloudFront/S3 + two ECS tasks/ALB | Existing hosting, App Runner, EC2 | Managed HA and reproducible rollback; fixed ALB/NAT cost | Before staging Terraform design, T-10 weeks |
-| Database | RDS PostgreSQL Multi-AZ `t4g.medium` | Small instance after test; Aurora; current DB | Meets HA/PITR; roughly `$106/month` compute/storage baseline | Before staging DB design, T-10 weeks |
+| Compute/frontend | CloudFront/S3 + ECS/ALB; determine task count/NAT from validation | Existing hosting, App Runner, EC2 | Managed rollback and operability; exact fixed network cost remains open | Before staging Terraform design, T-10 weeks |
+| Database | Managed RDS PostgreSQL; determine class, availability and retention from approved recovery/load evidence | Aurora; current DB; smaller/larger RDS shapes | Preserves PostgreSQL and managed recovery without prematurely fixing size | Before staging DB design, T-10 weeks |
 | Storage | S3 production, R2 migration source only | Retain R2; temporary hybrid | Removes static object credentials; requires checksum migration | Before upload prerequisite implementation, T-9 weeks |
-| Secrets/QBO keys | Secrets Manager + versioned keyring | Parameter Store/current secrets | Enables least privilege/rotation; product changes required | Before staging secrets exist, T-9 weeks |
+| Secrets/QBO/connector keys | Secrets Manager + versioned QBO keyring + per-tenant connector authorization | Parameter Store/current secrets; singleton pilot key only | Enables least privilege/rotation; product changes required | Before staging secrets/connectors exist, T-9 weeks |
+| Stripe connector tenancy | Keep disabled for customers until each tenant has an explicit authorization record; choose OAuth or restricted-key onboarding after provider review | One-company pilot only; omit Stripe from beta | Prevents cross-tenant provider access; adds onboarding/revocation work | Before a second company connects Stripe; no later than T-9 weeks |
+| Commercial account source of truth | Persist/derive plan, billing, support and renewal per company or label/hide the current global pilot fields | Keep deployment-wide copy | Avoids showing one company's commercial terms to another | Before shared multi-company staging, T-8 weeks |
+| Observation history | Preserve immutable sync/correction lineage while keeping idempotent current-value reads | Current-period overwrite only | Improves explainability/audit at modest storage cost | Before connector customer-data testing, T-8 weeks |
 | Sessions | Retain PostgreSQL; no Redis | Redis; JWT | Simplest durable model; auth hardening required | Before product prerequisite freeze, T-8 weeks |
-| Domain | `app.getaifo.com` unless `ai.fo` ownership proven | Acquire/use `ai.fo`; keep demo domain | Controls TLS/OAuth/customer trust | Before Intuit production callback submission, preferably T-10 weeks |
+| Domain | Use a founder-controlled same-origin hostname; exact hostname remains open pending custody evidence | Acquire/use `ai.fo`; use a verified `getaifo.com` subdomain; keep demo domain | Controls TLS/OAuth/customer trust | Before Intuit production callback submission, preferably T-10 weeks |
 | AI provider handling | Anthropic commercial DPA/ZDR; disable/replace GMI | Approve GMI under negotiated evidence; deterministic-only narratives | May constrain verifier feature; prevents unapproved disclosure | Before any customer-data provider test, T-8 weeks |
 | Retention/deletion | Approve proposed matrix with counsel | Shorter contract-specific periods | Creates truthful customer commitments and implementation scope | Before customer contract/privacy language, T-10 weeks |
-| Recovery targets | 15-minute RPO/4-hour RTO, quarterly restore | Weaker cheaper target; tighter costlier target | Sets architecture/drill obligations | Before infrastructure sizing, T-10 weeks |
-| Budget | `$400-$550` expected, `$800` review ceiling | Lower availability; higher managed controls | Authorizes recurring cost, not deployment | Before any resource creation, T-10 weeks |
+| Recovery targets | Approve explicit RPO/RTO/PITR/restore cadence after source-volume and customer-support evidence | Weaker cheaper target; tighter costlier target | Sets architecture, sizing and drill obligations | Before infrastructure sizing, T-10 weeks |
+| Budget | Approve a monthly target/review ceiling after updated service sizing and invoices | Lower availability; higher managed controls | Authorizes recurring cost, not deployment | Before any resource creation, T-10 weeks |
 | Production deployment approval | Create enforceable founder boundary separate from current unusable apply environment | Manual local approved deploy; paid GitHub protection | Determines who can change production | Before staging pipeline design, T-8 weeks |
 
 ## 13. Exact Approvals Required Before Deployment
 
-Architecture approval is not deployment approval. Before any staging resource creation, approve the ADR set, recurring staging cost, exact Terraform plan, account/IAM changes and data rule (synthetic only). Before production resource creation, approve the production account, exact plan, recurring budget, security review and staging exit report. Before migration/cutover, approve source backup/data copy, token handling, DNS/TLS, QBO callbacks, customer communication, exact commands, owners, go/no-go and rollback thresholds.
+Strategic direction is approved; implementation architecture is not deployment approval. Before any staging resource creation, approve the remaining ADRs, recurring staging cost, exact Terraform plan, account/IAM changes and data rule (synthetic only). Before production resource creation, approve the production account, exact plan, recurring budget, security review and staging exit report. Before migration/cutover, approve source backup/data copy, token handling, DNS/TLS, QBO callbacks, customer communication, exact commands, owners, go/no-go and rollback thresholds.
 
 ## 14. Stop Conditions
 
@@ -137,4 +143,4 @@ Stop for any Terraform apply/destroy; AWS/IAM/Scheduler/host/resource mutation; 
 
 ## 15. Recommended Next Execution Workstream
 
-Execute exactly one next workstream: **product-runtime prerequisite hardening design in the AI.FO-Demo repository**, covering one migration ledger/removal of startup DDL, QBO key-version rotation, real PostgreSQL tenant-isolation tests, session/logout/CSRF hardening, upload quarantine/checksums, structured redaction, readiness, deletion, and verifier fail-closed/provider abstraction. Produce a reviewable implementation plan and test strategy before any AWS staging Terraform.
+Execute exactly one next workstream: **controlled schema migration implementation in a dedicated AI.FO-Demo worktree**, the first dependency in the approved [prerequisite hardening plan](../superpowers/plans/2026-07-15-product-runtime-prerequisite-hardening.md). It must establish one migration ledger and eliminate non-fatal startup DDL without deploying or handling customer data.

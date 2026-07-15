@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 
-Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
+Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 
 ## Repository Checkpoint
 
@@ -10,10 +10,10 @@ Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
 - Inspected control `main`: `707e6298ed558fde06faea99b7e4b99b8b2b7adc`
 - Working branch: `codex/product-runtime-architecture-decision-package`
 - Product repository: `josephmccann/AI.FO-Demo`
-- Inspected product `master`: `8df211e02f274d0a812771327c69b6d5b6c040d2`
+- Inspected product `master`: `3329c99beb0713269b54bc5fd6a7fb39bf44f398`
 - Product checkout remained on `master`, clean and unmodified.
 - Control open PRs at reconstruction: none.
-- Product open PRs: #195 documentation checkpoint, #186 product surfaces/connectors, #180 founder context. They are not part of the inspected product baseline.
+- Product PR #186 merged as `3329c99beb0713269b54bc5fd6a7fb39bf44f398` and is included in the baseline. Current open-PR state was re-reviewed during the refresh.
 
 ## Verified AWS Control Plane
 
@@ -34,7 +34,7 @@ Control repository validation and a fresh remote-backend Terraform plan passed a
 
 ## Product Runtime Finding
 
-Current product is a Replit-associated Node/Express single process plus React/Vite static frontend, PostgreSQL/Drizzle, PostgreSQL sessions, Cloudflare R2 uploads, QBO OAuth/ingestion, Anthropic narratives and GMI verifier. Product head has extensive deterministic and route-level tests but no general CI workflow or independently reproducible production deployment definition.
+Current product is a Replit-associated Node/Express single process plus React/Vite static frontend, PostgreSQL/Drizzle, PostgreSQL sessions, Cloudflare R2 uploads, QBO OAuth/ingestion, Anthropic narratives and GMI verifier. Merged PR #186 adds session-derived account state, feature-flagged operating connectors, a Stripe read adapter, normalized observations, transactional/idempotent connector persistence and editable calibration suggestions. Product head has extensive deterministic and route-level tests but no general CI workflow or independently reproducible production deployment definition.
 
 Critical current gaps:
 
@@ -44,11 +44,13 @@ Critical current gaps:
 - Tenant isolation is application-query based with broad global admin and no real-database cross-tenant suite/RLS.
 - QBO token encryption uses one unversioned key with no rotation path.
 - Customer deletion, upload quarantine/integrity/malware controls, controlled schema migration/rollback and durable app audit/alerting are incomplete.
-- Product typecheck/build and 14,459 tests pass, but `pnpm lock:preflight` fails the telemetry provenance check and dependency audit is unverified because npm audit endpoints return HTTP 410 and Dependabot alerts are disabled.
+- Product frozen install, typecheck/build and 14,516 tests pass (5 skipped) at `3329c99`; `pnpm lock:preflight` still fails only the telemetry provenance check. AI/deploy-parity checks correctly block without clean-checkout secrets/DB, and no GitHub product workflow has run on the merged head.
+- The Stripe adapter uses one deployment-wide restricted key bound to one company; account plan/billing/support values are deployment-wide environment configuration. Neither is a multi-tenant production source of truth.
+- New connector tables are application-tenant-scoped and idempotent but lack database FK/RLS/check enforcement and append-only correction history.
 
 ## Architecture Package
 
-Completed analysis/drafts:
+Completed analysis/drafts and approved strategic direction:
 
 - Comprehensive runtime inventory and data classification/flows.
 - First-cohort production requirements.
@@ -57,11 +59,12 @@ Completed analysis/drafts:
 - STRIDE product threat model.
 - Objective migration readiness gates.
 - Product runtime cost model.
-- Proposed ADR-0011 through ADR-0022.
+- ADR-0011 accepted in principle for AWS-before-customer-data timing; ADR-0012 through ADR-0022 remain Proposed.
 - Founder decision packet.
+- Product prerequisite hardening plan updated against merged PR #186.
 
 Recommended path: migrate to a small AWS-managed runtime before onboarding real customer financial data. Use the current runtime only for synthetic demo/rehearsal. Expected product-runtime beta cost is `$400-$550/month`, with an `$800/month` review ceiling, separate from the current control-plane cost.
 
 ## Decision And Deployment Boundary
 
-Analysis is complete but architecture is not approved. No AWS product resources, product data, tokens, secrets, domains, certificates or callbacks changed. Future staging, migration rehearsal and production cutover remain blocked on founder decisions, product prerequisites, explicit resource/cost approval and objective evidence gates.
+The strategic AWS migration direction is approved. Exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention, monthly budget and other implementation parameters remain Proposed. No AWS product resources, product data, tokens, secrets, domains, certificates or callbacks changed. Future staging, migration rehearsal and production cutover remain blocked on founder decisions, product prerequisites, explicit resource/cost approval and objective evidence gates.

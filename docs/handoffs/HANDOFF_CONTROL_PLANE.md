@@ -2,16 +2,16 @@
 
 Date: 2026-07-15
 
-Session state: ACTIVE - FOUNDER PRODUCT RUNTIME DECISION PENDING
+Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 
 ## Repository State
 
 - Control main inspected: `707e6298ed558fde06faea99b7e4b99b8b2b7adc`.
-- Product master inspected: `8df211e02f274d0a812771327c69b6d5b6c040d2`.
+- Product master inspected: `3329c99beb0713269b54bc5fd6a7fb39bf44f398`.
 - Architecture work branch: `codex/product-runtime-architecture-decision-package`.
 - Product checkout was clean and unmodified.
 - Control open PRs at reconstruction: none.
-- Product open PRs: #195, #186 and #180; none is in the inspected baseline.
+- Product PR #186 is merged and included in the inspected baseline; open PRs were re-reviewed during refresh.
 
 ## Verified Control Plane
 
@@ -29,7 +29,7 @@ Session state: ACTIVE - FOUNDER PRODUCT RUNTIME DECISION PENDING
 
 ## Product Architecture Decision
 
-The repository now contains completed analysis and Proposed decisions:
+The repository now contains completed analysis, an accepted strategic direction and Proposed implementation decisions:
 
 - [Current runtime inventory](../product-runtime-inventory.md)
 - [Beta requirements](../product-runtime-requirements-beta-cohort.md)
@@ -38,14 +38,14 @@ The repository now contains completed analysis and Proposed decisions:
 - [Threat model](../security/product-runtime-threat-model.md)
 - [Migration gates](../product-runtime-migration-readiness.md)
 - [Cost model](../product-runtime-cost-model.md)
-- Proposed ADR-0011 through ADR-0022
+- ADR-0011 accepted in principle; ADR-0012 through ADR-0022 Proposed
 - [Founder decision packet](../decision-packets/PRODUCT_RUNTIME_ARCHITECTURE_FOUNDER_DECISION.md)
 
-Recommendation: complete a gated AWS-managed migration before accepting first-cohort real customer data. Use the current Replit-associated runtime only for synthetic demonstration and rehearsal. Proposed target is CloudFront/private S3, two ECS Fargate API tasks, RDS PostgreSQL Multi-AZ, private S3 uploads, Secrets Manager/task roles, structured CloudWatch audit/operations and a dedicated production AWS member account.
+Approved direction: complete a gated AWS-managed migration before accepting first-cohort real customer data. Use the current Replit-associated runtime only for synthetic demonstration and rehearsal. Service topology and exact RDS size, NAT topology, hostname, recovery/retention targets and budget remain Proposed. Merged PR #186 fits the core reference architecture but adds per-tenant Stripe authorization, account-metadata truth and observation-lineage decisions.
 
 ## Hard Blockers
 
-- Founder architecture, account, recovery, retention, domain, provider and budget decisions are pending.
+- Founder implementation, account, recovery, retention, domain, provider, connector-tenancy and budget decisions are pending; strategic migration timing is resolved.
 - `ai.fo` currently redirects to a domain marketplace while product canonicals claim it.
 - Current GMI verifier terms are not approved for highly sensitive financial facts.
 - Product prerequisites, staging, restore, tenant isolation, QBO rotation, upload integrity, deletion, monitoring, rollback, founder recovery and rehearsal gates have not passed.
@@ -53,7 +53,7 @@ Recommendation: complete a gated AWS-managed migration before accepting first-co
 
 ## Next Narrow Workstream
 
-Design product-runtime prerequisite hardening in `AI.FO-Demo`: one migration ledger/removal of startup DDL, QBO keyring rotation, database tenant-isolation tests, session/CSRF hardening, upload quarantine/integrity, structured redaction, readiness, deletion and verifier fail-closed/provider abstraction. Do not create runtime infrastructure.
+Execute the first prerequisite only in a dedicated `AI.FO-Demo` worktree: one migration ledger/removal of startup DDL with compatibility and rollback evidence. The full ordered plan is `docs/superpowers/plans/2026-07-15-product-runtime-prerequisite-hardening.md`. Do not create runtime infrastructure.
 
 ## Guardrails
 

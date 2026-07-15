@@ -4,13 +4,17 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Refreshed the product baseline to merged `AI.FO-Demo` PR #186 at `3329c99beb0713269b54bc5fd6a7fb39bf44f398` and incorporated connector, Stripe, account, observation and calibration implementation evidence.
+- Added the ordered 10-item product prerequisite hardening plan with exact merged files, dependencies, acceptance tests, migration/rollback, stage/data blockers, PR #186 overlap and ADR requirements.
+- Recorded AWS-before-customer-data as the approved strategic direction while keeping exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention, recurring budget and resource parameters Proposed.
+- Extended migration gates, threat model, risk/assumption memory and founder decisions for per-tenant connector authorization, commercial account truth and observation correction lineage.
 - Added the founder product-runtime architecture decision packet for the first approximately 10 customer companies; no deployment approval or infrastructure mutation is included.
-- Rebuilt the current AI.FO runtime inventory from product head `8df211e02f274d0a812771327c69b6d5b6c040d2`, including implementation-level topology, 17 data flows, classifications, confirmed risks and unresolved evidence.
+- Rebuilt the current AI.FO runtime inventory from product head `3329c99beb0713269b54bc5fd6a7fb39bf44f398`, including implementation-level topology, 20 data flows, classifications, confirmed risks and unresolved evidence.
 - Added beta-cohort security, availability, RPO/RTO, backup, retention, support, capacity and cost requirements.
 - Added a weighted current-platform, hybrid and AWS-managed options analysis recommending a gated AWS migration before real-customer data.
 - Added the proposed ECS Fargate, RDS PostgreSQL Multi-AZ, S3, Secrets Manager, CloudFront/WAF and two-account product reference architecture.
 - Added a STRIDE product threat model, objective MR-01 through MR-33 migration gates and a three-option cost model.
-- Added Proposed ADR-0011 through ADR-0022 for migration timing, compute, database, storage, secrets, sessions, environments/accounts, domain/TLS, observability, backup, deployment and retention/deletion.
+- Added ADR-0011 through ADR-0022 for migration timing, compute, database, storage, secrets, sessions, environments/accounts, domain/TLS, observability, backup, deployment and retention/deletion; ADR-0011 is now accepted in principle for strategic timing while the others remain Proposed.
 - Reconciled current state, open decisions, work queue, roadmap, architecture, security, readiness and handoff documents to separate completed analysis from unapproved deployment work.
 - Updated the verified control-plane checkpoint to main `707e629`, clean GitHub plan run `29380920338`, active CloudTrail/Session Manager/Scheduler and stopped instance `i-0254a9e2fcbcdebd7`.
 - Added a pinned, checksum-verified local installer for `actionlint` v1.7.12 and ShellCheck v0.11.0 across supported macOS/Linux architectures.

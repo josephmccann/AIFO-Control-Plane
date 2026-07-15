@@ -1,6 +1,6 @@
 # Roadmap
 
-Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
+Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 
 This roadmap keeps the operationally complete control plane separate from the unapproved product runtime.
 
@@ -37,19 +37,20 @@ Status: Ongoing, lower priority than product decision.
 
 ## Phase 4: Product Runtime Architecture Decision
 
-Status: Analysis complete; founder decision pending.
+Status: Analysis complete; AWS-before-customer-data strategic direction approved; implementation decisions pending.
 
 - Current-runtime inventory, data flows/classification and risk analysis complete.
 - Beta-cohort requirements and weighted current/hybrid/AWS options complete.
 - Reference architecture, threat model, readiness gates and cost model complete.
-- ADR-0011 through ADR-0022 and founder packet Proposed.
+- ADR-0011 accepted in principle; ADR-0012 through ADR-0022 and resource-level parameters Proposed.
+- Product baseline refreshed to merged PR #186 (`3329c99`) with connector/account/calibration implications incorporated.
 - Recommended path: AWS-managed runtime before real-customer data; current runtime remains synthetic demo/rehearsal only.
 
 Decision gates: domain/provider custody, architecture, retention, account, budget, recovery objectives and deployment approval boundary.
 
 ## Phase 5: Product Prerequisite Hardening
 
-Status: Not started; recommended next workstream.
+Status: Implementation not started; ordered documentation plan complete; recommended next workstream is item 1 only.
 
 - One controlled database migration ledger; remove startup DDL.
 - QBO versioned token-encryption keyring and rotation.

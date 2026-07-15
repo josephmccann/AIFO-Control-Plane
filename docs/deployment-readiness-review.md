@@ -38,7 +38,7 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - [x] EventBridge Scheduler start/stop automation deployed.
 - [x] GitHub plan workflow configured.
 - [x] GitHub plan drift gate completed.
-- [x] Comprehensive product runtime inventory/data flows/classification completed in a draft decision package.
+- [x] Comprehensive product runtime inventory/data flows/classification completed and refreshed to merged product PR #186 at `3329c99`.
 - [x] Beta requirements, options analysis, reference architecture, threat model, migration gate definitions, cost model and Proposed ADRs completed.
 
 ## Completed Bootstrap
@@ -78,7 +78,7 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - [ ] Product secrets.
 - [ ] Product object storage migration.
 - [ ] Domain/TLS/QBO callback migration.
-- [ ] Founder approval of product requirements and ADR-0011 through ADR-0022.
+- [ ] Founder approval of product implementation parameters and ADR-0012 through ADR-0022; ADR-0011 strategic timing is accepted in principle.
 - [ ] Product prerequisite hardening.
 - [ ] Product staging environment and validation.
 - [ ] Database/object restore and migration rehearsal.
@@ -99,9 +99,10 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - `terraform-apply` exists but cannot enforce reviewer protection and must remain unused.
 - Apply role has no infrastructure mutation permissions by design; future permissions require review.
 - Apply workflow intentionally absent.
-- Product runtime analysis is complete, but the design and deployment are not approved.
+- Product runtime analysis and strategic AWS-before-customer-data direction are complete, but implementation parameters and deployment are not approved.
 - `ai.fo` application ownership/control is not proven; it currently redirects to a domain marketplace while product canonicals claim it.
 - Current GMI verifier data handling is not acceptable for customer data without negotiated evidence or replacement.
 - Database/object backup and restore, customer deletion, QBO key rotation, tenant integration testing, upload integrity and controlled rollback gates have not passed.
+- Merged Stripe/account surfaces still need per-tenant connector authorization, per-company commercial account truth and observation-history semantics before multi-company staging.
 
 The authoritative product migration gate table is [product-runtime-migration-readiness.md](product-runtime-migration-readiness.md). Staging creation requires architecture, cost, account/IAM, product-prerequisite and exact Terraform-plan approval. Production cutover requires all MR-01 through MR-33 gates to pass plus explicit customer-data, DNS/TLS and QBO callback approval.

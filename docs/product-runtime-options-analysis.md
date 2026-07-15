@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 
-Status: Proposed
+Status: AWS-managed strategic direction approved; scores, sequence and implementation parameters remain Proposed
 
 ## Recommendation
 
@@ -118,12 +118,13 @@ Hybrid reduces commitment but maximizes day-two cognitive load. Its only justifi
 - AWS Secrets Manager and task roles; no static AWS credentials.
 - CloudWatch logs/metrics/alarms, CloudTrail, GuardDuty, AWS Budgets/Cost Anomaly Detection, and minimal SNS alerting.
 - GitHub OIDC builds immutable artifacts and produces plans; production deployment requires a new enforceable founder approval boundary.
+- Merged connector/account state remains in the same RDS/application boundary. Stripe adds outbound HTTPS and managed-secret requirements, not a new service. A per-tenant connector authorization record replaces the current one-company environment binding before multi-company use.
 
 ### Assessment
 
 | Dimension | Finding |
 | --- | --- |
-| Security | Strongest identity, network, secret, storage and audit integration. A separate production account materially limits control/nonproduction blast radius. Product fixes are still required; AWS does not solve tenant predicates or provider disclosure. |
+| Security | Strongest identity, network, secret, storage and audit integration. A separate production account materially limits control/nonproduction blast radius. Product fixes are still required; AWS does not solve tenant predicates, the singleton Stripe credential binding, global account metadata or provider disclosure. |
 | Reliability | Two API tasks and Multi-AZ RDS remove the main infrastructure single points. External QBO/AI dependencies remain graceful-degradation concerns. |
 | Recoverability | RDS PITR, S3 versioning, immutable images, Terraform reconstruction, cross-account founder access, and rehearsed restore provide the clearest recovery chain. |
 | Operational complexity | Moderate and bounded. ECS/RDS/S3 are more components than Replit but are standard managed services. No Kubernetes, service mesh, microservices, Redis, or Aurora is needed. |
@@ -144,9 +145,9 @@ Hybrid reduces commitment but maximizes day-two cognitive load. Its only justifi
 
 ## Migration Sequence
 
-1. Approve requirements and Proposed ADRs; resolve domain ownership, retention policy, provider terms, and production-account boundary.
+1. Strategic AWS timing is approved. Approve remaining requirements/ADRs; resolve domain ownership, retention, provider terms, production-account boundary, per-tenant connector authorization, commercial account truth and observation-history semantics.
 2. Make product runtime independently buildable as an immutable container and convert schema changes to a single reviewed migration path.
-3. Implement product prerequisites: tenant integration tests/RLS decision, QBO keyring rotation, session hardening, deletion, upload integrity/quarantine, logging redaction, readiness, and provider fail-closed behavior.
+3. Implement the ordered product prerequisites: controlled migrations, QBO keyring rotation, tenant/account/connector integration tests and enforcement, session hardening, upload integrity/quarantine, logging redaction, deletion, AI/verifier fail-closed behavior, readiness and reproducible container artifact.
 4. Design and review Terraform for nonproduction only. This package does not create it.
 5. After explicit approval, build staging with synthetic data; validate restore, OAuth sandbox, uploads, AI minimization, rollback, and founder access.
 6. Build production only after staging gates pass and recurring cost is approved.

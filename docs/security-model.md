@@ -129,12 +129,13 @@ The proposed product security model and structured threat register are in [secur
 - Prove founder control and recovery of the selected domain, DNS and exact QBO callback.
 - Disable or replace the current GMI verifier unless acceptable retention, no-training, subprocessor, incident and deletion terms are approved.
 - Add real-PostgreSQL tenant-isolation tests and RLS or an approved equivalent.
+- Replace the merged one-company Stripe secret binding with an approved per-tenant connector authorization model before multi-company use; make commercial account metadata authoritative per company or hide/label it.
 - Add versioned QBO token-encryption keys and tested re-encryption/revocation.
 - Add customer deletion, upload quarantine/checksum/malware controls, structured log redaction and durable audit events.
 - Replace fragmented/startup schema mutation with one audited migration path.
 - Restore database and objects and complete a founder recovery exercise before production.
 
-Proposed AWS controls include a dedicated production member account, private ECS/RDS/S3, KMS, Secrets Manager/task roles, WAF, CloudTrail/GuardDuty, immutable artifacts and an enforceable founder deployment boundary. None is deployed or approved yet.
+Proposed AWS controls include a dedicated production member account, private ECS/RDS/S3, KMS, Secrets Manager/task roles, WAF, CloudTrail/GuardDuty, immutable artifacts and an enforceable founder deployment boundary. The managed-AWS strategic direction is approved, but none of these product controls or resources is deployed or resource-approved.
 
 ## Threat Model
 

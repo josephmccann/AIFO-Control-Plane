@@ -175,11 +175,11 @@ Operating schedules for the default host:
 
 ## Architecture Decisions
 
-Material decisions are recorded in [docs/adr/](adr/). Accepted ADRs cover the deployed control plane. Proposed ADR-0011 through ADR-0022 cover the unapproved product runtime.
+Material decisions are recorded in [docs/adr/](adr/). Accepted ADRs cover the deployed control plane. ADR-0011 accepts only the strategic AWS-before-customer-data direction; ADR-0012 through ADR-0022 and all exact implementation parameters remain Proposed.
 
 ## Proposed Product Runtime Architecture
 
-The repository-grounded recommendation for the first approximately 10 customer companies is documented in [product-runtime-reference-architecture.md](product-runtime-reference-architecture.md). It is a design, not deployed state:
+The repository-grounded recommendation for the first approximately 10 customer companies is documented in [product-runtime-reference-architecture.md](product-runtime-reference-architecture.md). The AWS-managed direction is approved; the following topology is a Proposed design, not deployed state:
 
 - Current Organizations management account retains control/nonproduction; one dedicated member account isolates production.
 - CloudFront and WAF serve a private-S3 React build and route same-origin `/api/*` to an ALB.
@@ -189,7 +189,8 @@ The repository-grounded recommendation for the first approximately 10 customer c
 - Secrets Manager, ECS task roles and GitHub OIDC avoid long-lived AWS credentials.
 - CloudWatch/CloudTrail/GuardDuty provide a minimal unified evidence plane.
 - A simple SQS worker is deferred until current synchronous jobs are idempotent and measured evidence requires it.
+- Merged product PR #186 adds Stripe egress, tenant-scoped external observations and account/calibration surfaces. It fits the same core topology but requires per-tenant connector authorization, per-company commercial account truth and explicit observation correction lineage before multi-company use.
 
-Kubernetes, microservices, Aurora, Redis and active-active multi-Region are deliberately deferred. Expected product-runtime beta cost is `$400-$550/month`, separate from the existing `$250` control-plane target; founder recurring-cost approval is required.
+Kubernetes, microservices, Aurora, Redis and active-active multi-Region are deliberately deferred. Exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention and monthly budget remain Proposed pending workload, recovery and current-invoice evidence.
 
 No product runtime, database, bucket, secret, domain, certificate, callback or customer data is created or moved by the architecture package.

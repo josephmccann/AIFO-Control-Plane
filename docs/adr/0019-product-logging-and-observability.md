@@ -6,7 +6,7 @@ Proposed
 
 ## Context
 
-Current logs are console output and process-local operational counters; the health endpoint is liveness only. Sensitive identifiers and verifier response previews can reach logs.
+Current logs are console output and process-local operational counters; the health endpoint is liveness only. Sensitive identifiers and verifier response previews can reach logs. Merged connector routes use safe error codes, but connector provider/metric/period/company data and privileged sync actions expand the redaction/audit surface.
 
 ## Decision
 
@@ -19,7 +19,7 @@ Use CloudWatch structured application logs/metrics/alarms, a separate restricted
 
 ## Consequences
 
-The product must adopt an allowlist logger and remove raw response previews. Metrics avoid high-cardinality tenant labels. Every alarm needs a tested route and runbook.
+The product must adopt an allowlist logger and remove raw response previews. Connector audit records identify actor/provider/outcome without credential or metric values, and connector-read failure must not appear as "not configured." Metrics avoid high-cardinality tenant labels. Every alarm needs a tested route and runbook.
 
 ## Reversibility And Reconsideration
 

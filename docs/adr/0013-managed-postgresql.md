@@ -6,11 +6,11 @@ Proposed
 
 ## Context
 
-PostgreSQL holds users, sessions, QBO ciphertext, ingestion state, metrics, signals and narratives. Current backup/restore and schema-control evidence is absent.
+PostgreSQL holds users, sessions, QBO ciphertext, ingestion state, metrics, signals and narratives. Merged PR #186 adds `external_connections` and `source_observations` with application-level tenant keys and idempotent upserts but without company foreign keys/RLS/check constraints. Current backup/restore and schema-control evidence is absent.
 
 ## Decision
 
-Use private encrypted RDS PostgreSQL Multi-AZ with one standby, initially `db.t4g.medium`, 50 GiB gp3, 35-day PITR, deletion protection and quarterly restore tests. Use one migration ledger and remove runtime DDL before staging.
+Use private encrypted managed RDS PostgreSQL, deletion protection and restore tests. The current planning scenario is Multi-AZ with one standby, `db.t4g.medium`, 50 GiB gp3 and 35-day PITR; class, availability shape, storage, RPO/RTO and retention remain Proposed until workload/recovery evidence is approved. Use one migration ledger, include connector/account tables in tenant/restore manifests, and remove runtime DDL before staging.
 
 ## Alternatives Considered
 

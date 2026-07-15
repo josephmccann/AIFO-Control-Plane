@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted in principle — strategic direction only
 
 ## Context
 
@@ -10,7 +10,9 @@ The current Replit-associated runtime works as a synthetic demo but lacks reposi
 
 ## Decision
 
-Migrate to the approved AWS-managed reference architecture and pass every production gate before accepting real first-cohort customer data. Keep the current deployment only for synthetic demonstration and migration rehearsal until cutover.
+Migrate to an AWS-managed, founder-operable reference architecture and pass every production gate before accepting real first-cohort customer data. Keep the current deployment only for synthetic demonstration and migration rehearsal until cutover.
+
+This acceptance fixes the strategic direction and timing. It does not accept or authorize the proposed implementation parameters in ADR-0012 through ADR-0022, including exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention, recurring budget, resources, data movement, DNS, callbacks, or deployment.
 
 ## Alternatives Considered
 
@@ -21,7 +23,7 @@ Migrate to the approved AWS-managed reference architecture and pass every produc
 
 - Commercial onboarding may wait for architecture, product prerequisites, staging and rehearsal.
 - Migration is deliberate and evidence-gated, not a big-bang infrastructure apply.
-- No AWS runtime deployment is authorized by this ADR draft.
+- No AWS runtime deployment is authorized by this strategic decision.
 
 ## Security, Privacy, Reliability, Cost
 

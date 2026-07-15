@@ -29,6 +29,8 @@ Scope: Approximately 10 customer companies, 2 to 5 users per company, fewer than
 - Build real PostgreSQL integration tests that attempt cross-tenant read, write, update, export, and delete through user and admin paths.
 - Global administrator access must be exceptional, MFA-backed, logged, and limited to named founders/operators.
 - The synthetic public-demo tenant must be structurally barred from ingesting customer connections or customer uploads.
+- Connector reads, sync, observations, calibration suggestions and commercial account fields must pass the same real-PostgreSQL two-tenant suite. A deployment-wide provider key/company binding is not acceptable for multiple customer companies.
+- Commercial plan, billing, support and renewal fields must be authoritative per company or explicitly omitted/labeled as non-authoritative pilot information.
 
 ### Encryption
 
@@ -39,11 +41,12 @@ Scope: Approximately 10 customer companies, 2 to 5 users per company, fewer than
 
 ### Secrets and tokens
 
-- Store database credentials, session secrets, QBO client secret/keyring, Anthropic credentials, and any approved verifier credentials in AWS Secrets Manager.
+- Store database credentials, session secrets, QBO client secret/keyring, Stripe/future connector credentials, Anthropic credentials, and any approved verifier credentials in AWS Secrets Manager.
 - ECS tasks retrieve only named secrets through workload identity; no static AWS credentials or general secret-list permission.
 - Database credentials rotate automatically after staging validation. Vendor secrets rotate at least every 90 days where supported and immediately after suspected compromise.
 - QBO encryption keys use an active/previous keyring. New writes use the active version; reads support previous versions during a tested re-encryption campaign.
 - QBO disconnect, provider revocation, compromise response, and key-loss procedures must be rehearsed without exposing token values.
+- Each connector credential must have an explicit tenant/provider authorization record, minimum provider scope, owner, version, rotation/revocation procedure and audit evidence. The merged singleton Stripe key is restricted to a one-company synthetic/pilot case.
 
 ### Sessions and authentication
 
@@ -72,7 +75,7 @@ Scope: Approximately 10 customer companies, 2 to 5 users per company, fewer than
 
 - Application logs are structured JSON with timestamp, environment, immutable deployment ID, request/correlation ID, route class, tenant pseudonym, outcome, latency, and sanitized error class.
 - Never log secrets, token ciphertext/plaintext, cookies, passwords, raw uploads, prompts, generated narrative bodies, bank/transaction detail, customer/vendor names, or full provider responses.
-- Maintain a separate append-oriented audit log for login/security events, admin access, QBO connect/disconnect, upload acceptance, data export/delete, secret rotation, deployment, schema migration, and restore.
+- Maintain a separate append-oriented audit log for login/security events, admin access, QBO/connector connect/disconnect/sync, commercial-account change, calibration override, upload acceptance, data export/delete, secret rotation, deployment, schema migration, and restore.
 - CloudWatch application logs: 30 days. Security/audit logs: 365 days hot or archived, subject to approved legal policy. Load-balancer and object-access logs: 90 days minimum.
 - Required alerts: availability, 5xx/latency, ECS desired-task deficit/restart loop, RDS CPU/connections/storage/failover/backup, migration failure, QBO auth failure surge, AI/verifier error/cost surge, upload rejection/malware, CloudTrail/GuardDuty security findings, and monthly spend forecast.
 - P1 alerts route to at least two founder-controlled channels. Every alert has an owner and runbook.
@@ -95,6 +98,8 @@ Founder and counsel must approve the final policy. The recommended beta default 
 | Customer financial/database records | Contract term plus 30 days | Disable access immediately; primary deletion within 30 days; backups expire through policy within 90 days |
 | Raw uploads | 13 months unless customer requests shorter | Primary and noncurrent versions deleted through an evidenced workflow; backup copies age out within 90 days |
 | QBO tokens | Only while connected/contract active | Attempt provider revocation, then cryptographically and physically delete ciphertext; record outcome without token |
+| Connector credentials/observations | Only while connected/contract active, subject to approved financial-record retention | Revoke/delete credential; delete connection/observations and record provider outcome without secret or metric value |
+| Commercial account metadata | Contract term plus approved business-record period | Remove customer access immediately; retain only legally required content under restricted policy |
 | Sessions | 7 days maximum; expired rows purged weekly | Immediate invalidation on logout, account disable, compromise, or customer termination |
 | Narratives/verifier records | 13 months, without raw prompt/provider response unless needed for a documented audit purpose | Tenant deletion workflow; provider deletion handled under contract |
 | Application logs | 30 days | Automatic lifecycle; security evidence extracted to audit log |
@@ -127,6 +132,7 @@ Every deletion request must produce an immutable, content-free evidence record l
 - Database below 50 GiB in beta; object storage below 100 GiB in year one unless measured otherwise.
 - Uploads remain at or below 10 MB each; up to 500 uploads/company/year is a planning bound.
 - Nightly/scheduled work is I/O-bound and provider-bound, not sustained high CPU.
+- Stripe sync is currently admin-triggered, synchronous and paginates subscriptions/invoices/refunds. Beta planning must bound tenant count, pages, duration, provider rate and retry/cost behavior before enabling it for customers.
 - Two 0.5-vCPU/1-GiB API tasks are the initial production floor, subject to measured build/runtime memory. Increase to 1 vCPU/2 GiB if load and narrative concurrency evidence requires it.
 - QBO and AI work should move to a durable job model before customer volume or request duration makes synchronous processing unreliable. A simple SQS-backed worker is sufficient; no microservice program is required.
 

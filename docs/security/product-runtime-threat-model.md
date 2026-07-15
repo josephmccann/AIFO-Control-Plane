@@ -4,12 +4,12 @@ Date: 2026-07-15
 
 Status: Proposed, requires security/founder review before staging
 
-Method: STRIDE-informed practical review. Ratings reflect the first 10-company cohort and highly sensitive financial data. “Existing” means evidenced at product head `8df211e`; proposed AWS controls are not yet deployed.
+Method: STRIDE-informed practical review. Ratings reflect the first 10-company cohort and highly sensitive financial data. “Existing” means evidenced at product head `3329c99`; proposed AWS controls are not yet deployed.
 
 ## Assets
 
 - Customer identity, financial statements, GL/transaction/bank/AR/AP data, uploads, derived metrics, signals, narratives, and verifier evidence.
-- User credentials, sessions, roles, invites, QBO tokens, provider credentials, encryption keys, database/object backups.
+- User credentials, sessions, roles, invites, QBO tokens, Stripe/connector credentials, external observations, commercial account metadata, calibration suggestions, encryption keys, database/object backups.
 - Deterministic financial-engine integrity, tenant boundaries, audit evidence, deployment artifacts, Terraform state, domains/DNS/TLS/OAuth callbacks.
 - Founder identity/recovery factors and business continuity.
 
@@ -17,14 +17,14 @@ Method: STRIDE-informed practical review. Ratings reflect the first 10-company c
 
 - Customer user, customer administrator, AI.FO founder/administrator, future engineer/contractor.
 - External attacker, credential thief, malicious customer/insider, compromised dependency or CI identity.
-- Intuit, Anthropic, GMI and underlying model providers, Replit, Cloudflare, AWS, registrar/DNS providers.
+- Intuit, Stripe, future Gusto/Plaid providers, Anthropic, GMI and underlying model providers, Replit, Cloudflare, AWS, registrar/DNS providers.
 - Automated agents acting with repository, CI, AWS or operator permissions.
 
 ## Trust Boundaries And Entry Points
 
 1. Browser to CloudFront/Replit and API: login, registration/invites, cookies, JSON, multipart uploads.
 2. API to PostgreSQL and object storage.
-3. API to Intuit OAuth/report APIs, Anthropic, and GMI/model provider.
+3. API to Intuit OAuth/report APIs, Stripe and future operating connectors, Anthropic, and GMI/model provider.
 4. GitHub/CI to artifact registry and AWS through OIDC.
 5. Human/agent to GitHub, AWS Identity Center, registrar/DNS, provider consoles, and break-glass channels.
 6. Backup/restore and migration paths between current providers, staging, production, and recovery locations.
@@ -62,6 +62,10 @@ Method: STRIDE-informed practical review. Ratings reflect the first 10-company c
 | TM-26 | D | External QBO/AI/verifier outage blocks core product or causes runaway cost | Errors handled variably; GMI timeout/retry | Timeouts/circuit breakers, graceful “source available/narrative unavailable” mode, job retry budgets, provider status/cost alerts, no false verified status | Low-Medium | Product/Platform |
 | TM-27 | I | Public demo exposes customer data through hardcoded tenant or telemetry | Public routes target `integra-demo`; telemetry intended public/synthetic | Structural prohibition on QBO/customer uploads/users for demo tenant, synthetic provenance check, CI scan, periodic live response review | Low | Product/Security |
 | TM-28 | R/I | Customer deletion claim is false because rows, objects, providers or backups remain | No complete workflow | Approved retention matrix, deletion orchestrator, provider deletion, object versions, FK/cascade inventory, backup expiry statement, evidence record and test | Medium | Product/Privacy |
+| TM-29 | S/I/E | Singleton Stripe secret is used for the wrong tenant or exposed across a multi-company deployment | Connector flag off; admin-only route; session company must equal `AIFO_STRIPE_COMPANY_ID`; generic tables store no token | Per-tenant connector authorization/credential model, minimum scopes, managed secret versions, revocation drill, tenant integration tests and access audit | Medium; High before multi-tenant enablement | Product/Security |
+| TM-30 | I/R | Environment-wide commercial account metadata is shown as tenant-specific truth | Account route derives company/user/QBO/uploads from session and is read-only | Per-company source of truth or explicit non-authoritative pilot labeling; tenant tests; administrative change audit; degraded-read distinction | Low-Medium | Product/Commercial Ops |
+| TM-31 | T/R | Connector sync overwrites observation provenance or user mistakes a suggestion for authoritative financial truth | Transactional unique-key upsert; provider/metric/period/confidence retained; suggestions are editable and opt-in | Decide snapshot versus append-only history, immutable sync/audit ID, correction policy, source labeling and override-lineage regression tests | Medium | Product/Data |
+| TM-32 | D | Synchronous Stripe pagination exhausts request time, provider quota, memory or cost | Feature flag off; admin-only explicit sync; errors reduce to safe codes | Explicit timeout/page/job budgets, rate/circuit controls, durable idempotent job when justified, dependency metrics and failure-mode tests | Low-Medium | Product/Platform |
 
 ## Highest-Priority Abuse Cases
 
@@ -73,6 +77,8 @@ Method: STRIDE-informed practical review. Ratings reflect the first 10-company c
 6. A corrupt schema migration deploys successfully because startup DDL failure is non-fatal, leaving partial writes and no safe rollback.
 7. Registrar compromise changes the product domain or QBO callback to capture credentials/tokens.
 8. A backup appears healthy but fails during restore, leaving the founder unable to recover inside the promised RTO.
+9. A deployment-wide Stripe key or commercial metadata is incorrectly treated as tenant-specific in a multi-company environment.
+10. A repeated connector sync overwrites the only observation record and removes evidence needed to explain a calibration change.
 
 ## Review And Residual-Risk Rule
 

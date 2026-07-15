@@ -6,7 +6,7 @@ Proposed
 
 ## Context
 
-The current product has no complete customer deletion workflow. Customer data spans PostgreSQL, sessions, R2, QBO, AI/verifier providers, logs and backups.
+The current product has no complete customer deletion workflow. Customer data spans PostgreSQL, sessions, R2, QBO, AI/verifier providers, logs and backups. Merged PR #186 adds connection state, aggregate Stripe observations and calibration lineage; future per-tenant connector credentials and commercial account records also belong in the deletion graph.
 
 ## Decision
 

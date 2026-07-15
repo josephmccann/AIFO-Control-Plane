@@ -6,11 +6,11 @@ Proposed
 
 ## Context
 
-Database, session, QBO, Anthropic, GMI/R2 credentials are environment values. QBO tokens use one unversioned AES key, preventing safe rotation.
+Database, session, QBO, Anthropic, GMI/R2 and merged Stripe credentials are environment values. QBO tokens use one unversioned AES key, preventing safe rotation. PR #186 safely excludes credentials from generic connector tables but supports only one `STRIPE_SECRET_KEY` bound to one `AIFO_STRIPE_COMPANY_ID`.
 
 ## Decision
 
-Use environment-specific AWS Secrets Manager secrets, customer-managed KMS where justified, ECS task-role retrieval and no static AWS keys. Implement active/previous session and QBO keyrings, ciphertext key version, idempotent token re-encryption, and audited break-glass access.
+Use environment-specific AWS Secrets Manager secrets, customer-managed KMS where justified, ECS task-role retrieval and no static AWS keys. Implement active/previous session and QBO keyrings, ciphertext key version, idempotent token re-encryption, and audited break-glass access. Before multi-company connector use, select a per-tenant provider authorization/credential record with minimum scope, version, rotation, revocation and audit evidence; the singleton Stripe binding remains pilot-only.
 
 ## Alternatives Considered
 

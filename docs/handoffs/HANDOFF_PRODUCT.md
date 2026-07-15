@@ -62,9 +62,9 @@ git diff --check
 ## Current Open Product PRs Reviewed
 
 - PR #180, draft: founder/company context and constitutional documents.
-- PR #186, open: top value-add surfaces, account panel, connector store, Stripe adapter, external connectors migration.
+- PR #186, merged at `3329c99beb0713269b54bc5fd6a7fb39bf44f398`: top value-add surfaces, session-derived account panel, connector store, Stripe adapter, normalized observations and external-connectors migration.
 
-PR #186 is near-term context but not current baseline until merged.
+PR #186 is current canonical baseline. Infrastructure implications are tracked in the runtime inventory, threat model, migration gates and prerequisite hardening plan.
 
 ## Infrastructure Implications
 

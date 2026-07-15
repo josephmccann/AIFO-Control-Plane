@@ -12,6 +12,6 @@ High-priority assumptions:
 - The default 08:00-16:00 Monday-Friday `America/Los_Angeles` operating schedule is acceptable for first deployment unless the approval packet chooses another schedule.
 - A first copy of CloudTrail management events plus low-volume CloudWatch Session Manager logs should add only a small recurring cost relative to the $250 budget.
 - Cloudflare R2 remains the product upload storage target until a storage ADR changes that.
-- Product PR #186 is near-term context but not current baseline until merged.
+- Product PR #186 is merged at `3329c99`; its connector/account implementation is current product baseline.
 
 Review assumptions before any first apply or product runtime design.

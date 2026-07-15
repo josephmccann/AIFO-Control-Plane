@@ -4,6 +4,8 @@ Date: 2026-07-15
 
 Status: Planning estimate, 2026-07-15 public/list pricing; founder approval and current invoices required
 
+Exact RDS size, NAT topology, recovery retention and monthly budget are scenario inputs, not approved implementation parameters. Merged product PR #186 adds Stripe API usage/secret/audit work but no evidence that justifies changing or finalizing these infrastructure assumptions.
+
 All amounts are USD per month, before tax and support plans. This model intentionally uses ranges. It excludes engineering labor, migration labor, customer support labor, and the existing scheduled control-plane host unless stated.
 
 ## Workload Assumptions
@@ -108,6 +110,7 @@ Hybrid is not reliably cheaper than the target architecture and creates the most
 | Anthropic Sonnet 4.6 | 24-90 | 180 | Example range from token assumptions; provider budget/usage telemetry required |
 | Approved verifier | 0-35 | 100 | Must be contract-approved; zero means deterministic-only/fail-closed during beta |
 | Intuit | 0 | 0 | API commercial terms/support cost must still be verified |
+| Stripe connector | 0 | 25 | API access has no modeled platform charge; upper reserves monitoring/retry/support overhead, not Stripe payment-processing fees |
 | Email/status/alert extras | 0-20 | 50 | No provider selected yet |
 | **Third-party subtotal** | **24-145** | **330** | Excludes current unknown GMI invoice |
 

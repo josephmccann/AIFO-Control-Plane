@@ -2,13 +2,15 @@
 
 Date: 2026-07-15
 
-Status: Proposed, not approved or deployed
+Status: AWS-managed strategic direction approved; topology details and implementation parameters remain Proposed; nothing is deployed
 
 ## Recommendation At A Glance
 
-Use a small, managed, two-account AWS architecture: the existing AWS Organizations management account remains control/nonproduction, while a dedicated member account hosts production. Serve a static React build through CloudFront and private S3, route same-origin `/api/*` traffic through CloudFront to an Application Load Balancer, run two Node API tasks on ECS Fargate, store relational state in RDS PostgreSQL Multi-AZ, and move customer objects to private S3. Keep PostgreSQL sessions, use Secrets Manager and ECS task roles, and add a simple SQS worker only after the current synchronous jobs are made durable.
+The approved direction is a small, managed, founder-operable AWS runtime before real customer data. The review baseline proposes a dedicated production member account, CloudFront/private S3, an ALB with ECS Fargate API tasks, RDS PostgreSQL, private S3 objects, PostgreSQL sessions, Secrets Manager and task roles. Those service/topology parameters remain Proposed until prerequisite and cost evidence is reviewed. Add a simple SQS worker only after synchronous jobs are made durable and measured.
 
 No Kubernetes, service mesh, Aurora, Redis, microservice split, or always-on control-plane host is justified for 10 companies.
+
+Merged product PR #186 does not require a different core topology. Its connector/account implementation adds Stripe HTTPS egress, aggregate `external_connections`/`source_observations` data in PostgreSQL, a Stripe secret and tenant binding in the secret model, and connector/account rows in backup, restore, tenant-isolation, audit and deletion gates. Exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention and monthly budget remain Proposed because the merge supplies no sizing or recovery evidence.
 
 ```mermaid
 flowchart LR
@@ -156,7 +158,7 @@ Create a content-free manifest containing source key, size, ETag when meaningful
 
 ## Secrets And Key Management
 
-Use Secrets Manager for database credentials, session-secret keyring, QBO client secret and token-encryption keyring, Anthropic key, and any approved verifier credential. Parameter Store may hold nonsecret configuration only.
+Use Secrets Manager for database credentials, session-secret keyring, QBO client secret and token-encryption keyring, Anthropic key, Stripe restricted key or future tenant connector credentials, and any approved verifier credential. Parameter Store may hold nonsecret configuration only. The merged single `STRIPE_SECRET_KEY` plus `AIFO_STRIPE_COMPANY_ID` binding is a one-company guard, not the production credential model for 10 companies; provider authorization must be represented per tenant before multi-company use.
 
 - Names and IAM policies are environment-specific and secret-specific.
 - Tasks receive/retrieve only required secret versions through task roles; no wildcard list/read.

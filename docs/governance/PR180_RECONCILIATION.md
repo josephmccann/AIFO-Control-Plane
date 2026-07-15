@@ -29,18 +29,18 @@ Pinned source links for each file are in
 [SOURCE_MATERIAL_INDEX.md](SOURCE_MATERIAL_INDEX.md).
 
 Where one source item contains parts with different dispositions, it is
-split into lettered sub-items (CONST-07a/07b, FC-16a/16b) so that every
-item or sub-item has exactly one disposition.
+split into lettered sub-items (CONST-07a/07b, CONST-27a/27b, FC-16a/16b)
+so that every item or sub-item has exactly one disposition.
 
 ## Crosswalk summary
 
 | Disposition | Items |
 |-------------|-------|
-| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07a, CONST-08, CONST-13 to CONST-15, CONST-19 to CONST-21, CONST-24 to CONST-26, CONST-28; RM-01, RM-02, RM-04; RA-00 |
+| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07a, CONST-08, CONST-13 to CONST-15, CONST-19 to CONST-21, CONST-24 to CONST-26, CONST-27a, CONST-28; RM-01, RM-02, RM-04; RA-00 |
 | Imported with revision | CONST-16/17 (merged with product-repo statements), CONST-18 (revised per RA-06), CONST-06, CONST-09 to CONST-11, CONST-29 (horizon sequence revised by founder decision of 2026-07-15), CONST-12 and CONST-22/23 (imported with RA confidence qualifiers), FC-16a (durable hiring logic) |
 | Rejected as durable doctrine (reclassified) | CONST-07b (channel list); CCS-06 placement |
-| Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; FC-16b (stage-bound hiring framing) |
-| Retained in reasoning archive only | FC-01 to FC-03, FC-06, FC-07; RA-01 to RA-08; CONST-27 decision-ledger detail |
+| Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; FC-16b (stage-bound hiring framing); RM-03 (working-draft status statement) |
+| Retained in reasoning archive only | FC-01 to FC-03, FC-06, FC-07; RA-01 to RA-08; CONST-27b (decision-ledger detail) |
 | Founder decision still required | D-1 to D-6 below |
 
 Nothing in PR #180 was found false or contrary to repository evidence; no
@@ -63,7 +63,7 @@ true but belongs in current-state documents, not in the Manual.
 | CONST-13 to CONST-15 | Structural customer focus, funnel, first-principles build | Section 4.4 |
 | CONST-19 to CONST-21 | Hiring illustration; consequential-decision boundary; automation is not authority (CONST-18 itself is listed under imported with revision) | Section 6.1 |
 | CONST-24 | Compound founder judgment, not replace critical thinking | Section 16 |
-| CONST-25, CONST-26 | Decisions over engagement; login is for depth | Section 4.3 |
+| CONST-25, CONST-26, CONST-27a | Decisions over engagement; login is for depth; engagement measured at the level of delivered insights and what happened afterward | Section 4.3 |
 | CONST-28 | Seven non-negotiable constraints | Section 4.5 |
 | RM-01, RM-02 | Purpose of a doctrine layer; doctrine/state/reasoning separation | Sections 1 and 11 |
 | RM-04 | Placement rule: durable beliefs in doctrine, volatile facts in dated state docs | Section 11.3 |
@@ -117,7 +117,7 @@ doctrine:
 | FC-01 to FC-03 | Biographical detail (career history, upbringing) | The Manual summarizes in two sentences and links; duplicating biography invites drift and adds nothing operational |
 | FC-06, FC-07 | Views on the fractional-CFO market | Market beliefs are hypotheses to validate, not doctrine; FC-06 is tagged claim-needing-verification in the source inventory |
 | RA-01 to RA-08 | Dated reasoning entries with corrections and confidence levels | This is exactly what a reasoning archive is for; the Manual imports the format (RA-00) and the two corrections (RA-04, RA-06) but the entries themselves remain history |
-| CONST-27 decision-ledger detail | Insight-level engagement measurement and a future "transparent decision ledger" | The principle is imported (Manual 4.3); the ledger design is a future product decision, not present doctrine |
+| CONST-27b: decision-ledger detail | The future "transparent decision ledger" design sketch | The measurement principle (CONST-27a) is imported (Manual 4.3); the ledger design itself is a future product decision, not present doctrine |
 
 ## Files in PR #180 outside the five-file scope
 

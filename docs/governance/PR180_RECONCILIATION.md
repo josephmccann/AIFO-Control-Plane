@@ -32,7 +32,7 @@ Pinned source links for each file are in
 
 | Disposition | Items |
 |-------------|-------|
-| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07, CONST-08, CONST-13 to CONST-26, CONST-28; RM-01, RM-02, RM-04; RA-00 |
+| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07, CONST-08, CONST-13 to CONST-15, CONST-19 to CONST-21, CONST-24 to CONST-26, CONST-28; RM-01, RM-02, RM-04; RA-00 |
 | Imported with revision | CONST-16/17 (merged with product-repo statements), CONST-18 (revised per RA-06), CONST-06, CONST-09 to CONST-11, CONST-29 (horizon sequence revised by founder decision of 2026-07-15), CONST-12 and CONST-22/23 (imported with RA confidence qualifiers), FC-16 (durable logic imported, stage-bound framing split off) |
 | Rejected as durable doctrine (reclassified) | CONST-07 channel list; CCS-06 placement |
 | Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; CONST-07 channel list; the stage-bound half of FC-16 |
@@ -57,12 +57,10 @@ true but belongs in current-state documents, not in the Manual.
 | FC-19 to FC-27 | Nine AI collaboration rules | Section 10.2 |
 | CONST-07, CONST-08 | Burden of awareness; continuous communication (channel list excluded, see below) | Section 4.2 |
 | CONST-13 to CONST-15 | Structural customer focus, funnel, first-principles build | Section 4.4 |
-| CONST-16, CONST-17 | Deterministic computation / AI interpretation split; no silent recalculation | Section 4.1 |
-| CONST-18 to CONST-21 | "AI.FO reasons; people govern"; automation is not authority | Section 6.1 |
+| CONST-19 to CONST-21 | Hiring illustration; consequential-decision boundary; automation is not authority (CONST-18 itself is listed under imported with revision) | Section 6.1 |
 | CONST-24 | Compound founder judgment, not replace critical thinking | Section 16 |
 | CONST-25, CONST-26 | Decisions over engagement; login is for depth | Section 4.3 |
 | CONST-28 | Seven non-negotiable constraints | Section 4.5 |
-| CONST-22, CONST-23 | Experience as the network asset; one-helps-many aphorism | Section 19 |
 | RM-01, RM-02 | Purpose of a doctrine layer; doctrine/state/reasoning separation | Sections 1 and 11 |
 | RM-04 | Placement rule: durable beliefs in doctrine, volatile facts in dated state docs | Section 11.3 |
 | RA-00 | Reasoning-archive format (framing, discussion, correction, conclusion, confidence) as a durable process norm | Section 11.5 |

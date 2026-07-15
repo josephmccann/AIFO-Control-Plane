@@ -108,7 +108,7 @@ def authorize_transition(projection: MissionProjection, event: Mapping[str, Any]
 def project_state(events: Iterable[Mapping[str, Any]], policy: Mapping[str, Any] = None) -> MissionProjection:
     """Fold authenticated events into a projection, preserving denied input diagnostics."""
 
-    effective_policy = policy or {}
+    effective_policy = {} if policy is None else policy
     projection = MissionProjection()
     for event in events:
         decision = authorize_transition(projection, event, effective_policy)

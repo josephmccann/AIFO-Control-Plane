@@ -150,6 +150,13 @@ class MissionStateTests(unittest.TestCase):
         self.assertEqual(projection.state, "Proposed")
         self.assertEqual(projection.violations[0].code, "STATE_TRANSITION_DENIED")
 
+    def test_projector_fails_closed_on_malformed_falsy_policy(self):
+        for policy in ([], "", 0):
+            with self.subTest(policy=policy):
+                projection = project_state([event("mission.ready", "producer")], policy=policy)
+                self.assertEqual(projection.state, "Proposed")
+                self.assertEqual(projection.violations[0].code, "STATE_POLICY_INVALID")
+
 
 if __name__ == "__main__":
     unittest.main()

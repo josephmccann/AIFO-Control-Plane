@@ -12,7 +12,7 @@ Principle: every kind of claim has exactly one home. Everything else links to th
 
 | Kind of truth | Canonical source | Notes |
 |---|---|---|
-| **Product truth** (what the product does, what is merged) | `AI.FO-Demo` `master` — README.md + ARCHITECTURE.md | Open PRs are context, not truth, until merged. |
+| **Product truth** (what the product does, what is merged) | `AI.FO-Demo` `master` — README.md + ARCHITECTURE.md | Open PRs are context, not truth, until merged. [FACT] Canonical baseline at this revision: `3329c99` (PR #186 merge); the deployed demo may lag the baseline — deployment state is a separate fact from merged truth. |
 | **Signal methodology** (thresholds, formulas, benchmarks) | `AI.FO-Demo` `docs/SIGNAL_METHODOLOGY.md` | [FACT] The repo itself declares: "No other document may claim methodology authority." |
 | **Product numbers** (engine version, signal count, test counts) | Derived only: `lib/financial-engine/src/version.js`, the signal registry, and `generate-telemetry.js` output | [FACT] Hardcoding these anywhere is prohibited by AI.FO-Demo's own rules; the site's remaining `SIGNALS_FALLBACK = 40` literal is a tolerated exception to retire. |
 | **Infrastructure truth** (what exists in AWS) | `AIFO-Control-Plane` `main` — `memory/current-state.md` + `memory/deployment-status.md` | Terraform defines intent; these two record verified reality. Assumptions live in `docs/assumption-register.md` (memory/assumptions.md defers to it). |

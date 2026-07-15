@@ -1,7 +1,7 @@
 # AI.FO Company Digest
 
 > **Digest metadata**
-> - Audit snapshot: 2026-07-14 (repository evidence collected 2026-07-14 PT; revised 2026-07-14 19:10 PT / 2026-07-15 02:10 UTC)
+> - Audit snapshot: 2026-07-14 (repository evidence collected 2026-07-14 PT; revised 2026-07-14 21:15 PT / 2026-07-15 04:15 UTC, incorporating the PR #186 merge)
 > - Pinned commits: see the evidence table below. All facts in this digest trace to those commits.
 > - Statement classes used throughout: **[FACT]** verified current fact · **[PR]** open-PR proposal (not canonical until merged) · **[RUN]** active runtime state (volatile; re-verify before acting) · **[REC]** recommendation · **[JOE]** founder decision required.
 > - **PR state and active-run state are volatile.** Refresh them from the canonical dynamic sources below before making any decision based on this digest.
@@ -30,13 +30,13 @@ It is written for Joe, a new engineer, an investor diligence reviewer, or an AI 
 
 ## The company in six sentences
 
-**[FACT]** AI.FO is a financial intelligence platform ("a financial reasoning layer above systems of record") whose deterministic engine computes signals from QuickBooks Online or CSV data and whose AI layer writes CFO-grade narrative memos without ever touching the math. **[FACT]** The product is demo-live at `demo.getaifo.com` on Replit with functioning QBO **sandbox** and CSV ingestion; it does not currently host or process production customer financial data. **[FACT]** The AWS control plane is deployed and operationally complete but deliberately does not host the product; **[PR]** an architecture decision package for a gated Replit→AWS runtime migration is now open as Control-Plane PR #13 and remains a proposal until reviewed and merged. **[FACT]** The EDGAR signal-validation study is built and preregistered (tag `prereg-v1`, 2026-07-09, unchanged); **[RUN]** its authorized full live collection over 8,215 registered companies is actively running (~36% complete at the latest checkpoint) with conditional authorization to proceed automatically through scoring and measurement only if all documented gates pass — real-company scoring has not occurred, so no empirical validation claim is currently supportable. **[FACT]** Public trust surfaces (getaifo.com, the public `aifo-telemetry` artifact) publish machine-generated test and signal counts that were fresh as of 2026-07-14. **[JOE]** Everything now funnels into founder gates: PR dispositions (#195, #180, #186, #13), the runtime-architecture decisions, and any study stop condition.
+**[FACT]** AI.FO is a financial intelligence platform ("a financial reasoning layer above systems of record") whose deterministic engine computes signals from QuickBooks Online or CSV data and whose AI layer writes CFO-grade narrative memos without ever touching the math. **[FACT]** The product is demo-live at `demo.getaifo.com` on Replit with functioning QBO **sandbox** and CSV ingestion; it does not currently host or process production customer financial data. **[FACT]** PR #186 (commercial account surface + external connectors) has merged — the canonical product baseline is now `3329c99` — but the live demo has not yet been updated to that SHA, and connector functionality remains disabled pending deployment validation and explicit configuration. **[FACT]** The AWS control plane is deployed and operationally complete but deliberately does not host the product; **[PR]** an architecture decision package for a gated Replit→AWS runtime migration is now open as Control-Plane PR #13 and remains a proposal until reviewed and merged. **[FACT]** The EDGAR signal-validation study is built and preregistered (tag `prereg-v1`, 2026-07-09, unchanged); **[RUN]** its authorized full live collection over 8,215 registered companies is actively running (~36% complete at the latest checkpoint) with conditional authorization to proceed automatically through scoring and measurement only if all documented gates pass — real-company scoring has not occurred, so no empirical validation claim is currently supportable. **[FACT]** Public trust surfaces (getaifo.com, the public `aifo-telemetry` artifact) publish machine-generated test and signal counts that were fresh as of 2026-07-14. **[JOE]** Everything now funnels into founder gates: PR dispositions (#195, #180, #13), validated deployment of baseline `3329c99`, the runtime-architecture decisions, and any study stop condition.
 
 ## Evidence basis (pinned commits)
 
 | Repository | Branch inspected | HEAD at audit |
 |---|---|---|
-| josephmccann/AI.FO-Demo | master | `8df211e` |
+| josephmccann/AI.FO-Demo | master | `3329c99` (refreshed after the PR #186 merge, 2026-07-15 02:11 UTC; original audit at `8df211e`) |
 | josephmccann/AIFO-Control-Plane | main | `707e629` |
 | josephmccann/aifo-signal-validation-study | master (default branch is stale — see REPOSITORY_MAP) | `5f84563` |
 | josephmccann/aifo-telemetry | main | `bf59bc7` |
@@ -56,7 +56,8 @@ It is written for Joe, a new engineer, an investor diligence reviewer, or an AI 
 ## Update protocol
 
 **When this digest must be refreshed** (any of):
-- any of the four open PRs (#195, #180, #186 in AI.FO-Demo; #13 in AIFO-Control-Plane) is merged, closed, or substantially rewritten;
+- any of the three open PRs (#195, #180 in AI.FO-Demo; #13 in AIFO-Control-Plane) is merged, closed, or substantially rewritten;
+- the live demo is redeployed to product baseline `3329c99` (or a later SHA), or connectors are activated;
 - the EDGAR live collection completes, halts on a stop condition, or produces scored results;
 - the product runtime decision (OD-005…OD-008) is made, or real customer data onboarding begins;
 - a repository is archived, renamed, created, or re-pointed (e.g., the study default-branch fix);

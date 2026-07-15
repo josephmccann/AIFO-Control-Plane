@@ -17,24 +17,25 @@ Sources: repository evidence only (commits, PRs, and each repo's own docs), plus
 - QuickBooks Online **sandbox** OAuth sync with field-level provenance.
 - Server-owned AI narrative layer: `POST /api/ai/generate` builds the snapshot server-side; the AI writes the memo but "cannot change the numbers." The legacy raw-prompt route was removed and is test-guarded.
 - Eight demo screens, admin panel, invite-code auth, sealed board package (#184), trust evidence console (#183), QBO self-serve recovery (#182), centralized public trust copy (#181).
+- **Merged 2026-07-15 02:11 UTC (PR #186, merge commit `3329c99` — the current canonical product baseline):** commercial account surface, feature-flagged external-connectors framework with a Stripe billing adapter, DB migration `0011_external_connectors.sql`. **Connector functionality remains disabled pending deployment validation and explicit configuration** — merged into the baseline, not yet active anywhere.
 - Public telemetry pipeline: `generate-telemetry.js` (refuses on dirty tree or red suite) → `telemetry.json` → mirrored to the public `aifo-telemetry` repo → served at `/api/telemetry` → consumed by getaifo.com.
 - Quality signal as of 2026-07-14 telemetry: 13,477 engine tests + 987 API tests, 0 failures; 21,851 classified assertions (note the mix: 19,648 snapshot vs 1,780 property vs 30 sourcing); 45 nightly pressure-test runs over 900 synthetic companies since 2026-04-28.
 
 ### What is deployed — [FACT]
 - `https://demo.getaifo.com` on Replit autoscale. Production storage on Cloudflare R2. Nightly pressure test runs via launchd on Joe's Mac (02:00 PT) with a GitHub Actions dead-man monitor.
-- Open question recorded in the repo [JOE]: the deployed frontend bundle may lag current `master` (redeploy decision open; telemetry/deadman do not require it).
+- **The live demo has not yet been updated to baseline `3329c99`** (it predates the PR #186 merge); deployment and telemetry refresh are pending, and the **post-merge demo deployment workstream is active**. Connector activation is separately gated behind deployment validation and explicit configuration.
 
 ### Customer-data position — [FACT]
 The product has functioning QBO **sandbox** and CSV ingestion. It does **not currently host or process production customer financial data**: demo companies are fictional, QBO runs against the Intuit sandbox, and nightly runs use synthetic companies. Existing protections: QBO tokens AES-256-encrypted at rest; telemetry denylist-scrubbed of tokens, IDs, names, and accounting values.
 
 ### What remains in open PRs (not on master) — all [PR]; refresh state before deciding
-- **PR #186** — commercial account surface, feature-flagged external-connectors framework with a Stripe billing adapter, DB migration `0011_external_connectors.sql`. The only open *code* PR. **Pending final technical review and founder merge decision** [JOE]. The PR body self-reports 13,487 aifo tests, 1,003 api-server tests, and 6 Chromium E2E green — recorded as reported; **not independently re-verified, and merge readiness must not be assumed from self-reported tests**.
 - **PR #180** — constitution, founder-context, and operating-system docs plus machine-readable `.aifo/*.yaml` context. **Valuable working-draft source material**, explicitly non-behavioral. [REC] Reconcile into one canonical Founder Operating Manual before or as part of its final disposition (see SOURCE_OF_TRUTH_HIERARCHY.md). Disposition is [JOE].
-- **PR #195** — session-checkpoint docs (`memory/`, `workqueue/`, session handoff, CHANGELOG). **A July 14 shutdown checkpoint that may now require refresh, supersession, or closure**: activity since it was written (Control-Plane PR #13, the live EDGAR collection) has changed the state it froze. Not recommended for automatic merge. Disposition is [JOE].
+- **PR #195** — session-checkpoint docs (`memory/`, `workqueue/`, session handoff, CHANGELOG). **A July 14 shutdown checkpoint that may now require refresh, supersession, or closure**: activity since it was written (the PR #186 merge, Control-Plane PR #13, the live EDGAR collection) has changed the state it froze. Not recommended for automatic merge. Disposition is [JOE].
+- (PR #186 no longer belongs in this list — it merged 2026-07-15 02:11 UTC as `3329c99`; see "What works" above.)
 
 ### Beta-ready vs not production-ready
 - **[FACT] Beta-ready today:** the demo/sandbox validation path — engine, QBO sandbox sync, AI memo generation, trust surfaces — is green and demoable end to end.
-- **[FACT] Not production-ready.** `docs/PRODUCTION_READINESS_PLAN.md` defines seven phases, all unstarted: (1) production QBO OAuth, (2) deployment parity, (3) operational monitoring, (4) real-company datasets (recruit 3–5 consenting companies), (5) browser E2E, (6) security/privacy review, (7) commercial account surface (PR #186 is a proposed down payment on this).
+- **[FACT] Not production-ready.** `docs/PRODUCTION_READINESS_PLAN.md` defines seven phases: (1) production QBO OAuth, (2) deployment parity, (3) operational monitoring, (4) real-company datasets (recruit 3–5 consenting companies), (5) browser E2E, (6) security/privacy review, (7) commercial account surface — the merged PR #186 is a down payment on phase 7 (code in the baseline, connectors still gated off); phases 1–6 remain unstarted.
 - **[FACT]** Known product-data gap: QBO sandbox fires 11 of 40 signals (28 evaluated); full 40-signal sandbox coverage needs companion seed data — an open workstream.
 
 ## 2. Infrastructure (AIFO-Control-Plane)
@@ -99,7 +100,7 @@ The product has functioning QBO **sandbox** and CSV ingestion. It does **not cur
 ## 5. Company operations
 
 ### Active workstreams (detail in [ACTIVE_WORKSTREAMS.md](ACTIVE_WORKSTREAMS.md))
-1. [PR] Product feature delivery — PR #186 (AI.FO-Demo), pending final technical review + founder decision.
+1. [FACT] Post-merge demo deployment — deploy and validate product baseline `3329c99` on the live Replit demo; telemetry refresh pending; connector activation separately gated.
 2. [PR] Founder/constitution working drafts — PR #180 (AI.FO-Demo), pending reconciliation into a Founder Operating Manual.
 3. [PR] Product runtime architecture decision package — PR #13 (AIFO-Control-Plane, draft), pending founder review.
 4. [RUN] Study A live collection — running (~36% at checkpoint), conditionally authorized through scoring/measurement gates.
@@ -117,8 +118,10 @@ The product has functioning QBO **sandbox** and CSV ingestion. It does **not cur
 
 ### Decision sequence — [REC]; each step is [JOE]
 This is a sequence of decisions, not a predetermined merge order:
-1. **PR #195:** decide refresh vs supersession vs closure — its July-14 checkpoint no longer matches current state (PR #13 open, EDGAR collection running).
+1. **PR #195:** determine its disposition — refresh, supersede, or close; its July-14 checkpoint no longer matches current state (PR #186 merged, PR #13 open, EDGAR collection running).
 2. **PR #180:** reconcile the working drafts into one canonical Founder Operating Manual (home and format are Joe's call), then disposition the PR accordingly.
-3. **PR #186:** complete an independent technical review (do not rely on self-reported tests), then make the founder merge decision.
-4. **PR #13:** review the runtime decision packet and make the architecture decisions (OD-005…OD-008, OD-012); merging the PR records them.
-5. **This digest:** update against the resolved state of 1–4 (and the study run's outcome if it has moved), then merge.
+3. **Product baseline `3329c99`:** resolve and validate its deployment to the live demo (including telemetry refresh); connector activation remains separately gated on validation plus explicit configuration.
+4. **PR #13:** review the runtime decision packet and make the required founder architecture decisions (OD-005…OD-008, OD-012); merging the PR records them.
+5. **This digest:** refresh and review against the resolved state of 1–4 (and the study run's status at that time), then merge.
+6. **Production-prerequisite hardening:** begin the PRODUCTION_READINESS_PLAN phases (production QBO OAuth, monitoring, real-company datasets, security/privacy review) against the settled baseline.
+7. **Visual-foundation implementation:** begin after the deployment baseline is settled.

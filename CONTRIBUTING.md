@@ -13,22 +13,22 @@ This repository manages the AI.FO AWS control plane. Treat every change as infra
 
 ## Required Local Validation
 
+Install the repository-pinned lint tools into ignored `build/bin`:
+
+```bash
+./scripts/install-dev-tools.sh
+```
+
 Run these before commit:
 
 ```bash
-./scripts/validate.sh
+PATH="$PWD/build/bin:$PATH" ./scripts/validate.sh
+PATH="$PWD/build/bin:$PATH" bash tests/install-dev-tools-test.sh
 git diff --check
 ruby -ryaml -e 'ARGV.each { |path| YAML.load_file(path); puts "#{path}: ok" }' .github/workflows/*.yml
 ```
 
-Run when installed:
-
-```bash
-shellcheck scripts/*.sh
-actionlint
-```
-
-If a check is skipped because tooling is missing, document the skip in the PR.
+`scripts/validate.sh` prints the installer command if either linter is absent. If a check is skipped, document the skip in the PR.
 
 ## Pull Request Expectations
 

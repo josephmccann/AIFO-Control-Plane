@@ -7,13 +7,13 @@ Make infrastructure work repeatable and understandable for a solo founder and fu
 ## Current Supports
 
 - `scripts/validate.sh`.
+- Pinned, checksum-verified local installation of `shellcheck` and `actionlint` through `scripts/install-dev-tools.sh`.
 - Terraform root separation.
 - README and architecture docs.
 - Runbooks and ADR framework.
 
 ## Gaps
 
-- `shellcheck` and `actionlint` are optional local tools.
 - No PR template.
 - No automated Markdown linting.
 - Product validation is not integrated into control-plane CI.
@@ -21,5 +21,4 @@ Make infrastructure work repeatable and understandable for a solo founder and fu
 ## Next Work
 
 - Add PR template.
-- Add optional lint tooling guidance.
 - Add product validation mapping before product runtime work.

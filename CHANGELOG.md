@@ -4,6 +4,10 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Added a pinned, checksum-verified local installer for `actionlint` v1.7.12 and ShellCheck v0.11.0 across supported macOS/Linux architectures.
+- Extended standard validation to lint repository shell scripts, installer tests, and GitHub Actions workflows when the pinned tools are on `PATH`.
+- Grouped Terraform Plan step outputs into a single redirect to satisfy the newly enforced workflow shell lint without changing plan-gate behavior.
+- Advanced canonical repository state from the pre-update parked checkpoint to active operational refinement; retained the dated session handoff as historical evidence.
 - Checkpointed the operationally complete current-scope AWS control-plane baseline before Codex CLI update.
 - Added dated session handoff at `docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md`.
 - Updated canonical state, readiness, roadmap, security, and workqueue documents to record `PARKED — SAFE FOR CODEX CLI UPDATE`.

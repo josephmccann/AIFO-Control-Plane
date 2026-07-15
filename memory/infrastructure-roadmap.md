@@ -1,22 +1,19 @@
 # Infrastructure Roadmap Memory
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 ## Now
 
 - AWS control-plane baseline is operationally complete for the approved current scope.
 - EC2 instance `i-0254a9e2fcbcdebd7` is stopped.
 - Local Terraform plan and GitHub Terraform Plan are clean.
-- No new AWS implementation work should begin before the Codex CLI update.
+- Reproducible local `actionlint` and `shellcheck` installation is available through `scripts/install-dev-tools.sh`.
 
 ## Next
 
-- Resume with Codex 5.6 using `docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md`.
-- Confirm clean repository state, AWS identity, stopped instance state, and clean Terraform plans.
-- Then choose one narrow next task:
-  - add `actionlint`/`shellcheck` availability to the developer toolchain or CI;
-  - create a product-runtime architecture ADR without deploying anything;
-  - define host patching and maintenance procedure.
+- Define the host patching and maintenance procedure.
+- Add periodic documentation checks for stale deployment status.
+- Add a cost-review cadence and lightweight monthly cost evidence.
 
 ## Later
 

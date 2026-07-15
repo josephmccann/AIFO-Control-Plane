@@ -2,7 +2,7 @@
 
 AWS infrastructure control-plane repository for AI.FO.
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 The approved current-scope AWS control-plane baseline is operationally complete. It does not host the AI.FO product runtime and it does not include an apply workflow.
 
@@ -115,6 +115,14 @@ Plan gate behavior:
 GitHub required environment reviewers are unavailable on the current repository plan. The `terraform-apply` environment exists but must remain unused. Do not create an apply workflow until an enforceable approval boundary exists.
 
 ## Local Validation
+
+Install the pinned, checksum-verified lint tools into ignored `build/bin`:
+
+```bash
+./scripts/install-dev-tools.sh
+```
+
+Run the standard validation entrypoint with the repository tools on `PATH`:
 
 ```bash
 PATH="$PWD/build/bin:$PATH" AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 ./scripts/validate.sh

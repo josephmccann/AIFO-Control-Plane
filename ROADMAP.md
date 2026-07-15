@@ -1,6 +1,6 @@
 # Roadmap
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 This roadmap is intentionally conservative. The control plane must support the actual AI.FO product while avoiding infrastructure for hypothetical future systems.
 
@@ -51,7 +51,7 @@ Decision gate: no further AWS mutation without explicit human approval.
 
 Status: Next.
 
-- Install or add CI support for `actionlint` and `shellcheck`.
+- Reproducible local `actionlint` and `shellcheck` tooling: complete.
 - Add periodic documentation checks for stale deployment status.
 - Add patch-management runbook for the stopped control-plane host.
 - Add cost-review cadence and lightweight monthly cost evidence.

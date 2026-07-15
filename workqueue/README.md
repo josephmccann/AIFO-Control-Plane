@@ -1,6 +1,6 @@
 # Work Queue
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 Status values: `todo`, `in-progress`, `blocked`, `done`.
 
@@ -25,7 +25,8 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-031 | Complete hardened control-plane baseline | Local and GitHub plans clean; instance stopped | Done |
 | WQ-032 | Fix stopped-instance public IPv4 drift | Local stopped/running plans clean | Done |
 | WQ-033 | Complete GitHub Terraform plan gate | Main/manual drift fails; PR proposed changes pass | Done |
-| WQ-034 | Checkpoint control-plane before Codex CLI update | This documentation PR | Done when merged |
+| WQ-034 | Checkpoint control-plane before Codex CLI update | PR #10 merged | Done |
+| WQ-036 | Add durable local `actionlint` and `shellcheck` tooling | Pinned installer, platform tests, full repository validation | Done |
 
 ## In Progress
 
@@ -40,6 +41,6 @@ None.
 
 ## Next
 
-- Resume after Codex CLI update using `docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md`.
-- Confirm clean local and GitHub plans.
-- Select one narrow task: tooling lint availability, host patching runbook, or product-runtime architecture ADR.
+- Define the host patching and maintenance procedure.
+- Add periodic deployment-status documentation checks.
+- Add lightweight monthly cost evidence.

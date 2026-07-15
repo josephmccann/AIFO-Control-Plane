@@ -91,11 +91,13 @@ jobs:
             result="plan failed"
           fi
 
-          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
-          echo "add_count=${add_count}" >> "$GITHUB_OUTPUT"
-          echo "change_count=${change_count}" >> "$GITHUB_OUTPUT"
-          echo "destroy_count=${destroy_count}" >> "$GITHUB_OUTPUT"
-          echo "result=${result}" >> "$GITHUB_OUTPUT"
+          {
+            echo "exit_code=${exit_code}"
+            echo "add_count=${add_count}"
+            echo "change_count=${change_count}"
+            echo "destroy_count=${destroy_count}"
+            echo "result=${result}"
+          } >> "$GITHUB_OUTPUT"
 
           {
             echo "## Terraform Plan Summary"

@@ -7,6 +7,7 @@ TF_ROOTS=(
   "$ROOT_DIR/terraform/bootstrap/github-oidc"
   "$ROOT_DIR/terraform/environments/control-plane"
 )
+MISSING_LINTERS=()
 
 if ! command -v terraform >/dev/null 2>&1; then
   echo "Terraform is required for validation." >&2
@@ -25,13 +26,24 @@ for tf_dir in "${TF_ROOTS[@]}"; do
 done
 
 echo "Checking shell syntax."
-bash -n "$ROOT_DIR"/scripts/*.sh
+bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/tests/*.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "Running shellcheck."
-  shellcheck "$ROOT_DIR"/scripts/*.sh
+  shellcheck "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/tests/*.sh
 else
-  echo "shellcheck not found; skipping shell lint."
+  MISSING_LINTERS+=("shellcheck")
+fi
+
+if command -v actionlint >/dev/null 2>&1; then
+  echo "Running actionlint."
+  actionlint "$ROOT_DIR"/.github/workflows/*.yml
+else
+  MISSING_LINTERS+=("actionlint")
+fi
+
+if (( ${#MISSING_LINTERS[@]} > 0 )); then
+  echo "Missing lint tools: ${MISSING_LINTERS[*]}. Install pinned versions with ./scripts/install-dev-tools.sh."
 fi
 
 echo "Validation complete."

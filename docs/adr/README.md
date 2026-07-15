@@ -18,3 +18,15 @@ Use `0000-adr-template.md` for new records. Do not replace current-state docs or
 | [0008](0008-cloudtrail-management-events-baseline.md) | Accepted for first deployment | Create a multi-Region CloudTrail management-events baseline |
 | [0009](0009-automated-ec2-operating-schedule.md) | Accepted for first deployment | Automate control-plane host start/stop with EventBridge Scheduler |
 | [0010](0010-manual-host-patching.md) | Accepted for current single-host control plane | Use approval-gated manual patching and defer automation until scale or compliance justifies it |
+| [0011](0011-product-runtime-migration-timing.md) | Proposed | Migrate to an approved AWS-managed runtime before accepting first-cohort customer data |
+| [0012](0012-product-compute-topology.md) | Proposed | Use CloudFront/private S3 and two ECS Fargate API tasks behind an ALB |
+| [0013](0013-managed-postgresql.md) | Proposed | Use RDS PostgreSQL Multi-AZ with PITR and controlled migrations |
+| [0014](0014-product-object-storage.md) | Proposed | Use S3 for production and retire R2 after checksum-validated migration |
+| [0015](0015-product-secrets-and-key-rotation.md) | Proposed | Use Secrets Manager, workload identity and versioned QBO/session keyrings |
+| [0016](0016-session-persistence-and-authentication.md) | Proposed | Retain PostgreSQL sessions and harden authentication without Redis |
+| [0017](0017-product-environment-and-account-boundaries.md) | Proposed | Isolate production in one dedicated AWS organization member account |
+| [0018](0018-product-domain-and-tls.md) | Proposed | Use a founder-controlled same-origin product domain with tested TLS/OAuth cutover |
+| [0019](0019-product-logging-and-observability.md) | Proposed | Use minimal structured CloudWatch observability and a restricted audit stream |
+| [0020](0020-product-backup-and-restore.md) | Proposed | Establish 15-minute RPO, 4-hour RTO and tested quarterly restores |
+| [0021](0021-product-deployment-and-rollback.md) | Proposed | Promote immutable artifacts with controlled migrations and tested rollback |
+| [0022](0022-customer-data-retention-and-deletion.md) | Proposed | Adopt explicit retention and tested, evidenced customer deletion |

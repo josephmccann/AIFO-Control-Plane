@@ -28,14 +28,18 @@ Items are numbered by source file:
 Pinned source links for each file are in
 [SOURCE_MATERIAL_INDEX.md](SOURCE_MATERIAL_INDEX.md).
 
+Where one source item contains parts with different dispositions, it is
+split into lettered sub-items (CONST-07a/07b, FC-16a/16b) so that every
+item or sub-item has exactly one disposition.
+
 ## Crosswalk summary
 
 | Disposition | Items |
 |-------------|-------|
-| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07, CONST-08, CONST-13 to CONST-15, CONST-19 to CONST-21, CONST-24 to CONST-26, CONST-28; RM-01, RM-02, RM-04; RA-00 |
-| Imported with revision | CONST-16/17 (merged with product-repo statements), CONST-18 (revised per RA-06), CONST-06, CONST-09 to CONST-11, CONST-29 (horizon sequence revised by founder decision of 2026-07-15), CONST-12 and CONST-22/23 (imported with RA confidence qualifiers), FC-16 (durable logic imported, stage-bound framing split off) |
-| Rejected as durable doctrine (reclassified) | CONST-07 channel list; CCS-06 placement |
-| Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; CONST-07 channel list; the stage-bound half of FC-16 |
+| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07a, CONST-08, CONST-13 to CONST-15, CONST-19 to CONST-21, CONST-24 to CONST-26, CONST-28; RM-01, RM-02, RM-04; RA-00 |
+| Imported with revision | CONST-16/17 (merged with product-repo statements), CONST-18 (revised per RA-06), CONST-06, CONST-09 to CONST-11, CONST-29 (horizon sequence revised by founder decision of 2026-07-15), CONST-12 and CONST-22/23 (imported with RA confidence qualifiers), FC-16a (durable hiring logic) |
+| Rejected as durable doctrine (reclassified) | CONST-07b (channel list); CCS-06 placement |
+| Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; FC-16b (stage-bound hiring framing) |
 | Retained in reasoning archive only | FC-01 to FC-03, FC-06, FC-07; RA-01 to RA-08; CONST-27 decision-ledger detail |
 | Founder decision still required | D-1 to D-6 below |
 
@@ -55,7 +59,7 @@ true but belongs in current-state documents, not in the Manual.
 | FC-12, FC-13 | Six-step decision process; context acquisition is not delay | Section 5.1 |
 | FC-14, FC-15 | Coaching sequence; complementary teams | Section 14 |
 | FC-19 to FC-27 | Nine AI collaboration rules | Section 10.2 |
-| CONST-07, CONST-08 | Burden of awareness; continuous communication (channel list excluded, see below) | Section 4.2 |
+| CONST-07a, CONST-08 | Burden of awareness; continuous communication (CONST-07b, the channel list, is reclassified below) | Section 4.2 |
 | CONST-13 to CONST-15 | Structural customer focus, funnel, first-principles build | Section 4.4 |
 | CONST-19 to CONST-21 | Hiring illustration; consequential-decision boundary; automation is not authority (CONST-18 itself is listed under imported with revision) | Section 6.1 |
 | CONST-24 | Compound founder judgment, not replace critical thinking | Section 16 |
@@ -74,13 +78,13 @@ true but belongs in current-state documents, not in the Manual.
 | CONST-09 to CONST-11 (horizon confidence) | Imported with the qualifier "direction high confidence; sequencing and implementation subject to validation" | RA-03 attaches this confidence caveat; the constitution draft presented the horizons unqualified. The Manual makes the qualifier part of the doctrine, and the 2026-07-15 resequencing leaves it unchanged (Manual 3) |
 | CONST-12, CONST-22, CONST-23 (network intelligence) | Imported with explicitly unresolved preconditions: privacy, consent, data governance, causal inference; plus binding interim constraints | RA-04 records these as unresolved; stating the vision without them would overstate certainty, violating FC-11 (Manual 19) |
 | CONST-16/17 | Merged with the product repository's stronger operational statements ("The separation is the product"; negative test on the removed raw-prompt route) | Repository evidence (AI.FO-Demo README, ARCHITECTURE, SIGNAL_METHODOLOGY) is more precise than the draft prose and is canonical (Manual 4.1, 8) |
-| FC-16 (early-hire stance) | Durable logic imported (founder can temporarily supply judgment and operating context, not technical depth; weight technical capability, accept coaching load); the "first engineering hire" framing classified as current state | The reasoning is durable; the specific hire is stage-bound (CCS-08) (Manual 14) |
+| FC-16a (early-hire logic) | Durable logic imported: founder can temporarily supply judgment and operating context, not technical depth; weight technical capability, accept coaching load | The reasoning is durable; the stage-bound "first engineering hire" framing is split off as FC-16b, classified as temporary state (Manual 14) |
 
 ## Material rejected as durable doctrine (reclassified, not discarded)
 
 | Item | Ruling |
 |------|--------|
-| CONST-07 channel list ("email, Slack, Teams, SMS") | The proactive-delivery principle is doctrine; the named channel list is a current-state design choice that RA-05 itself says should be validated with customers. The Manual imports the principle and explicitly excludes channel lists from doctrine (Manual 4.2) |
+| CONST-07b: channel list ("email, Slack, Teams, SMS") | The proactive-delivery principle (CONST-07a) is doctrine; the named channel list is a current-state design choice that RA-05 itself says should be validated with customers. The Manual imports the principle and explicitly excludes channel lists from doctrine; the current channel choices belong in the product repository's current-state documents (Manual 4.2) |
 | CCS-06 (architectural principles restated in the current-state file) | Content is correct and already doctrine (CONST-16/17, CONST-05, FC-27); its placement in a file that says it must not be treated as doctrine violates RM-04. Ruling: doctrine lives in the Manual; the current-state file should link, not restate |
 
 ## Material classified as temporary company state
@@ -96,6 +100,7 @@ and the company digest once adopted), not this manual.
 | CCS-03 | Market band "generally below $50M revenue" (a parameterization of durable CONST-13) |
 | CCS-04, CCS-05 | Current product definition; honest gap between product and constitution horizons |
 | CCS-07 to CCS-10 | Current priorities, including first engineering hire and SEC-data validation work |
+| FC-16b | The stage-bound "first engineering hire" framing (pairs with CCS-08; the durable logic is FC-16a in the revision table) |
 | CCS-11 | Current strategic sequence (its ordering, network intelligence last, is superseded by the founder's 2026-07-15 horizon resequencing; see the revision table above) |
 | CCS-12, CCS-13 | Current positioning constraints and preferred framing (operationalized durable rules; the durable versions are Manual 4.5 and 17, and the product repository's positioning decision records govern the current wording) |
 | CCS-14 | Monthly review cadence for the current-state file |

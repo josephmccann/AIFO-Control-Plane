@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
 
 The approved current-scope AWS control-plane baseline is operationally complete in AWS account `350480401760`, Region `us-west-2`.
 
@@ -33,7 +33,7 @@ Current validation state:
 
 - `PATH="$PWD/build/bin:$PATH" AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 ./scripts/validate.sh`
 - Local Terraform control-plane plan: `0 to add, 0 to change, 0 to destroy`.
-- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712.
+- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29380920338.
 - GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`.
 - EC2 instance state: `stopped`.
 - GitHub plan-role policy default version: `v4`.

@@ -1,6 +1,6 @@
 # Work Queue
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
 
 Status values: `todo`, `in-progress`, `blocked`, `done`.
 
@@ -28,6 +28,11 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-034 | Checkpoint control-plane before Codex CLI update | PR #10 merged | Done |
 | WQ-036 | Add durable local `actionlint` and `shellcheck` tooling | Pinned installer, platform tests, full repository validation | Done |
 | WQ-037 | Define control-plane host patching and maintenance | ADR-0010, approval-gated runbook, repository-state reconciliation | Done |
+| WQ-038 | Define product-runtime requirements | Beta-cohort requirements cover security, recovery, isolation, support, capacity and cost | Done; proposed for founder approval |
+| WQ-039 | Complete product-runtime architecture options analysis | Three options, explicit weights, decision matrix and recommendation | Done; proposed for founder approval |
+| WQ-040 | Complete product-runtime threat model | STRIDE assets, boundaries, threats, controls, residual risk, owners and evidence | Done; security review pending |
+| WQ-041 | Complete product-runtime cost model | Current/hybrid/AWS assumptions, ranges, pricing anchors, thresholds and risks | Done; invoices/founder approval pending |
+| WQ-042 | Define product-runtime migration readiness | Objective gates name evidence, owner, approver, status and blocking effect | Done; gates not executed |
 
 ## In Progress
 
@@ -39,8 +44,11 @@ None.
 | --- | --- | --- | --- |
 | WQ-023 | Product runtime hosting | Requires product migration decision, spending approval, secrets design, database decision, storage decision, and product validation plan | Defer |
 | WQ-035 | Apply workflow automation | GitHub required environment reviewers unavailable on current repository plan | Keep apply workflow absent |
+| WQ-043 | Obtain founder product-runtime architecture decision | ADR-0011 through ADR-0022, requirements, budget and provider/domain decisions are Proposed | Review founder decision packet; no deployment approval implied |
+| WQ-044 | Future staging deployment | Requires approved architecture/cost/account/IAM, completed product prerequisites, reviewed Terraform plan and explicit resource-creation approval | Do not create staging during architecture mission |
+| WQ-045 | Product migration rehearsal | Requires validated staging, source backup/restore approval, synthetic/sanitized data rule and all rehearsal prerequisites | Rehearse only after explicit approval; do not copy customer data |
+| WQ-046 | Product production cutover | Requires every migration gate PASS and explicit production/data/DNS/QBO/cutover approval | Keep blocked; no customer data/runtime deployed |
 
-## Next
+## Next Narrow Workstream
 
-- Add periodic deployment-status documentation checks.
-- Add lightweight monthly cost evidence.
+Design the product-runtime prerequisite hardening work in `AI.FO-Demo`: controlled migrations, QBO key rotation, database-backed tenant isolation tests, session/CSRF hardening, upload quarantine/integrity, structured redaction, readiness, deletion and verifier fail-closed behavior. Do not create AWS runtime infrastructure.

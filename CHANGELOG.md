@@ -4,6 +4,15 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Added the founder product-runtime architecture decision packet for the first approximately 10 customer companies; no deployment approval or infrastructure mutation is included.
+- Rebuilt the current AI.FO runtime inventory from product head `8df211e02f274d0a812771327c69b6d5b6c040d2`, including implementation-level topology, 17 data flows, classifications, confirmed risks and unresolved evidence.
+- Added beta-cohort security, availability, RPO/RTO, backup, retention, support, capacity and cost requirements.
+- Added a weighted current-platform, hybrid and AWS-managed options analysis recommending a gated AWS migration before real-customer data.
+- Added the proposed ECS Fargate, RDS PostgreSQL Multi-AZ, S3, Secrets Manager, CloudFront/WAF and two-account product reference architecture.
+- Added a STRIDE product threat model, objective MR-01 through MR-33 migration gates and a three-option cost model.
+- Added Proposed ADR-0011 through ADR-0022 for migration timing, compute, database, storage, secrets, sessions, environments/accounts, domain/TLS, observability, backup, deployment and retention/deletion.
+- Reconciled current state, open decisions, work queue, roadmap, architecture, security, readiness and handoff documents to separate completed analysis from unapproved deployment work.
+- Updated the verified control-plane checkpoint to main `707e629`, clean GitHub plan run `29380920338`, active CloudTrail/Session Manager/Scheduler and stopped instance `i-0254a9e2fcbcdebd7`.
 - Added a pinned, checksum-verified local installer for `actionlint` v1.7.12 and ShellCheck v0.11.0 across supported macOS/Linux architectures.
 - Extended standard validation to lint repository shell scripts, installer tests, and GitHub Actions workflows when the pinned tools are on `PATH`.
 - Grouped Terraform Plan step outputs into a single redirect to satisfy the newly enforced workflow shell lint without changing plan-gate behavior.

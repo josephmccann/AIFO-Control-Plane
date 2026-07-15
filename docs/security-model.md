@@ -118,11 +118,23 @@ Expected audit sources:
 - CloudWatch Logs for Session Manager stream output
 - EventBridge Scheduler and SQS DLQ state for scheduled start/stop failures
 
-CloudTrail is implemented as an account-level multi-Region trail. An organization trail is deferred until AWS Organizations scope is confirmed.
+CloudTrail is implemented as an account-level multi-Region trail. Read-only evidence confirms account `350480401760` is the Organizations management account; an organization trail remains deferred because product account/log-archive scope is not approved.
 
 ## Product Data Boundary
 
 The current control plane does not host product runtime or customer data. Future infrastructure that handles accounting data, QBO tokens, uploads, AI prompts, verifier outputs, or decision records requires a product runtime ADR, secrets design, retention model, and privacy review.
+
+The proposed product security model and structured threat register are in [security/product-runtime-threat-model.md](security/product-runtime-threat-model.md). Production blockers include:
+
+- Prove founder control and recovery of the selected domain, DNS and exact QBO callback.
+- Disable or replace the current GMI verifier unless acceptable retention, no-training, subprocessor, incident and deletion terms are approved.
+- Add real-PostgreSQL tenant-isolation tests and RLS or an approved equivalent.
+- Add versioned QBO token-encryption keys and tested re-encryption/revocation.
+- Add customer deletion, upload quarantine/checksum/malware controls, structured log redaction and durable audit events.
+- Replace fragmented/startup schema mutation with one audited migration path.
+- Restore database and objects and complete a founder recovery exercise before production.
+
+Proposed AWS controls include a dedicated production member account, private ECS/RDS/S3, KMS, Secrets Manager/task roles, WAF, CloudTrail/GuardDuty, immutable artifacts and an enforceable founder deployment boundary. None is deployed or approved yet.
 
 ## Threat Model
 

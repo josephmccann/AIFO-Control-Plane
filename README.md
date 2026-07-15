@@ -2,7 +2,7 @@
 
 AWS infrastructure control-plane repository for AI.FO.
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
 
 The approved current-scope AWS control-plane baseline is operationally complete. It does not host the AI.FO product runtime and it does not include an apply workflow.
 
@@ -34,7 +34,7 @@ Start with [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/sess
 ## Current Verification
 
 - Local Terraform control-plane plan: `0 to add, 0 to change, 0 to destroy`
-- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712
+- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29380920338
 - GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`
 - GitHub plan-role policy default version: `v4`
 - OIDC trust: unchanged and restricted to exact repository/environment subjects
@@ -54,7 +54,12 @@ Start with [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/sess
 │   ├── session-handoffs/
 │   ├── architecture.md
 │   ├── deployment-readiness-review.md
+│   ├── product-runtime-cost-model.md
 │   ├── product-runtime-inventory.md
+│   ├── product-runtime-migration-readiness.md
+│   ├── product-runtime-options-analysis.md
+│   ├── product-runtime-reference-architecture.md
+│   ├── product-runtime-requirements-beta-cohort.md
 │   └── security-model.md
 ├── memory/
 ├── scripts/
@@ -148,4 +153,4 @@ terraform -chdir=terraform/environments/control-plane plan \
 
 ## Product Runtime Boundary
 
-The control plane does not run the AI.FO product. Product runtime infrastructure remains out of scope until a separate architecture, security, data, cost, and deployment decision is approved.
+The control plane does not run the AI.FO product. The repository now contains a Proposed product architecture and [founder decision packet](docs/decision-packets/PRODUCT_RUNTIME_ARCHITECTURE_FOUNDER_DECISION.md), but no runtime infrastructure or migration is approved. The recommendation is to complete a gated AWS migration before accepting first-cohort real customer data.

@@ -1,6 +1,14 @@
 # AI.FO Control Plane Session Handoff
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: HISTORICAL CHECKPOINT - SUPERSEDED BY `docs/handoffs/HANDOFF_CONTROL_PLANE.md`
+
+## 2026-07-15 Reconciliation Addendum
+
+- Current verified main head is `707e6298ed558fde06faea99b7e4b99b8b2b7adc`.
+- Latest clean GitHub Terraform Plan is https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29380920338.
+- Pinned ShellCheck v0.11.0 and actionlint v1.7.12 are now installed by repository tooling and validation passes; the historical warnings below are resolved.
+- The product-runtime architecture analysis is complete in a draft decision package, but all product deployment remains unapproved and blocked.
+- Use [the canonical current handoff](../handoffs/HANDOFF_CONTROL_PLANE.md) when resuming work. The remainder of this document preserves the pre-update checkpoint as historical evidence.
 
 ## Mission Objective
 

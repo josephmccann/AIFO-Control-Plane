@@ -2,85 +2,66 @@
 
 Date: 2026-07-15
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
 
-## Repository
+## Repository Checkpoint
 
-- Repository: `josephmccann/AIFO-Control-Plane`
-- Latest main commit at checkpoint start: `b9e1b539474efa30086d9031b3118cfe241ffa28`
-- Product repository: `/Users/joemccann/code/AI.FO-Demo`
-- Product baseline observed earlier: `8df211e02f274d0a812771327c69b6d5b6c040d2`
-- Current product remains a working financial intelligence platform with deterministic financial engine, QBO ingestion, CSV ingestion, PostgreSQL, R2, AI narrative generation, and verifier support.
+- Control repository: `josephmccann/AIFO-Control-Plane`
+- Inspected control `main`: `707e6298ed558fde06faea99b7e4b99b8b2b7adc`
+- Working branch: `codex/product-runtime-architecture-decision-package`
+- Product repository: `josephmccann/AI.FO-Demo`
+- Inspected product `master`: `8df211e02f274d0a812771327c69b6d5b6c040d2`
+- Product checkout remained on `master`, clean and unmodified.
+- Control open PRs at reconstruction: none.
+- Product open PRs: #195 documentation checkpoint, #186 product surfaces/connectors, #180 founder context. They are not part of the inspected product baseline.
 
-## AWS Baseline
+## Verified AWS Control Plane
 
-- AWS account: `350480401760`
-- Region: `us-west-2`
-- Terraform state bucket: `aifo-terraform-state-350480401760-us-west-2`
-- Terraform state key: `control-plane/terraform.tfstate`
-- Backend locking: native S3 lockfile
-- EC2 instance: `i-0254a9e2fcbcdebd7`
-- EC2 state: `stopped`
-- Instance type: `m7i-flex.2xlarge`
-- Root volume: 100 GiB encrypted gp3
-- Administration: SSM Session Manager only
-- SSH key: none
-- Inbound security-group rules: zero
-- IMDSv2: required
-- Termination protection: enabled
-- Public IPv4: assigned only while running for outbound egress; released while stopped
-
-## Deployed Control-Plane Resources
-
-- CloudTrail: `arn:aws:cloudtrail:us-west-2:350480401760:trail/aifo-control-plane-management-events`
-- CloudTrail bucket: `aifo-control-plane-cloudtrail-350480401760-us-west-2`
-- VPC: `vpc-0f73b1daaa9fc17ab`
-- Public subnet: `subnet-03ce35314c75b8e1f`
-- Security group: `sg-0190e01bae800bb1a`
-- S3 gateway endpoint: `vpce-058114f11531d5fdd`
-- EC2 role/profile: `aifo-control-plane-ec2-ssm-role`, `aifo-control-plane-ec2-profile`
-- Session Manager log group: `/aifo/control-plane/session-manager`
-- Session Manager KMS key: `arn:aws:kms:us-west-2:350480401760:key/e36ac1c5-105c-42c1-92f9-06fcf02cb772`
-- Scheduler group: `aifo-control-plane-host`
-- Scheduler role: `aifo-control-plane-scheduler-role`
-- Scheduler DLQ: `https://sqs.us-west-2.amazonaws.com/350480401760/aifo-control-plane-scheduler-dlq`
-- Scheduler start: 08:00 Monday-Friday, `America/Los_Angeles`
-- Scheduler stop: 16:00 Monday-Friday, `America/Los_Angeles`
-
-## Bootstrap Resources
-
-- OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
-- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
-- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
-- State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
-- Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
-- Plan read policy default version: `v4`
-- Plan trust subject: `repo:josephmccann/AIFO-Control-Plane:environment:terraform-plan`
-- Apply trust subject: `repo:josephmccann/AIFO-Control-Plane:environment:terraform-apply`
-- OIDC audience: `sts.amazonaws.com`
-- Apply role: state-access-only, no inline policies
-
-## Verification
-
-- Local Terraform plan: `0 to add, 0 to change, 0 to destroy`
-- Latest GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712
-- GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`
-- Drift gate behavior verified:
-  - `workflow_dispatch` exit `0`: clean, pass
-  - `workflow_dispatch` exit `2`: unexpected drift, fail
-  - `pull_request` exit `2`: proposed change, pass
-- Session Manager connectivity test succeeded after host deployment.
-- Session Manager logging reached `/aifo/control-plane/session-manager`.
-- Current EC2 state is stopped, so active SSM shell access requires a start action inside an approved window or emergency override.
-
-## Current Warnings
-
-- GitHub Actions emits Node 20 deprecation warnings for upstream actions.
-- `terraform-apply` environment exists but required reviewers are unavailable on the current repository plan.
-- No apply workflow exists and none should be added until an enforceable approval boundary exists.
-- Always-on `m7i-flex.2xlarge` exceeds the $250 budget posture; scheduled operation remains required.
+- AWS account `350480401760`, region `us-west-2`, Organizations management account.
+- Identity verified through IAM Identity Center profile `aifo-admin` and permission set `AIFO-Platform-Admin`.
+- Remote state bucket `aifo-terraform-state-350480401760-us-west-2`, key `control-plane/terraform.tfstate`, native S3 lockfile.
+- Read-only backend init and local plan succeeded with `0 to add, 0 to change, 0 to destroy`.
+- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29380920338.
+- Latest successful Terraform Validate: run `29380960040`.
+- CloudTrail `aifo-control-plane-management-events` is logging and last delivery succeeded without error.
+- Session Manager preference `SSM-SessionManagerRunShell` streams encrypted logs to `/aifo/control-plane/session-manager`, 30-day retention.
+- Scheduler start/stop rules are enabled at 08:00/16:00 Monday-Friday, `America/Los_Angeles`, targeting only `i-0254a9e2fcbcdebd7`.
+- EC2 instance `i-0254a9e2fcbcdebd7` is stopped and has no public IP while stopped.
+- No apply workflow exists. Apply role remains state-access-only. `terraform-apply` remains unused.
 - Product runtime infrastructure is not deployed.
 
-## Product Runtime Boundary
+Control repository validation and a fresh remote-backend Terraform plan passed after the architecture documentation changes; the plan remained `0 to add, 0 to change, 0 to destroy`.
 
-No AWS product runtime, production database, product secrets, QBO callback migration, product storage migration, domain/TLS migration, or customer-data hosting has been approved or deployed from this repository.
+## Product Runtime Finding
+
+Current product is a Replit-associated Node/Express single process plus React/Vite static frontend, PostgreSQL/Drizzle, PostgreSQL sessions, Cloudflare R2 uploads, QBO OAuth/ingestion, Anthropic narratives and GMI verifier. Product head has extensive deterministic and route-level tests but no general CI workflow or independently reproducible production deployment definition.
+
+Critical current gaps:
+
+- `ai.fo` redirects to a domain marketplace while product canonical tags claim it.
+- Database/object backup and restore evidence is absent.
+- GMI's published aggregator terms do not prove acceptable handling for sensitive verifier inputs and allow that underlying models may store/train on inputs.
+- Tenant isolation is application-query based with broad global admin and no real-database cross-tenant suite/RLS.
+- QBO token encryption uses one unversioned key with no rotation path.
+- Customer deletion, upload quarantine/integrity/malware controls, controlled schema migration/rollback and durable app audit/alerting are incomplete.
+- Product typecheck/build and 14,459 tests pass, but `pnpm lock:preflight` fails the telemetry provenance check and dependency audit is unverified because npm audit endpoints return HTTP 410 and Dependabot alerts are disabled.
+
+## Architecture Package
+
+Completed analysis/drafts:
+
+- Comprehensive runtime inventory and data classification/flows.
+- First-cohort production requirements.
+- Three-option weighted analysis.
+- Proposed AWS reference architecture.
+- STRIDE product threat model.
+- Objective migration readiness gates.
+- Product runtime cost model.
+- Proposed ADR-0011 through ADR-0022.
+- Founder decision packet.
+
+Recommended path: migrate to a small AWS-managed runtime before onboarding real customer financial data. Use the current runtime only for synthetic demo/rehearsal. Expected product-runtime beta cost is `$400-$550/month`, with an `$800/month` review ceiling, separate from the current control-plane cost.
+
+## Decision And Deployment Boundary
+
+Analysis is complete but architecture is not approved. No AWS product resources, product data, tokens, secrets, domains, certificates or callbacks changed. Future staging, migration rehearsal and production cutover remain blocked on founder decisions, product prerequisites, explicit resource/cost approval and objective evidence gates.

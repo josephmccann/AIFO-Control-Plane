@@ -1,82 +1,97 @@
 # Roadmap
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE - PRODUCT RUNTIME ARCHITECTURE DECISION
 
-This roadmap is intentionally conservative. The control plane must support the actual AI.FO product while avoiding infrastructure for hypothetical future systems.
+This roadmap keeps the operationally complete control plane separate from the unapproved product runtime.
 
 ## Phase 0: Repository Operating Model
 
 Status: Complete.
 
-- Product runtime inventory.
-- Principle traceability matrix.
-- Assumption register.
-- Control-plane fit assessment.
-- ADR framework.
-- Runbooks, memory, workstreams, and workqueue.
-- PR #1 handoff reconciliation completed; PR #1 closed as superseded.
+- Product context, principles, assumptions, ADRs, memory, workstreams and work queue established.
+- PR #1 reconciled and closed as superseded.
 
 ## Phase 1: Bootstrap Readiness
 
 Status: Complete and applied.
 
-- Remote-state bootstrap root for S3 state and native lockfiles applied.
-- GitHub OIDC bootstrap root applied.
-- Separate Terraform plan and apply roles created.
-- GitHub environments created.
-- Repository variables configured for Terraform plan.
-- GitHub Actions plan succeeds through OIDC.
-- Apply role remains state-access-only.
-- Exact human execution steps documented.
+- S3 remote state/native lockfile, GitHub OIDC, separate plan/apply roles, environments and plan variables.
+- Apply role remains state-access-only; no apply workflow.
 
 ## Phase 2: Hardened Control-Plane Baseline
 
-Status: Complete for approved current scope.
+Status: Complete for approved scope.
 
-- CloudTrail management-events baseline deployed.
-- Session Manager logging deployed.
-- VPC/network baseline deployed.
-- No-ingress EC2 host deployed.
-- EC2 instance `i-0254a9e2fcbcdebd7` is stopped.
-- 100 GiB encrypted gp3 root volume deployed.
-- EventBridge Scheduler start and stop schedules deployed.
-- Scheduler inline policy and DLQ deployed.
-- Local Terraform plan is clean.
-- GitHub Terraform Plan is clean on `main`: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712.
-- GitHub plan-role read policy default version is `v4`.
+- CloudTrail, Session Manager logs, no-ingress EC2, Scheduler and drift gate operational.
+- Instance `i-0254a9e2fcbcdebd7` stopped.
+- Local plan and GitHub plan run `29380920338` clean.
 
 Decision gate: no further AWS mutation without explicit human approval.
 
-## Phase 3: Operational Refinement
+## Phase 3: Control-Plane Operational Refinement
 
-Status: Next.
+Status: Ongoing, lower priority than product decision.
 
-- Reproducible local `actionlint` and `shellcheck` tooling: complete.
-- Approval-gated manual host patching runbook and ADR: complete.
-- Add periodic documentation checks for stale deployment status.
-- Add cost-review cadence and lightweight monthly cost evidence.
-- Run a Terraform state recovery drill from S3 versioning.
+- Pinned actionlint/ShellCheck and approval-gated manual patching complete.
+- Future: periodic stale-status checks, lightweight monthly cost evidence and Terraform state recovery drill.
 
-## Phase 4: Product Runtime Design
+## Phase 4: Product Runtime Architecture Decision
 
-Status: Deferred until product deployment scope is approved.
+Status: Analysis complete; founder decision pending.
 
-- PostgreSQL hosting decision.
-- Product secrets architecture.
-- Product object storage decision: retain Cloudflare R2 or deliberately migrate.
-- Runtime hosting decision for API/frontend.
-- Domain, TLS, and QBO OAuth callback migration.
-- Product validation pipeline using existing AI.FO-Demo commands.
+- Current-runtime inventory, data flows/classification and risk analysis complete.
+- Beta-cohort requirements and weighted current/hybrid/AWS options complete.
+- Reference architecture, threat model, readiness gates and cost model complete.
+- ADR-0011 through ADR-0022 and founder packet Proposed.
+- Recommended path: AWS-managed runtime before real-customer data; current runtime remains synthetic demo/rehearsal only.
 
-Decision gates: spending, secrets, customer data, deployment, and production approval.
+Decision gates: domain/provider custody, architecture, retention, account, budget, recovery objectives and deployment approval boundary.
 
-## Phase 5: Private Network Migration
+## Phase 5: Product Prerequisite Hardening
 
-Status: Deferred.
+Status: Not started; recommended next workstream.
 
-- Private subnets.
-- NAT Gateway, NAT instance, or endpoint-based egress decision.
-- Interface endpoints where cost-justified.
-- Removal of public IPv4 from the control-plane host.
+- One controlled database migration ledger; remove startup DDL.
+- QBO versioned token-encryption keyring and rotation.
+- Real-PostgreSQL tenant-isolation/RLS decision and tests.
+- Session/logout/CSRF/rate/auth hardening.
+- Upload quarantine, checksum, type/limit and malware controls.
+- Structured redaction/audit events, readiness, deletion and verifier fail-closed/provider abstraction.
+- Pinned container build and product CI design.
 
-Decision gate: cost and security review.
+Decision gate: product-code changes require a separately scoped implementation mission and review.
+
+## Phase 6: Staging Design And Validation
+
+Status: Blocked; no resources approved.
+
+- Review product Terraform, production account bootstrap design and cost.
+- After explicit approval, create isolated staging with synthetic data only.
+- Validate build/deploy, restore, QBO sandbox, storage, sessions, tenant isolation, security, load/failure, monitoring and rollback.
+
+Decision gates: architecture/cost/account/IAM approval and exact Terraform plan/resource-creation approval.
+
+## Phase 7: Migration Rehearsal
+
+Status: Blocked.
+
+- Source backup/restore evidence.
+- Synthetic/sanitized DB and object manifest/checksum rehearsal.
+- Timed deployment, callback, smoke, rollback and founder recovery exercise.
+
+Decision gate: explicit rehearsal/data handling approval; no customer data by default.
+
+## Phase 8: Production And Cutover
+
+Status: Blocked.
+
+- Empty production infrastructure only after staging gates and explicit approval.
+- Production cutover only after all MR-01 through MR-33 gates pass.
+- Controlled backup, freeze, final copy/reconcile, deploy/migrate, DNS/QBO callback, validation and rollback window.
+
+Decision gates: production cost/resources, customer data, secrets, DNS/TLS, QBO callbacks and command-level cutover approval.
+
+## Deferred
+
+- Kubernetes, microservices, Aurora, Redis, active-active multi-Region, per-tenant accounts/databases and large observability stacks until evidence requires them.
+- Private-network migration of the control-plane host remains separate and cost-gated.

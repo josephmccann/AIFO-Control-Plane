@@ -1,101 +1,60 @@
 # AI.FO Control Plane Handoff
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Date: 2026-07-15
 
-## Purpose
+Session state: ACTIVE - FOUNDER PRODUCT RUNTIME DECISION PENDING
 
-Canonical starting context for AWS infrastructure, Terraform, GitHub Actions, SSM access, security boundaries, and control-plane operations.
+## Repository State
 
-The detailed Codex 5.6 resume handoff is [../session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](../session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md).
+- Control main inspected: `707e6298ed558fde06faea99b7e4b99b8b2b7adc`.
+- Product master inspected: `8df211e02f274d0a812771327c69b6d5b6c040d2`.
+- Architecture work branch: `codex/product-runtime-architecture-decision-package`.
+- Product checkout was clean and unmodified.
+- Control open PRs at reconstruction: none.
+- Product open PRs: #195, #186 and #180; none is in the inspected baseline.
 
-## Stable Context
+## Verified Control Plane
 
-- Repository: `josephmccann/AIFO-Control-Plane`
-- Product repository: `josephmccann/AI.FO-Demo`
-- AWS account: `350480401760`
-- AWS region: `us-west-2`
-- Human access: IAM Identity Center
-- Human administrator permission set: `AIFO-Platform-Admin`
-- Root MFA: enabled
-- Monthly budget target: $250, currently created manually outside Terraform
-- GitHub Actions AWS access: OIDC only, no static AWS keys
-- EC2 administration: Systems Manager Session Manager only
-- Public SSH: not allowed
+- AWS account `350480401760`, Organizations management account, region `us-west-2`.
+- Human access through IAM Identity Center `AIFO-Platform-Admin`; automation through GitHub OIDC only.
+- S3 state bucket `aifo-terraform-state-350480401760-us-west-2`, key `control-plane/terraform.tfstate`, native lockfile.
+- Plan/apply roles remain separate; apply role is state-access-only; no apply workflow; `terraform-apply` unused.
+- Local Terraform plan: `0 to add, 0 to change, 0 to destroy`.
+- Latest clean GitHub plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29380920338.
+- CloudTrail logging/delivery healthy.
+- Session Manager encrypted CloudWatch logging active, 30-day retention.
+- Scheduler enabled at 08:00/16:00 weekdays, `America/Los_Angeles`, targeting only `i-0254a9e2fcbcdebd7`.
+- Instance `i-0254a9e2fcbcdebd7` stopped with no public IP while stopped.
+- Product runtime not deployed.
 
-## Current Repository State
+## Product Architecture Decision
 
-- Latest main commit at checkpoint start: `b9e1b539474efa30086d9031b3118cfe241ffa28`
-- Current-scope AWS baseline: operationally complete
-- Product runtime infrastructure: not deployed
-- Apply workflow: absent
-- `terraform-apply` environment: exists but must remain unused
+The repository now contains completed analysis and Proposed decisions:
 
-## Current Architecture
+- [Current runtime inventory](../product-runtime-inventory.md)
+- [Beta requirements](../product-runtime-requirements-beta-cohort.md)
+- [Options analysis](../product-runtime-options-analysis.md)
+- [Reference architecture](../product-runtime-reference-architecture.md)
+- [Threat model](../security/product-runtime-threat-model.md)
+- [Migration gates](../product-runtime-migration-readiness.md)
+- [Cost model](../product-runtime-cost-model.md)
+- Proposed ADR-0011 through ADR-0022
+- [Founder decision packet](../decision-packets/PRODUCT_RUNTIME_ARCHITECTURE_FOUNDER_DECISION.md)
 
-The deployed initial control-plane environment includes:
+Recommendation: complete a gated AWS-managed migration before accepting first-cohort real customer data. Use the current Replit-associated runtime only for synthetic demonstration and rehearsal. Proposed target is CloudFront/private S3, two ECS Fargate API tasks, RDS PostgreSQL Multi-AZ, private S3 uploads, Secrets Manager/task roles, structured CloudWatch audit/operations and a dedicated production AWS member account.
 
-- Multi-Region CloudTrail management-events trail with log-file validation.
-- Dedicated encrypted CloudTrail S3 log bucket with public access blocked and lifecycle expiration.
-- VPC with DNS support.
-- One public subnet in one Availability Zone.
-- Internet Gateway and outbound default route.
-- S3 gateway endpoint.
-- Ubuntu EC2 control-plane host `i-0254a9e2fcbcdebd7`.
-- Public IPv4 while running for outbound egress.
-- Zero host ingress rules.
-- HTTPS and DNS egress only.
-- No SSH key.
-- SSM instance role using `AmazonSSMManagedInstanceCore`.
-- IMDSv2 required.
-- 100 GiB encrypted gp3 root volume.
-- Termination protection enabled.
-- Session Manager logging to encrypted CloudWatch Logs with 30-day retention.
-- EventBridge Scheduler start and stop schedules targeting only the Terraform-managed host.
-- Scheduler dead-letter queue.
-- Optional Terraform-managed AWS Budget, default disabled.
+## Hard Blockers
 
-## Bootstrap Architecture
+- Founder architecture, account, recovery, retention, domain, provider and budget decisions are pending.
+- `ai.fo` currently redirects to a domain marketplace while product canonicals claim it.
+- Current GMI verifier terms are not approved for highly sensitive financial facts.
+- Product prerequisites, staging, restore, tenant isolation, QBO rotation, upload integrity, deletion, monitoring, rollback, founder recovery and rehearsal gates have not passed.
+- Expected product-runtime beta cost `$400-$550/month` and `$800` review ceiling are not approved.
 
-- State bucket: `aifo-terraform-state-350480401760-us-west-2`
-- State key: `control-plane/terraform.tfstate`
-- OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
-- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
-- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
-- Plan role policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`, default version `v4`
-- Apply role status: state-access-only, no inline policies
+## Next Narrow Workstream
 
-## Verification
-
-- Local Terraform plan: `0 to add, 0 to change, 0 to destroy`
-- Latest GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712
-- GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`
-- EC2 state: `stopped`
-- Session Manager connectivity: tested successfully after deployment
-- Session Manager logging: reached `/aifo/control-plane/session-manager`
-- CloudTrail: deployed and logging management events
-
-## Current Cost Finding
-
-Current modeled totals for `m7i-flex.2xlarge`, 100 GiB gp3, and public IPv4:
-
-- 8 hours per weekday: about `$76.30` monthly before low-volume logs/taxes
-- 12 hours per day: about `$149.64` monthly before low-volume logs/taxes
-- Always on: about `$291.27` monthly before low-volume logs/taxes
-
-Always-on operation exceeds the $250 budget target. Scheduled operation remains the approved posture.
-
-## Product Fit Boundary
-
-The control plane does not currently host AI.FO product runtime. Product hosting is deferred because current product requirements include PostgreSQL, R2 or storage migration, secrets, QBO OAuth, AI provider credentials, domain/TLS, and validation flows that need explicit design.
+Design product-runtime prerequisite hardening in `AI.FO-Demo`: one migration ledger/removal of startup DDL, QBO keyring rotation, database tenant-isolation tests, session/CSRF hardening, upload quarantine/integrity, structured redaction, readiness, deletion and verifier fail-closed/provider abstraction. Do not create runtime infrastructure.
 
 ## Guardrails
 
-- Do not run `terraform apply` without explicit human approval.
-- Do not run `terraform destroy`.
-- Do not create, modify, or delete AWS resources without explicit human approval.
-- Do not start the EC2 instance unless an approved operating window or emergency override applies.
-- Do not create an apply workflow until an enforceable approval boundary exists.
-- Do not use long-lived AWS keys.
-- Do not open inbound administrative ports.
-- Do not use SSH as an emergency bypass.
-- Do not deploy product runtime until a product-hosting ADR is approved.
+Do not apply/destroy Terraform; create/modify/delete AWS resources; start/modify the host; change Scheduler/IAM/GitHub protection; create an apply workflow; deploy product runtime; move data/tokens/secrets; change DNS/TLS/QBO callbacks; modify production product code; or merge the architecture PR without the action-specific founder approval.

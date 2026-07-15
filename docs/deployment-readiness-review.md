@@ -10,11 +10,11 @@ This review is not approval to deploy product runtime infrastructure or to creat
 
 - AWS account: `350480401760`
 - Region: `us-west-2`
-- Latest main commit at checkpoint start: `b9e1b539474efa30086d9031b3118cfe241ffa28`
+- Latest main commit inspected: `707e6298ed558fde06faea99b7e4b99b8b2b7adc`
 - EC2 instance: `i-0254a9e2fcbcdebd7`
 - EC2 state: `stopped`
 - Local Terraform plan: `0 to add, 0 to change, 0 to destroy`
-- GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712
+- GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29380920338
 - GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`
 - Plan-role policy default version: `v4`
 - Apply role: unchanged and state-access-only
@@ -38,6 +38,8 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - [x] EventBridge Scheduler start/stop automation deployed.
 - [x] GitHub plan workflow configured.
 - [x] GitHub plan drift gate completed.
+- [x] Comprehensive product runtime inventory/data flows/classification completed in a draft decision package.
+- [x] Beta requirements, options analysis, reference architecture, threat model, migration gate definitions, cost model and Proposed ADRs completed.
 
 ## Completed Bootstrap
 
@@ -76,6 +78,12 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - [ ] Product secrets.
 - [ ] Product object storage migration.
 - [ ] Domain/TLS/QBO callback migration.
+- [ ] Founder approval of product requirements and ADR-0011 through ADR-0022.
+- [ ] Product prerequisite hardening.
+- [ ] Product staging environment and validation.
+- [ ] Database/object restore and migration rehearsal.
+- [ ] Founder recovery exercise.
+- [ ] Product production cutover.
 
 ## Operational Gates
 
@@ -91,4 +99,9 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - `terraform-apply` exists but cannot enforce reviewer protection and must remain unused.
 - Apply role has no infrastructure mutation permissions by design; future permissions require review.
 - Apply workflow intentionally absent.
-- Product runtime design and deployment are not approved.
+- Product runtime analysis is complete, but the design and deployment are not approved.
+- `ai.fo` application ownership/control is not proven; it currently redirects to a domain marketplace while product canonicals claim it.
+- Current GMI verifier data handling is not acceptable for customer data without negotiated evidence or replacement.
+- Database/object backup and restore, customer deletion, QBO key rotation, tenant integration testing, upload integrity and controlled rollback gates have not passed.
+
+The authoritative product migration gate table is [product-runtime-migration-readiness.md](product-runtime-migration-readiness.md). Staging creation requires architecture, cost, account/IAM, product-prerequisite and exact Terraform-plan approval. Production cutover requires all MR-01 through MR-33 gates to pass plus explicit customer-data, DNS/TLS and QBO callback approval.

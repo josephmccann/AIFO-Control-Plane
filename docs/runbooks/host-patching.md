@@ -63,7 +63,7 @@ aws ec2 describe-instances \
 
 If the instance is `stopped`, stop the procedure. Starting it requires explicit approval; use [ec2-start-stop.md](ec2-start-stop.md) only after that approval.
 
-Confirm CloudTrail is logging and the scheduled stop remains enabled:
+Confirm CloudTrail is logging and both schedules remain enabled with the exact expected expressions, timezone, and single-instance target:
 
 ```bash
 aws cloudtrail get-trail-status \
@@ -79,10 +79,24 @@ aws scheduler get-schedule \
   --profile aifo-admin \
   --region us-west-2 \
   --group-name aifo-control-plane-host \
+  --name aifo-control-plane-host-start \
+  --query '{State:State,Expression:ScheduleExpression,Timezone:ScheduleExpressionTimezone,Input:Target.Input}' \
+  --output table
+```
+
+Expected: `ENABLED`, `cron(0 8 ? * MON-FRI *)`, `America/Los_Angeles`, and only `i-0254a9e2fcbcdebd7`.
+
+```bash
+aws scheduler get-schedule \
+  --profile aifo-admin \
+  --region us-west-2 \
+  --group-name aifo-control-plane-host \
   --name aifo-control-plane-host-stop \
   --query '{State:State,Expression:ScheduleExpression,Timezone:ScheduleExpressionTimezone,Input:Target.Input}' \
   --output table
 ```
+
+Expected: `ENABLED`, `cron(0 16 ? * MON-FRI *)`, `America/Los_Angeles`, and only `i-0254a9e2fcbcdebd7`.
 
 Confirm SSM is online and no conflicting session is active:
 
@@ -105,7 +119,7 @@ aws ssm describe-sessions \
   --output table
 ```
 
-Go only when CloudTrail is logging, the stop schedule is enabled, SSM is `Online`, there is no conflicting session, and sufficient time remains before 16:00.
+Go only when CloudTrail is logging, both schedules match the expected configuration, SSM is `Online`, there is no conflicting session, and sufficient time remains before 16:00.
 
 ## Phase 2: Logged Pre-Change Evidence
 
@@ -129,15 +143,20 @@ systemctl --failed --no-pager
 systemctl is-active amazon-ssm-agent 2>/dev/null || systemctl is-active snap.amazon-ssm-agent.amazon-ssm-agent
 sudo dpkg --audit
 sudo apt-get check
-if [[ -e /var/lib/dpkg/lock-frontend ]]; then echo "APT lock exists"; else echo "No APT lock"; fi
+if ! command -v fuser >/dev/null 2>&1; then
+  echo "ABORT: fuser is unavailable; package-lock ownership cannot be verified."
+elif sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; then
+  echo "ABORT: an APT or dpkg lock is held by another process."
+else
+  echo "No active APT or dpkg lock owner."
+fi
 ```
 
 Abort if root usage is at or above 85%, `dpkg --audit` or `apt-get check` reports errors, a package lock exists, SSM Agent is unhealthy, or unrelated failed services need investigation.
 
-Review configured repositories and automatic-update state without printing unrelated configuration:
+Review automatic-update state without printing repository URLs or configuration that could contain credentials:
 
 ```bash
-grep -RhsE '^[[:space:]]*(deb |URIs:|Suites:|Components:)' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null
 systemctl is-enabled unattended-upgrades 2>/dev/null || true
 systemctl is-active unattended-upgrades 2>/dev/null || true
 ```
@@ -151,10 +170,11 @@ The following commands mutate the host and may run only under the approved chang
 ```bash
 sudo apt-get update
 apt list --upgradable 2>/dev/null
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade
+sudo apt-get --simulate upgrade --with-new-pkgs
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade --with-new-pkgs
 ```
 
-Do not use `dist-upgrade`, `full-upgrade`, `do-release-upgrade`, package removal, or repository changes in this routine window.
+Review the simulation before continuing. `--with-new-pkgs` permits dependencies required by upgraded packages while `upgrade` still refuses package removal. Do not use `dist-upgrade`, `full-upgrade`, `do-release-upgrade`, package removal, or repository changes in this routine window.
 
 If APT proposes removing packages, changing release sources, or resolving broken dependencies manually, answer no and abort. Record the exact package names and error without printing secrets.
 
@@ -165,11 +185,14 @@ Inside the same session:
 ```bash
 sudo dpkg --audit
 sudo apt-get check
+apt list --upgradable 2>/dev/null
 systemctl --failed --no-pager
 df -h /
 systemctl is-active amazon-ssm-agent 2>/dev/null || systemctl is-active snap.amazon-ssm-agent.amazon-ssm-agent
 if [[ -f /var/run/reboot-required ]]; then cat /var/run/reboot-required.pkgs 2>/dev/null || true; fi
 ```
+
+Record and escalate any remaining upgrade instead of reporting the host fully patched. A remaining package can reflect phasing, a dependency conflict, a held package, or a change outside this runbook's approval.
 
 If no reboot is required, exit the session and continue to closeout.
 
@@ -191,12 +214,26 @@ aws ec2 wait instance-status-ok \
 ```
 
 ```bash
-aws ssm describe-instance-information \
-  --profile aifo-admin \
-  --region us-west-2 \
-  --filters Key=InstanceIds,Values=i-0254a9e2fcbcdebd7 \
-  --query 'InstanceInformationList[].{PingStatus:PingStatus,AgentVersion:AgentVersion,LastPingDateTime:LastPingDateTime}' \
-  --output table
+for attempt in {1..30}; do
+  ping_status="$(aws ssm describe-instance-information \
+    --profile aifo-admin \
+    --region us-west-2 \
+    --filters Key=InstanceIds,Values=i-0254a9e2fcbcdebd7 \
+    --query 'InstanceInformationList[0].PingStatus' \
+    --output text)"
+
+  if [[ "$ping_status" == "Online" ]]; then
+    echo "SSM returned Online."
+    break
+  fi
+
+  if [[ "$attempt" -eq 30 ]]; then
+    echo "ABORT: SSM did not return Online within five minutes." >&2
+    exit 1
+  fi
+
+  sleep 10
+done
 ```
 
 Reconnect through Session Manager and repeat `uname -a`, `sudo dpkg --audit`, `sudo apt-get check`, `systemctl --failed --no-pager`, disk, and SSM Agent checks.
@@ -226,7 +263,7 @@ Record:
 - SSM Agent health, package integrity, failed-service, and disk results;
 - any follow-up or deferred package.
 
-After leaving the session, confirm the instance state and stop schedule. Do not manually stop a healthy host inside the normal window unless the change approval calls for it; the existing 16:00 schedule remains authoritative.
+After leaving the session, repeat the instance-state and both Scheduler checks from Phase 1. Do not manually stop a healthy host inside the normal window unless the change approval calls for it; the existing 16:00 schedule remains authoritative.
 
 ## Automation Reconsideration Triggers
 

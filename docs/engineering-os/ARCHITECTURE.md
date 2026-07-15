@@ -20,6 +20,13 @@ events. Git owns source and policy. CI derives evidence from those inputs.
 Airtable is a one-way reporting projection only and cannot drive GitHub state
 or authority.
 
+An event record is accepted only from a `github-actions[bot]` issue comment.
+Human event metadata is derived from an exact, authenticated `/eos` command
+comment and rechecked against the mission assignment, repository policy,
+transition authority, and full hash chain. System recovery records must name an
+exact Actions run URL in the same repository. Event JSON never grants its own
+actor identity or role.
+
 ## State and decision boundary
 
 The state projector folds validated events over a deny-by-default transition
@@ -27,6 +34,13 @@ table. Authorization returns a structured decision and never mutates GitHub,
 the repository, AWS, product runtime, or another external system. Workflow
 adapters added in later packages may propose or append events only after the
 pure kernel validates complete authenticated input.
+
+Mission commands and explicit orphan recovery serialize on the same
+repository-and-issue concurrency key. Scheduled orphan discovery is always
+read-only. Recovery mutation additionally requires a non-dry manual or reusable
+workflow invocation and the versioned `orphan_recovery_enabled` policy flag,
+which is false by default. Recovery re-fetches the chain inside that serialized
+boundary and appends `mission.orphaned` plus `mission.released` as one comment.
 
 Mission declarations become Ready only with bounded scope, independently
 testable acceptance criteria, dependencies and founder decisions, explicit

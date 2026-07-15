@@ -4,7 +4,7 @@
   "title": "AI.FO Repository Policy",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "repository", "eos_version", "constitution_sha256", "founder_identities", "semantic_domains", "tier_2_paths", "required_status_checks", "default_limits", "transition_roles", "auto_merge_enabled", "airtable_live_enabled", "deployment_enabled", "edgar_integration_enabled"],
+  "required": ["schema_version", "repository", "eos_version", "constitution_sha256", "founder_identities", "semantic_domains", "tier_2_paths", "required_status_checks", "default_limits", "transition_roles", "auto_merge_enabled", "airtable_live_enabled", "deployment_enabled", "edgar_integration_enabled", "orphan_recovery_enabled"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
@@ -22,6 +22,9 @@
         "mission.ready": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer", "founder"]}},
         "mission.recovered": {"type": "array", "uniqueItems": true, "items": {"enum": ["founder"]}},
         "mission.claimed": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer"]}},
+        "lease.heartbeat": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer"]}},
+        "mission.orphaned": {"type": "array", "uniqueItems": true, "items": {"enum": ["system"]}},
+        "mission.released": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer", "system"]}},
         "mission.started": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer"]}},
         "review.requested": {"type": "array", "uniqueItems": true, "items": {"enum": ["producer"]}},
         "finding.valid": {"type": "array", "uniqueItems": true, "items": {"enum": ["adversary"]}},
@@ -40,6 +43,7 @@
     "auto_merge_enabled": {"type": "boolean"},
     "airtable_live_enabled": {"type": "boolean"},
     "deployment_enabled": {"type": "boolean"},
-    "edgar_integration_enabled": {"type": "boolean"}
+    "edgar_integration_enabled": {"type": "boolean"},
+    "orphan_recovery_enabled": {"type": "boolean"}
   }
 }

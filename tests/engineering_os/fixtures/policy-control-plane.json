@@ -14,5 +14,6 @@
   "auto_merge_enabled": false,
   "airtable_live_enabled": false,
   "deployment_enabled": false,
-  "edgar_integration_enabled": false
+  "edgar_integration_enabled": false,
+  "orphan_recovery_enabled": false
 }

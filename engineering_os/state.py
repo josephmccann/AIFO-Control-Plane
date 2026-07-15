@@ -25,6 +25,21 @@ TRANSITIONS = {
     "mission.ready": ({"Proposed"}, "Ready", {"producer", "founder"}),
     "mission.recovered": ({"Parked"}, "Ready", {"founder"}),
     "mission.claimed": ({"Ready"}, "Claimed", {"producer"}),
+    "lease.heartbeat": (
+        {"Claimed", "In Progress", "Adversarial Review", "Founder Approval"},
+        "__PRESERVE__",
+        {"producer"},
+    ),
+    "mission.orphaned": (
+        {"Claimed", "In Progress", "Adversarial Review", "Founder Approval"},
+        "Parked",
+        {"system"},
+    ),
+    "mission.released": (
+        {"Claimed", "In Progress", "Adversarial Review", "Founder Approval", "Parked"},
+        "Ready",
+        {"producer", "system"},
+    ),
     "mission.started": ({"Claimed"}, "In Progress", {"producer"}),
     "review.requested": ({"In Progress"}, "Adversarial Review", {"producer"}),
     "finding.valid": ({"Adversarial Review"}, "In Progress", {"adversary"}),
@@ -92,6 +107,15 @@ def authorize_transition(projection: MissionProjection, event: Mapping[str, Any]
         normalized_roles[configured_event] = role_set
     roles = normalized_roles.get(event_type, set(default_roles))
     role = event.get("actor_role")
+    if event_type == "mission.released" and (
+        (role == "system" and projection.state != "Parked")
+        or (role == "producer" and projection.state == "Parked")
+    ):
+        return Decision(False, "STATE_ROLE_DENIED", {
+            "event_type": event_type,
+            "actor_role": role,
+            "state": projection.state,
+        })
     if role not in roles:
         return Decision(False, "STATE_ROLE_DENIED", {
             "event_type": event_type,
@@ -101,7 +125,7 @@ def authorize_transition(projection: MissionProjection, event: Mapping[str, Any]
     return Decision(True, "STATE_TRANSITION_ALLOWED", {
         "event_type": event_type,
         "from_state": projection.state,
-        "to_state": target,
+        "to_state": projection.state if target == "__PRESERVE__" else target,
     })
 
 

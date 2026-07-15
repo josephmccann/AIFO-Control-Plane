@@ -32,11 +32,12 @@ class LimitDecision:
 
 
 def _valid_number(value: object, *, positive: bool) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if isinstance(value, float) and not math.isfinite(value):
+        return False
     return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and (value > 0 if positive else value >= 0)
+        value > 0 if positive else value >= 0
     )
 
 

@@ -47,6 +47,14 @@ class LimitTests(unittest.TestCase):
         self.assertTrue(decision.preserve_state)
         self.assertEqual(decision.current_state, "Ready")
 
+    def test_huge_integers_fail_closed_without_overflow(self):
+        measured = dict(CAPS)
+        measured["model_tokens"] = 10 ** 10000
+        decision = evaluate_limits(measured, CAPS, current_state="In Progress")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.code, "LIMIT_EXCEEDED")
+        self.assertEqual(decision.recommended_action, "Parked")
+
 
 if __name__ == "__main__":
     unittest.main()

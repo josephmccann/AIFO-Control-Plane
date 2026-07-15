@@ -8,7 +8,9 @@
     "details": {
       "lease_owner": "agent-a",
       "lease_nonce": "nonce-104",
+      "lease_start": "2026-07-15T09:00:00Z",
       "lease_expires_at": "2026-07-15T09:15:00Z",
+      "wall_clock_cap_minutes": 240,
       "paths": ["engineering_os/**"]
     }
   },
@@ -21,6 +23,7 @@
     "details": {
       "lease_owner": "agent-a",
       "lease_nonce": "nonce-104",
+      "lease_start": "2026-07-15T09:00:00Z",
       "lease_expires_at": "2026-07-15T09:25:00Z"
     }
   }

@@ -18,6 +18,7 @@ class LeaseTests(unittest.TestCase):
         decision = claim_mission(
             [], mission_id="aifo-200", owner="agent-a", actor_role="producer",
             now=NOW, expires_at=EXPIRY, nonce="nonce-200", paths=["src/**"],
+            wall_clock_minutes=240,
         )
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.event["type"], "mission.claimed")
@@ -26,6 +27,7 @@ class LeaseTests(unittest.TestCase):
         self.assertFalse(claim_mission(
             [], mission_id="aifo-200", owner="reviewer", actor_role="adversary",
             now=NOW, expires_at=EXPIRY, nonce="nonce-review", paths=["src/**"],
+            wall_clock_minutes=240,
         ).allowed)
 
     def test_duplicate_and_concurrent_claims_are_rejected(self):
@@ -33,10 +35,12 @@ class LeaseTests(unittest.TestCase):
         duplicate = claim_mission(
             events, mission_id="aifo-103", owner="agent-a", actor_role="producer",
             now=NOW, expires_at=EXPIRY, nonce="nonce-first", paths=["engineering_os/**"],
+            wall_clock_minutes=240,
         )
         concurrent = claim_mission(
             events, mission_id="aifo-103", owner="agent-b", actor_role="producer",
             now=NOW, expires_at=EXPIRY, nonce="nonce-new", paths=["engineering_os/**"],
+            wall_clock_minutes=240,
         )
         self.assertEqual(duplicate.code, "LEASE_NONCE_REUSED")
         self.assertEqual(concurrent.code, "LEASE_ALREADY_CLAIMED")
@@ -46,6 +50,7 @@ class LeaseTests(unittest.TestCase):
         claim = claim_mission(
             events, mission_id="aifo-102", owner="agent-b", actor_role="producer",
             now=NOW, expires_at=EXPIRY, nonce="nonce-new", paths=["engineering_os/**"],
+            wall_clock_minutes=240,
         )
         self.assertFalse(claim.allowed)
         self.assertEqual(claim.code, "LEASE_RECOVERY_REQUIRED")
@@ -102,10 +107,11 @@ class LeaseTests(unittest.TestCase):
         )
         self.assertEqual(denied.code, "LEASE_OWNER_MISMATCH")
         self.assertTrue(released.allowed)
+        self.assertEqual(released.event["type"], "mission.released")
         reclaimed = claim_mission(
             events + [released.event], mission_id="aifo-101", owner="agent-b",
             actor_role="producer", now=NOW, expires_at=EXPIRY,
-            nonce="nonce-reclaim", paths=["engineering_os/**"],
+            nonce="nonce-reclaim", paths=["engineering_os/**"], wall_clock_minutes=240,
         )
         self.assertTrue(reclaimed.allowed)
 
@@ -114,6 +120,7 @@ class LeaseTests(unittest.TestCase):
         blocked = claim_mission(
             events, mission_id="aifo-999", owner="agent-b", actor_role="producer",
             now=NOW, expires_at=EXPIRY, nonce="nonce-999", paths=["engineering_os/lease.py"],
+            wall_clock_minutes=240,
         )
         self.assertEqual(blocked.code, "LEASE_PATH_CONFLICT")
         recovered = release_mission(
@@ -121,12 +128,94 @@ class LeaseTests(unittest.TestCase):
             nonce="nonce-102", recovery=True,
         )
         self.assertTrue(recovered.allowed)
+        self.assertEqual(
+            [event["type"] for event in recovered.events],
+            ["mission.orphaned", "mission.released"],
+        )
         admitted = claim_mission(
             events + [recovered.event], mission_id="aifo-999", owner="agent-b",
             actor_role="producer", now=NOW, expires_at=EXPIRY,
-            nonce="nonce-999", paths=["engineering_os/lease.py"],
+            nonce="nonce-999", paths=["engineering_os/lease.py"], wall_clock_minutes=240,
         )
         self.assertTrue(admitted.allowed)
+
+    def test_claim_records_start_and_heartbeat_cannot_exceed_wall_clock_cap(self):
+        claim = claim_mission(
+            [], mission_id="aifo-cap", owner="agent-a", actor_role="producer",
+            now="2026-07-15T10:00:00.125Z", expires_at="2026-07-15T10:10:00.125Z",
+            nonce="cap-nonce", paths=["src/**"], wall_clock_minutes=30,
+        )
+        self.assertTrue(claim.allowed)
+        self.assertEqual(claim.event["details"]["lease_start"], "2026-07-15T10:00:00.125Z")
+        self.assertEqual(claim.event["details"]["wall_clock_cap_minutes"], 30)
+        heartbeat = heartbeat_lease(
+            [claim.event], mission_id="aifo-cap", owner="agent-a",
+            now="2026-07-15T10:05:00.125Z", expires_at="2026-07-15T10:30:00.126Z",
+            nonce="cap-nonce",
+        )
+        self.assertEqual(heartbeat.code, "LEASE_WALL_CLOCK_CAP_EXCEEDED")
+
+    def test_recovery_rechecks_current_history_after_heartbeat(self):
+        refreshed = load_fixture("events/heartbeat-timeout.json")
+        raced = release_mission(
+            refreshed, mission_id="aifo-104", owner="system",
+            now="2026-07-15T09:20:00Z", nonce="nonce-104", recovery=True,
+        )
+        self.assertEqual(raced.code, "LEASE_NOT_EXPIRED")
+
+    def test_root_wildcard_patterns_conflict_conservatively(self):
+        first = claim_mission(
+            [], mission_id="aifo-pattern-a", owner="agent-a", actor_role="producer",
+            now=NOW, expires_at=EXPIRY, nonce="pattern-a", paths=["*.py"],
+            wall_clock_minutes=240,
+        )
+        second = claim_mission(
+            [first.event], mission_id="aifo-pattern-b", owner="agent-b", actor_role="producer",
+            now=NOW, expires_at=EXPIRY, nonce="pattern-b", paths=["test*"],
+            wall_clock_minutes=240,
+        )
+        self.assertEqual(second.code, "LEASE_PATH_CONFLICT")
+
+    def test_nonce_is_normalized_before_reuse_comparison(self):
+        first = claim_mission(
+            [], mission_id="aifo-nonce-a", owner="agent-a", actor_role="producer",
+            now=NOW, expires_at=EXPIRY, nonce="  shared-nonce  ", paths=["src/**"],
+            wall_clock_minutes=240,
+        )
+        released = release_mission(
+            [first.event], mission_id="aifo-nonce-a", owner="agent-a",
+            now=NOW, nonce="shared-nonce",
+        )
+        reused = claim_mission(
+            [first.event, released.event], mission_id="aifo-nonce-b", owner="agent-b",
+            actor_role="producer", now=NOW, expires_at=EXPIRY,
+            nonce="shared-nonce", paths=["docs/**"], wall_clock_minutes=240,
+        )
+        self.assertEqual(reused.code, "LEASE_NONCE_REUSED")
+
+    def test_heartbeat_normalizes_nonce_in_proposed_event(self):
+        events = load_fixture("events/valid-lifecycle.json")[:1]
+        heartbeat = heartbeat_lease(
+            events, mission_id="aifo-101", owner="agent-a", now=NOW,
+            expires_at=EXPIRY, nonce="  nonce-101  ",
+        )
+        self.assertTrue(heartbeat.allowed)
+        self.assertEqual(heartbeat.event["details"]["lease_nonce"], "nonce-101")
+
+    def test_timestamps_require_z_and_preserve_fractional_seconds(self):
+        strict = claim_mission(
+            [], mission_id="aifo-time", owner="agent-a", actor_role="producer",
+            now="2026-07-15T10:05:00.123456Z", expires_at="2026-07-15T10:20:00.654321Z",
+            nonce="time-nonce", paths=["src/**"], wall_clock_minutes=240,
+        )
+        self.assertTrue(strict.allowed)
+        self.assertEqual(strict.event["occurred_at"], "2026-07-15T10:05:00.123456Z")
+        non_zulu = claim_mission(
+            [], mission_id="aifo-time", owner="agent-a", actor_role="producer",
+            now="2026-07-15T10:05:00+00:00", expires_at=EXPIRY,
+            nonce="time-nonce", paths=["src/**"], wall_clock_minutes=240,
+        )
+        self.assertEqual(non_zulu.code, "LEASE_TIMESTAMP_INVALID")
 
 
 if __name__ == "__main__":

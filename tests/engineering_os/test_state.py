@@ -145,6 +145,32 @@ class MissionStateTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.code, "STATE_EVENT_UNKNOWN")
 
+    def test_lifecycle_control_events_are_authorized_and_state_explicit(self):
+        heartbeat = authorize_transition(
+            MissionProjection(state="Claimed"), event("lease.heartbeat", "producer"), POLICY
+        )
+        released = authorize_transition(
+            MissionProjection(state="In Progress"), event("mission.released", "producer"), POLICY
+        )
+        orphaned = authorize_transition(
+            MissionProjection(state="In Progress"), event("mission.orphaned", "system"), POLICY
+        )
+        recovered = authorize_transition(
+            MissionProjection(state="Parked"), event("mission.released", "system"), POLICY
+        )
+        self.assertTrue(all(item.allowed for item in (heartbeat, released, orphaned, recovered)))
+        self.assertEqual(heartbeat.details["to_state"], "Claimed")
+        self.assertEqual(released.details["to_state"], "Ready")
+        self.assertEqual(orphaned.details["to_state"], "Parked")
+        self.assertEqual(recovered.details["to_state"], "Ready")
+
+    def test_system_cannot_release_without_orphaned_parked_state(self):
+        denied = authorize_transition(
+            MissionProjection(state="In Progress"), event("mission.released", "system"), POLICY
+        )
+        self.assertFalse(denied.allowed)
+        self.assertEqual(denied.code, "STATE_ROLE_DENIED")
+
     def test_invalid_projection_event_preserves_state_and_records_violation(self):
         projection = project_state([event("mission.merged", "founder")])
         self.assertEqual(projection.state, "Proposed")

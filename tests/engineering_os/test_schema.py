@@ -52,7 +52,9 @@ class SchemaTests(unittest.TestCase):
 
     def test_valid_mission_and_policy_conform(self):
         self.assertEqual(validate_document("mission", load_fixture("mission-valid.json")), [])
-        self.assertEqual(validate_document("repository-policy", load_fixture("policy-control-plane.json")), [])
+        policy = load_fixture("policy-control-plane.json")
+        self.assertEqual(validate_document("repository-policy", policy), [])
+        self.assertIs(policy["orphan_recovery_enabled"], False)
 
     def test_every_required_mission_field_is_enforced(self):
         mission = load_fixture("mission-valid.json")

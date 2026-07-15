@@ -40,6 +40,17 @@ assert_file_contains() {
   fi
 }
 
+assert_file_occurrences() {
+  local file="$1"
+  local expected_text="$2"
+  local expected_count="$3"
+  local message="$4"
+  local actual_count
+
+  actual_count="$(grep -Fc "$expected_text" "$file" || true)"
+  assert_equal "$expected_count" "$actual_count" "$message"
+}
+
 assert_equal \
   "actionlint_1.7.12_darwin_amd64.tar.gz|5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644" \
   "$(actionlint_asset darwin amd64)" \
@@ -122,5 +133,10 @@ assert_file_contains \
   "$ROOT_DIR/scripts/validate.sh" \
   "./scripts/install-dev-tools.sh" \
   "validation points to the reproducible installer"
+assert_file_occurrences \
+  "$ROOT_DIR/scripts/validate.sh" \
+  "./scripts/install-dev-tools.sh" \
+  "1" \
+  "validation prints one shared installer remediation"
 
 echo "install-dev-tools tests passed."

@@ -6,6 +6,16 @@ from pathlib import PurePosixPath
 import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from .errors import EngineeringOSError
+
+
+class LeaseInputError(EngineeringOSError):
+    """Fail-closed lease input error with a stable machine code."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
 
 @dataclass(frozen=True)
 class LeaseDecision:
@@ -314,16 +324,18 @@ def release_mission(
         },
     }
     if recovery:
+        recovery_details = {
+            "lease_owner": lease.owner, "lease_nonce": lease.nonce,
+            "lease_start": lease.lease_start_text,
+            "lease_expires_at": lease.expires_at_text,
+            "recovery": True, "recommended_action": "Parked",
+        }
         orphaned = {
             "mission_id": mission_id, "type": "mission.orphaned", "actor": owner,
             "actor_role": "system", "occurred_at": now_text,
-            "details": {
-                "lease_owner": lease.owner, "lease_nonce": lease.nonce,
-                "lease_start": lease.lease_start_text,
-                "lease_expires_at": lease.expires_at_text,
-                "recovery": True, "recommended_action": "Parked",
-            },
+            "details": dict(recovery_details),
         }
+        released["details"] = dict(recovery_details)
         return LeaseDecision(
             True, "LEASE_RELEASE_ALLOWED", event=released,
             events=(orphaned, released),
@@ -336,8 +348,11 @@ def find_orphans(events: Iterable[Mapping[str, Any]], *, now: str) -> List[Orpha
 
     try:
         observed_at = _timestamp(now)
-    except (TypeError, ValueError):
-        return []
+    except (TypeError, ValueError) as error:
+        raise LeaseInputError(
+            "LEASE_TIMESTAMP_INVALID",
+            "orphan observation time must be strict UTC RFC3339",
+        ) from error
     return sorted(
         (
             OrphanedLease(

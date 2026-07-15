@@ -1,6 +1,7 @@
 import unittest
 
 from engineering_os.lease import (
+    LeaseInputError,
     claim_mission,
     find_orphans,
     heartbeat_lease,
@@ -86,6 +87,11 @@ class LeaseTests(unittest.TestCase):
         self.assertEqual([orphan.mission_id for orphan in orphans], ["aifo-104"])
         self.assertEqual(orphans[0].recommended_action, "Parked")
         self.assertTrue(orphans[0].preserve_state)
+
+    def test_malformed_orphan_timestamp_fails_closed_with_machine_code(self):
+        with self.assertRaises(LeaseInputError) as captured:
+            find_orphans([], now="not-a-timestamp")
+        self.assertEqual(captured.exception.code, "LEASE_TIMESTAMP_INVALID")
 
     def test_lease_is_expired_at_its_explicit_expiry_instant(self):
         events = load_fixture("events/expired-lease.json")

@@ -63,6 +63,7 @@ jobs:
     needs: policy
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: read
     steps:
@@ -91,15 +92,37 @@ jobs:
             ISSUE="$issue" python3 - <<'PY'
           import json
           import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
           from engineering_os.mission import parse_issue_body
           issue = os.environ["ISSUE"]
           record = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "issue-%s.json" % issue), encoding="utf-8"))
           json.dump(parse_issue_body(record["body"]), open(os.path.join(os.environ["RUNNER_TEMP"], "mission-%s.json" % issue), "w", encoding="utf-8"))
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments-%s.json" % issue), encoding="utf-8"))
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(os.environ["GITHUB_REPOSITORY"]))
+          run_ids = set()
+          for comment in comments:
+              for match in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(match.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids-%s.txt" % issue), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY
+            : > "$RUNNER_TEMP/runs-${issue}.ndjson"
+            while read -r run_id; do
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs-${issue}.ndjson"
+            done < "$RUNNER_TEMP/run-ids-${issue}.txt"
+            if [[ -s "$RUNNER_TEMP/runs-${issue}.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs-${issue}.ndjson" > "$RUNNER_TEMP/runs-${issue}.json"; else printf '[]\n' > "$RUNNER_TEMP/runs-${issue}.json"; fi
             python3 -m engineering_os.commands authenticate-event-history \
               --comments "$RUNNER_TEMP/comments-${issue}.json" \
               --mission "$RUNNER_TEMP/mission-${issue}.json" \
               --policy .aifo/engineering-os-policy.json \
+              --runs "$RUNNER_TEMP/runs-${issue}.json" \
               --repository "$GITHUB_REPOSITORY" \
               --events-output "$RUNNER_TEMP/events-${issue}.json"
             scripts/engineering-os/recover-orphaned-mission \
@@ -112,6 +135,7 @@ jobs:
     if: ${{ github.event_name != 'schedule' && inputs.dry_run == false && inputs.issue_number != 0 && inputs.issue_number != '' && needs.policy.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: write
     steps:
@@ -121,6 +145,9 @@ jobs:
           persist-credentials: false
       - name: Re-fetch and revalidate chain immediately before atomic append
         env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           SOURCE_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -128,17 +155,58 @@ jobs:
           [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments-latest.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > "$RUNNER_TEMP/current-run.json"
           python3 - <<'PY'
           import json
           import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
           from engineering_os.mission import parse_issue_body
           issue = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "issue.json"), encoding="utf-8"))
           json.dump(parse_issue_body(issue["body"]), open(os.path.join(os.environ["RUNNER_TEMP"], "mission.json"), "w", encoding="utf-8"))
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments-latest.json"), encoding="utf-8"))
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(os.environ["GITHUB_REPOSITORY"]))
+          run_ids = set()
+          for comment in comments:
+              for match in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(match.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids-latest.txt"), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
+          PY
+          : > "$RUNNER_TEMP/runs-latest.ndjson"
+          while read -r run_id; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs-latest.ndjson"
+          done < "$RUNNER_TEMP/run-ids-latest.txt"
+          if [[ -s "$RUNNER_TEMP/runs-latest.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs-latest.ndjson" > "$RUNNER_TEMP/runs-latest.json"; else printf '[]\n' > "$RUNNER_TEMP/runs-latest.json"; fi
+          gh api "repos/${GITHUB_REPOSITORY}/contents/.aifo/engineering-os-policy.json?ref=${DEFAULT_BRANCH}" --jq .content \
+            | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/policy-current.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from engineering_os.commands import recovery_mutation_allowed, validate_recovery_run
+          from engineering_os.schema import validate_document
+          policy = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "policy-current.json"), encoding="utf-8"))
+          violations = validate_document("repository-policy", policy)
+          if violations:
+              raise SystemExit("current default-branch repository policy is invalid")
+          dry_run = os.environ["DRY_RUN"].lower() == "true"
+          if not recovery_mutation_allowed(os.environ["EVENT_NAME"], dry_run, policy):
+              raise SystemExit("live recovery mutation gate is closed")
+          run = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "current-run.json"), encoding="utf-8"))
+          if not validate_recovery_run(run, os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_URL"]):
+              raise SystemExit("current recovery workflow run metadata is invalid")
           PY
           python3 -m engineering_os.commands authenticate-event-history \
             --comments "$RUNNER_TEMP/comments-latest.json" \
             --mission "$RUNNER_TEMP/mission.json" \
-            --policy .aifo/engineering-os-policy.json \
+            --policy "$RUNNER_TEMP/policy-current.json" \
+            --runs "$RUNNER_TEMP/runs-latest.json" \
             --repository "$GITHUB_REPOSITORY" \
             --events-output "$RUNNER_TEMP/events-latest.json"
           NOW="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" python3 - <<'PY'
@@ -150,7 +218,7 @@ jobs:
           from engineering_os.state import authorize_transition, project_state
 
           events = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events-latest.json"), encoding="utf-8"))
-          policy = json.load(open(".aifo/engineering-os-policy.json", encoding="utf-8"))
+          policy = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "policy-current.json"), encoding="utf-8"))
           mission = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "mission.json"), encoding="utf-8"))
           orphans = [item for item in find_orphans(events, now=os.environ["NOW"]) if item.mission_id == mission["mission_id"]]
           if len(orphans) != 1:

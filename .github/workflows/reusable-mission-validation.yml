@@ -14,6 +14,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: read
     steps:
@@ -31,14 +32,36 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
           from engineering_os.mission import parse_issue_body
           issue = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "issue.json"), encoding="utf-8"))
           json.dump(parse_issue_body(issue["body"]), open(os.path.join(os.environ["RUNNER_TEMP"], "mission.json"), "w", encoding="utf-8"))
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments.json"), encoding="utf-8"))
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(os.environ["GITHUB_REPOSITORY"]))
+          run_ids = set()
+          for comment in comments:
+              for match in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(match.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY
+          : > "$RUNNER_TEMP/runs.ndjson"
+          while read -r run_id; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs.ndjson"
+          done < "$RUNNER_TEMP/run-ids.txt"
+          if [[ -s "$RUNNER_TEMP/runs.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs.ndjson" > "$RUNNER_TEMP/runs.json"; else printf '[]\n' > "$RUNNER_TEMP/runs.json"; fi
       - name: Authenticate event history, authority, and projection
         run: |
           python3 -m engineering_os.commands authenticate-event-history \
             --comments "$RUNNER_TEMP/comments.json" \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy .aifo/engineering-os-policy.json \
+            --runs "$RUNNER_TEMP/runs.json" \
             --repository "$GITHUB_REPOSITORY"

@@ -17,6 +17,7 @@ from .lease import (
     heartbeat_lease,
     release_mission,
 )
+from .limits import LIMIT_NAMES, evaluate_limits
 from .mission import validate_ready
 from .schema import validate_document
 from .state import MissionProjection, authorize_transition, project_state
@@ -57,6 +58,9 @@ _EVENT_MARKER = re.compile(
     re.S,
 )
 _BOT = "github-actions[bot]"
+_RECOVERY_WORKFLOW_NAME = "Reusable orphan recovery"
+_RECOVERY_WORKFLOW_PATH = ".github/workflows/reusable-orphan-recovery.yml"
+_RECOVERY_EVENTS = frozenset(("workflow_call", "workflow_dispatch"))
 
 
 @dataclass(frozen=True)
@@ -191,8 +195,11 @@ def _deny_history(code: str, events: Sequence[Dict[str, Any]], projection: Missi
     return HistoryDecision(False, code, tuple(events), projection, details)
 
 
-def _extract_event_comments(comments: Sequence[Mapping[str, Any]]) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+def _extract_event_comments(
+    comments: Sequence[Mapping[str, Any]],
+) -> Tuple[Optional[str], List[Dict[str, Any]], List[Any]]:
     events: List[Dict[str, Any]] = []
+    groups: List[Any] = []
     for comment in comments:
         body = comment.get("body")
         if not isinstance(body, str):
@@ -201,18 +208,81 @@ def _extract_event_comments(comments: Sequence[Mapping[str, Any]]) -> Tuple[Opti
         if not matches:
             continue
         if comment.get("user", {}).get("login") != _BOT:
-            return "EVENT_COMMENT_ACTOR_INVALID", events
+            return "EVENT_COMMENT_ACTOR_INVALID", events, groups
         if _EVENT_MARKER.sub("", body).strip():
-            return "EVENT_COMMENT_FORMAT_INVALID", events
+            return "EVENT_COMMENT_FORMAT_INVALID", events, groups
         for match in matches:
             try:
                 event = json.loads(match.group(1))
             except json.JSONDecodeError:
-                return "EVENT_JSON_INVALID", events
+                return "EVENT_JSON_INVALID", events, groups
             if not isinstance(event, dict):
-                return "EVENT_JSON_INVALID", events
+                return "EVENT_JSON_INVALID", events, groups
             events.append(event)
-    return None, events
+            groups.append(comment.get("html_url"))
+    return None, events, groups
+
+
+def validate_recovery_run(run: Mapping[str, Any], repository: str, source_url: str) -> bool:
+    """Authenticate one recovery source against independently fetched run metadata."""
+
+    if not isinstance(run, Mapping) or not isinstance(repository, str):
+        return False
+    run_id = run.get("id")
+    expected_url = (
+        "https://github.com/%s/actions/runs/%s" % (repository, run_id)
+        if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0
+        else None
+    )
+    run_repository = run.get("repository")
+    return (
+        source_url == expected_url
+        and run.get("html_url") == expected_url
+        and run.get("name") == _RECOVERY_WORKFLOW_NAME
+        and run.get("path") == _RECOVERY_WORKFLOW_PATH
+        and run.get("event") in _RECOVERY_EVENTS
+        and isinstance(run_repository, Mapping)
+        and run_repository.get("full_name") == repository
+    )
+
+
+def effective_limits(mission: Mapping[str, Any], policy: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return the most restrictive declared mission/repository cap per resource."""
+
+    mission_caps = mission.get("budgets", {})
+    repository_caps = policy.get("default_limits", {})
+    return {
+        name: min(mission_caps.get(name), repository_caps.get(name))
+        for name in LIMIT_NAMES
+    }
+
+
+def derive_measurements(events: Sequence[Mapping[str, Any]], observed_at: str) -> Dict[str, Any]:
+    """Derive cumulative resource observations only from authenticated events."""
+
+    observed = _timestamp(observed_at)
+    measured: Dict[str, Any] = {name: 0 for name in LIMIT_NAMES}
+    lease_starts = []
+    for event in events:
+        details = event.get("details", {})
+        if not isinstance(details, Mapping):
+            continue
+        for name in ("model_cost_usd", "model_tokens", "ci_reruns"):
+            value = details.get(name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                measured[name] += value
+        concurrent = details.get("concurrent_agents")
+        if isinstance(concurrent, (int, float)) and not isinstance(concurrent, bool):
+            measured["concurrent_agents"] = max(measured["concurrent_agents"], concurrent)
+        if event.get("type") == "finding.valid":
+            measured["remediation_cycles"] += 1
+        if event.get("type") == "mission.claimed" and isinstance(details.get("lease_start"), str):
+            lease_starts.append(_timestamp(details["lease_start"]))
+    if lease_starts:
+        measured["wall_clock_minutes"] = max(
+            0, (observed - min(lease_starts)).total_seconds() / 60
+        )
+    return measured
 
 
 def authenticate_event_history(
@@ -221,14 +291,25 @@ def authenticate_event_history(
     policy: Mapping[str, Any],
     *,
     repository: str,
+    actions_runs: Sequence[Mapping[str, Any]] = (),
 ) -> HistoryDecision:
     """Authenticate GitHub-backed events, authority, lifecycle, and projection."""
 
     projection = MissionProjection()
     if not isinstance(comments, list) or not isinstance(mission, Mapping) or not isinstance(policy, Mapping):
         return _deny_history("EVENT_HISTORY_INPUT_INVALID", (), projection)
+    policy_violations = validate_document("repository-policy", dict(policy))
+    if policy_violations:
+        return _deny_history(
+            "REPOSITORY_POLICY_INVALID", (), projection,
+            violations=[asdict(item) for item in policy_violations],
+        )
     if policy.get("repository") != repository or mission.get("repository") != repository:
         return _deny_history("EVENT_REPOSITORY_MISMATCH", (), projection)
+    if not isinstance(actions_runs, (list, tuple)) or any(
+        not isinstance(run, Mapping) for run in actions_runs
+    ):
+        return _deny_history("EVENT_SYSTEM_RUNS_INVALID", (), projection)
     comment_urls: Dict[str, Mapping[str, Any]] = {}
     for comment in comments:
         if not isinstance(comment, Mapping) or not isinstance(comment.get("html_url"), str):
@@ -236,15 +317,59 @@ def authenticate_event_history(
         if comment["html_url"] in comment_urls:
             return _deny_history("EVENT_SOURCE_DUPLICATE", (), projection)
         comment_urls[comment["html_url"]] = comment
-    extraction_error, events = _extract_event_comments(comments)
+    extraction_error, events, event_groups = _extract_event_comments(comments)
     if extraction_error:
         return _deny_history(extraction_error, events, projection)
     valid, code = validate_event_chain(events)
     if not valid:
         return _deny_history(code, events, projection)
 
+    system_indexes = {
+        index for index, event in enumerate(events)
+        if event.get("actor") == "system" or event.get("actor_role") == "system"
+    }
+    expected_system_source = (
+        r"https://github\.com/%s/actions/runs/[1-9][0-9]*" % re.escape(repository)
+    )
+    for index in sorted(system_indexes):
+        event = events[index]
+        if (
+            event.get("actor") != "system"
+            or event.get("actor_role") != "system"
+            or not isinstance(event.get("source_url"), str)
+            or re.fullmatch(expected_system_source, event["source_url"]) is None
+            or event.get("type") not in {"mission.orphaned", "mission.released"}
+        ):
+            return _deny_history("EVENT_SYSTEM_SOURCE_INVALID", events[:index], projection)
+    recovery_pairs: Dict[int, int] = {}
+    for index in sorted(system_indexes):
+        if index in recovery_pairs or index - 1 in recovery_pairs:
+            continue
+        group_indexes = [
+            candidate for candidate, group in enumerate(event_groups)
+            if group == event_groups[index]
+        ]
+        if group_indexes != [index, index + 1] or index + 1 >= len(events):
+            return _deny_history("EVENT_SYSTEM_BUNDLE_INVALID", events[:index], projection)
+        first, second = events[index], events[index + 1]
+        if (
+            first.get("type") != "mission.orphaned"
+            or second.get("type") != "mission.released"
+            or any(
+                item.get("actor") != "system" or item.get("actor_role") != "system"
+                for item in (first, second)
+            )
+        ):
+            return _deny_history("EVENT_SYSTEM_BUNDLE_INVALID", events[:index], projection)
+        if any(
+            first.get(key) != second.get(key)
+            for key in ("mission_id", "actor", "actor_role", "occurred_at", "source_url", "details")
+        ):
+            return _deny_history("EVENT_SYSTEM_BUNDLE_MISMATCH", events[:index], projection)
+        recovery_pairs[index] = index + 1
+
     accepted: List[Dict[str, Any]] = []
-    for event in events:
+    for index, event in enumerate(events):
         if event.get("mission_id") != mission.get("mission_id"):
             return _deny_history("EVENT_MISSION_MISMATCH", accepted, projection)
         try:
@@ -264,6 +389,13 @@ def authenticate_event_history(
                 or event_type not in {"mission.orphaned", "mission.released"}
             ):
                 return _deny_history("EVENT_SYSTEM_SOURCE_INVALID", accepted, projection)
+            matching_runs = [run for run in actions_runs if run.get("html_url") == source_url]
+            if not matching_runs:
+                return _deny_history("EVENT_SYSTEM_RUN_NOT_FOUND", accepted, projection)
+            if len(matching_runs) != 1 or not validate_recovery_run(
+                matching_runs[0], repository, source_url
+            ):
+                return _deny_history("EVENT_SYSTEM_RUN_INVALID", accepted, projection)
         else:
             source = comment_urls.get(source_url)
             if source is None:
@@ -285,6 +417,12 @@ def authenticate_event_history(
 
         if event_type in {"mission.ready", "mission.claimed"} and validate_ready(dict(mission)):
             return _deny_history("MISSION_NOT_READY", accepted, projection)
+        if event_type == "mission.ready":
+            recorded_hash = event.get("details", {}).get("mission_sha256")
+            if not isinstance(recorded_hash, str) or re.fullmatch(r"[0-9a-f]{64}", recorded_hash) is None:
+                return _deny_history("MISSION_DECLARATION_HASH_INVALID", accepted, projection)
+            if recorded_hash != content_sha256(mission):
+                return _deny_history("MISSION_DECLARATION_CHANGED", accepted, projection)
         transition = authorize_transition(projection, event, policy)
         if not transition.allowed:
             return _deny_history(transition.code, accepted, projection, **transition.details)
@@ -294,14 +432,32 @@ def authenticate_event_history(
         }]
         lifecycle = None
         details = event.get("details", {})
-        if event_type == "mission.claimed":
+        if index in recovery_pairs:
+            lifecycle = release_mission(
+                prior_lease_events, mission_id=event["mission_id"],
+                owner="system", now=event["occurred_at"],
+                nonce=details.get("lease_nonce"), recovery=True,
+            )
+            if not lifecycle.allowed:
+                return _deny_history(lifecycle.code, accepted, projection, **lifecycle.details)
+            expected_pair = lifecycle.events
+            actual_pair = (event, events[recovery_pairs[index]])
+            if len(expected_pair) != 2 or any(
+                any(actual.get(key) != expected.get(key) for key in (
+                    "mission_id", "type", "actor", "actor_role", "occurred_at", "details",
+                ))
+                for actual, expected in zip(actual_pair, expected_pair)
+            ):
+                return _deny_history("EVENT_SYSTEM_BUNDLE_MISMATCH", accepted, projection)
+            lifecycle = None
+        elif event_type == "mission.claimed":
             lifecycle = claim_mission(
                 prior_lease_events,
                 mission_id=event["mission_id"], owner=event["actor"],
                 actor_role=event["actor_role"], now=event["occurred_at"],
                 expires_at=details.get("lease_expires_at"),
                 nonce=details.get("lease_nonce"), paths=details.get("paths"),
-                wall_clock_minutes=mission.get("budgets", {}).get("wall_clock_minutes"),
+                wall_clock_minutes=effective_limits(mission, policy).get("wall_clock_minutes"),
             )
         elif event_type == "lease.heartbeat":
             lifecycle = heartbeat_lease(
@@ -309,7 +465,7 @@ def authenticate_event_history(
                 owner=event["actor"], now=event["occurred_at"],
                 expires_at=details.get("lease_expires_at"), nonce=details.get("lease_nonce"),
             )
-        elif event_type == "mission.released":
+        elif event_type == "mission.released" and index - 1 not in recovery_pairs:
             lifecycle = release_mission(
                 prior_lease_events, mission_id=event["mission_id"],
                 owner=event["actor"], now=event["occurred_at"],
@@ -344,10 +500,13 @@ def authorize_command_proposal(
     *,
     repository: str,
     command_comment_url: str,
+    actions_runs: Sequence[Mapping[str, Any]] = (),
 ) -> ProposalDecision:
     """Authorize one authenticated command and return append-only audit events."""
 
-    history = authenticate_event_history(comments, mission, policy, repository=repository)
+    history = authenticate_event_history(
+        comments, mission, policy, repository=repository, actions_runs=actions_runs
+    )
     if not history.allowed or history.projection.violations:
         return ProposalDecision(False, history.code)
     source = next(
@@ -369,6 +528,19 @@ def authorize_command_proposal(
         _rfc3339(occurred_at)
     except (TypeError, ValueError):
         return ProposalDecision(False, "EVENT_TIMESTAMP_INVALID")
+    caps = effective_limits(mission, policy)
+    measured = derive_measurements(history.events, occurred_at)
+    limit_decision = evaluate_limits(
+        measured, caps, current_state=history.projection.state
+    )
+    if not limit_decision.allowed and command not in {"park", "cancel"}:
+        return ProposalDecision(False, limit_decision.code, details={
+            "preserve_state": limit_decision.preserve_state,
+            "recommended_action": limit_decision.recommended_action,
+            "breaches": [asdict(item) for item in limit_decision.breaches],
+            "measured": measured,
+            "caps": caps,
+        })
     roles = _actor_roles(actor, mission, policy) if isinstance(actor, str) else set()
     role = None
     for candidate in ("founder", "producer", "adversary"):
@@ -398,13 +570,16 @@ def authorize_command_proposal(
     }]
     lifecycle = None
     if command == "claim":
-        expiry = _utc_text(_timestamp(occurred_at) + timedelta(minutes=15))
+        wall_clock_cap = caps["wall_clock_minutes"]
+        expiry = _utc_text(
+            _timestamp(occurred_at) + timedelta(minutes=min(15, wall_clock_cap))
+        )
         lifecycle = claim_mission(
             lease_events,
             mission_id=mission["mission_id"], owner=actor, actor_role=role,
             now=occurred_at, expires_at=expiry, nonce=nonce,
             paths=mission["allowed_paths"],
-            wall_clock_minutes=mission["budgets"]["wall_clock_minutes"],
+            wall_clock_minutes=wall_clock_cap,
         )
     elif command == "heartbeat":
         requested_expiry = _timestamp(occurred_at) + timedelta(minutes=15)
@@ -433,13 +608,16 @@ def authorize_command_proposal(
             return ProposalDecision(False, lifecycle.code)
         proposals = list(lifecycle.events)
     else:
+        event_details = {"nonce": nonce}
+        if event_type == "mission.ready":
+            event_details["mission_sha256"] = content_sha256(mission)
         proposals = [{
             "mission_id": mission["mission_id"],
             "type": event_type,
             "actor": actor,
             "actor_role": role,
             "occurred_at": occurred_at,
-            "details": {"nonce": nonce},
+            "details": event_details,
         }]
 
     previous = history.events[-1]["event_hash"] if history.events else None
@@ -543,6 +721,7 @@ def _authenticate_history(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--comments", required=True)
     parser.add_argument("--mission", required=True)
     parser.add_argument("--policy", required=True)
+    parser.add_argument("--runs", required=True)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--events-output")
     arguments = parser.parse_args(argv)
@@ -554,8 +733,11 @@ def _authenticate_history(argv: Optional[Sequence[str]] = None) -> int:
             mission = json.load(stream)
         with open(arguments.policy, encoding="utf-8") as stream:
             policy = json.load(stream)
+        with open(arguments.runs, encoding="utf-8") as stream:
+            actions_runs = json.load(stream)
         decision = authenticate_event_history(
-            comments, mission, policy, repository=arguments.repository
+            comments, mission, policy, repository=arguments.repository,
+            actions_runs=actions_runs,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.error(str(error))
@@ -577,6 +759,7 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--comments", required=True)
     parser.add_argument("--mission", required=True)
     parser.add_argument("--policy", required=True)
+    parser.add_argument("--runs", required=True)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--command-comment-url", required=True)
     parser.add_argument("--body-output", required=True)
@@ -589,9 +772,12 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
             mission = json.load(stream)
         with open(arguments.policy, encoding="utf-8") as stream:
             policy = json.load(stream)
+        with open(arguments.runs, encoding="utf-8") as stream:
+            actions_runs = json.load(stream)
         decision = authorize_command_proposal(
             comments, mission, policy, repository=arguments.repository,
             command_comment_url=arguments.command_comment_url,
+            actions_runs=actions_runs,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.error(str(error))

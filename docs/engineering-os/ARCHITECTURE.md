@@ -23,9 +23,14 @@ or authority.
 An event record is accepted only from a `github-actions[bot]` issue comment.
 Human event metadata is derived from an exact, authenticated `/eos` command
 comment and rechecked against the mission assignment, repository policy,
-transition authority, and full hash chain. System recovery records must name an
-exact Actions run URL in the same repository. Event JSON never grants its own
-actor identity or role.
+transition authority, and full hash chain. A `mission.ready` event binds the
+canonical hash of the complete mission declaration, so later issue edits make
+the history invalid. System recovery records cannot authenticate themselves:
+the kernel requires independently fetched metadata for the exact same-repository
+Actions run, workflow name and path, and allowed invocation event. Recovery is
+accepted only as a consecutive `mission.orphaned`/`mission.released` pair in one
+bot comment that exactly matches a fresh replay of the expired lease. Event JSON
+never grants its own actor identity or role.
 
 ## State and decision boundary
 
@@ -39,8 +44,15 @@ Mission commands and explicit orphan recovery serialize on the same
 repository-and-issue concurrency key. Scheduled orphan discovery is always
 read-only. Recovery mutation additionally requires a non-dry manual or reusable
 workflow invocation and the versioned `orphan_recovery_enabled` policy flag,
-which is false by default. Recovery re-fetches the chain inside that serialized
-boundary and appends `mission.orphaned` plus `mission.released` as one comment.
+which is false by default. Recovery re-fetches the chain, referenced Actions run
+metadata, and the current default-branch policy inside that serialized boundary,
+then appends `mission.orphaned` plus `mission.released` as one comment.
+
+Command authorization derives cumulative measurements from authenticated
+events and compares them with the more restrictive value of mission and
+repository caps. Crossed limits preserve the current state and deny further
+work while still allowing an explicit park or cancel command. Initial leases
+are clamped to the same effective wall-clock cap.
 
 Mission declarations become Ready only with bounded scope, independently
 testable acceptance criteria, dependencies and founder decisions, explicit

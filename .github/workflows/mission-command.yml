@@ -15,6 +15,7 @@ jobs:
     if: ${{ github.event.issue.pull_request == null }}
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: read
     outputs:
@@ -51,6 +52,33 @@ jobs:
           json.dump(parse_issue_body(os.environ["ISSUE_BODY"]), open(os.path.join(os.environ["RUNNER_TEMP"], "mission.json"), "w", encoding="utf-8"))
           PY
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
+          repository = os.environ["GITHUB_REPOSITORY"]
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments.json"), encoding="utf-8"))
+          run_ids = set()
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(repository))
+          for comment in comments:
+              for match in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(match.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  source = event.get("source_url") if isinstance(event, dict) else None
+                  found = pattern.fullmatch(source or "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
+          PY
+          : > "$RUNNER_TEMP/runs.ndjson"
+          while read -r run_id; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs.ndjson"
+          done < "$RUNNER_TEMP/run-ids.txt"
+          if [[ -s "$RUNNER_TEMP/runs.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs.ndjson" > "$RUNNER_TEMP/runs.json"; else printf '[]\n' > "$RUNNER_TEMP/runs.json"; fi
       - name: Authenticate history and authorize proposal
         id: proposal
         if: ${{ steps.exact.outcome == 'success' }}
@@ -61,11 +89,13 @@ jobs:
             --comments "$RUNNER_TEMP/comments.json" \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy .aifo/engineering-os-policy.json \
+            --runs "$RUNNER_TEMP/runs.json" \
             --repository "$GITHUB_REPOSITORY"
           python3 -m engineering_os.commands propose-command \
             --comments "$RUNNER_TEMP/comments.json" \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy .aifo/engineering-os-policy.json \
+            --runs "$RUNNER_TEMP/runs.json" \
             --repository "$GITHUB_REPOSITORY" \
             --command-comment-url "$COMMAND_URL" \
             --body-output "$RUNNER_TEMP/event-body.txt"

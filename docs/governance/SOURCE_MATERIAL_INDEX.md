@@ -106,3 +106,14 @@ index records only what was reviewed.
 | AI.FO-Demo PR #190 | Closed unmerged; content folded into PR #180 per the company digest. No independent authority |
 | AI-CFO repository founder assets (pitch deck, founding PRD, "Vibe Coding Inputs V1.0") | Historical founder material predating this manual; not inspected for this draft, flagged by the digest as candidate archive material. Any import would be a future amendment with its own evidence |
 | Verbal or chat-only founder statements before 2026-07-14 | Captured only insofar as PR #180 recorded them; otherwise not evidence |
+
+## 7. Founder directives
+
+Explicit written founder decisions received during the drafting of this
+manual. Each is recorded as an amendment-log row in
+[AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md),
+which is its durable evidence.
+
+| Directive | Recorded |
+|-----------|----------|
+| 2026-07-15: resequence the three horizons (network intelligence is Horizon 2, the living decision model is Horizon 3; finance remains the trust anchor throughout; confidence qualifier unchanged) | Amendment log version 0.2.0; Manual sections 3 and 19; [PR180_RECONCILIATION.md](PR180_RECONCILIATION.md) revision table |

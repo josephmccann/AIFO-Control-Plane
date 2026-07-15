@@ -32,8 +32,8 @@ Pinned source links for each file are in
 
 | Disposition | Items |
 |-------------|-------|
-| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-08, CONST-13 to CONST-26, CONST-28, CONST-29; RM-01, RM-02, RM-04; RA-00 |
-| Imported with revision | CONST-16/17 (merged with product-repo statements), CONST-18 (revised per RA-06), CONST-09 to CONST-12 and CONST-22/23 (imported with RA confidence qualifiers), FC-16 (durable logic imported, stage-bound framing split off) |
+| Imported into the Manual | FC-04, FC-05, FC-08 to FC-15, FC-17 to FC-27; CONST-01 to CONST-05, CONST-07, CONST-08, CONST-13 to CONST-26, CONST-28; RM-01, RM-02, RM-04; RA-00 |
+| Imported with revision | CONST-16/17 (merged with product-repo statements), CONST-18 (revised per RA-06), CONST-06, CONST-09 to CONST-11, CONST-29 (horizon sequence revised by founder decision of 2026-07-15), CONST-12 and CONST-22/23 (imported with RA confidence qualifiers), FC-16 (durable logic imported, stage-bound framing split off) |
 | Rejected as durable doctrine (reclassified) | CONST-07 channel list; CCS-06 placement |
 | Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; CONST-07 channel list; the stage-bound half of FC-16 |
 | Retained in reasoning archive only | FC-01 to FC-03, FC-06, FC-07; RA-01 to RA-08; CONST-27 decision-ledger detail |
@@ -50,7 +50,6 @@ true but belongs in current-state documents, not in the Manual.
 | FC-04, FC-05 | Access motivation; "motivated by access to better decisions" | Section 2 |
 | FC-17, FC-18 | Definition of success: durable impact plus family security | Section 2 |
 | CONST-01 to CONST-03 | Mission; finance as proving ground, not endpoint | Sections 2 and 3 |
-| CONST-06, CONST-09, CONST-11 | Three product horizons | Section 3 |
 | CONST-04, CONST-05 | Earned-trust axiom and six trust requirements | Section 6.2 |
 | FC-08 to FC-11 | Humility doctrine; unsupported certainty loses trust | Section 6.3 |
 | FC-12, FC-13 | Six-step decision process; context acquisition is not delay | Section 5.1 |
@@ -63,7 +62,6 @@ true but belongs in current-state documents, not in the Manual.
 | CONST-24 | Compound founder judgment, not replace critical thinking | Section 16 |
 | CONST-25, CONST-26 | Decisions over engagement; login is for depth | Section 4.3 |
 | CONST-28 | Seven non-negotiable constraints | Section 4.5 |
-| CONST-29 | Working thesis synthesis | Sections 3 and 19 |
 | CONST-22, CONST-23 | Experience as the network asset; one-helps-many aphorism | Section 19 |
 | RM-01, RM-02 | Purpose of a doctrine layer; doctrine/state/reasoning separation | Sections 1 and 11 |
 | RM-04 | Placement rule: durable beliefs in doctrine, volatile facts in dated state docs | Section 11.3 |
@@ -74,7 +72,8 @@ true but belongs in current-state documents, not in the Manual.
 | Item | Revision made | Reason |
 |------|---------------|--------|
 | CONST-18 | Boundary restated as "advice versus accountable decision authority" rather than recommendation versus execution | RA-06 records this as an explicit correction reached in discussion; the corrected form is sharper and is adopted (Manual 6.1) |
-| CONST-09 to CONST-11 (horizons) | Imported with the qualifier "direction high confidence; sequencing and implementation subject to validation" | RA-03 attaches this confidence caveat; the constitution draft presented the horizons unqualified. The Manual makes the qualifier part of the doctrine (Manual 3) |
+| CONST-06, CONST-09 to CONST-11, CONST-29 (horizon sequence) | Resequenced by founder decision of 2026-07-15: Horizon 1 remains continuous financial reasoning; Horizon 2 is now privacy-preserving network intelligence; Horizon 3 is now the living decision model of the company. Finance is stated as the trust anchor, integration layer, and common language throughout | The PR #180 drafts (CONST-09 to CONST-11, RA-03, CCS-11) presented expansion beyond finance as the second horizon and network intelligence as the third. The founder decided that network intelligence begins within finance and is the compounding mechanism that creates the foundation for the broader vision, not a later layer. This is a founder-approved revision to the draft sequencing, recorded in the amendment log (version 0.2.0) in [AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md) (Manual 3, 19) |
+| CONST-09 to CONST-11 (horizon confidence) | Imported with the qualifier "direction high confidence; sequencing and implementation subject to validation" | RA-03 attaches this confidence caveat; the constitution draft presented the horizons unqualified. The Manual makes the qualifier part of the doctrine, and the 2026-07-15 resequencing leaves it unchanged (Manual 3) |
 | CONST-12, CONST-22, CONST-23 (network intelligence) | Imported with explicitly unresolved preconditions: privacy, consent, data governance, causal inference; plus binding interim constraints | RA-04 records these as unresolved; stating the vision without them would overstate certainty, violating FC-11 (Manual 19) |
 | CONST-16/17 | Merged with the product repository's stronger operational statements ("The separation is the product"; negative test on the removed raw-prompt route) | Repository evidence (AI.FO-Demo README, ARCHITECTURE, SIGNAL_METHODOLOGY) is more precise than the draft prose and is canonical (Manual 4.1, 8) |
 | FC-16 (early-hire stance) | Durable logic imported (founder can temporarily supply judgment and operating context, not technical depth; weight technical capability, accept coaching load); the "first engineering hire" framing classified as current state | The reasoning is durable; the specific hire is stage-bound (CCS-08) (Manual 14) |
@@ -99,7 +98,7 @@ and the company digest once adopted), not this manual.
 | CCS-03 | Market band "generally below $50M revenue" (a parameterization of durable CONST-13) |
 | CCS-04, CCS-05 | Current product definition; honest gap between product and constitution horizons |
 | CCS-07 to CCS-10 | Current priorities, including first engineering hire and SEC-data validation work |
-| CCS-11 | Current strategic sequence |
+| CCS-11 | Current strategic sequence (its ordering, network intelligence last, is superseded by the founder's 2026-07-15 horizon resequencing; see the revision table above) |
 | CCS-12, CCS-13 | Current positioning constraints and preferred framing (operationalized durable rules; the durable versions are Manual 4.5 and 17, and the product repository's positioning decision records govern the current wording) |
 | CCS-14 | Monthly review cadence for the current-state file |
 | RM-03 | The July 10, 2026 working-draft status statement |

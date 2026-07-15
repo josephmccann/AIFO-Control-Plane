@@ -2,7 +2,7 @@
 
 Status: DRAFT, pending founder review and merge approval.
 Owner: Joseph McCann (founder).
-Version: 0.1.0 (pre-adoption draft).
+Version: 0.2.0 (pre-adoption draft).
 Created: 2026-07-14.
 
 This document becomes the canonical home for AI.FO founder doctrine when the
@@ -163,27 +163,64 @@ the shortcut is rejected. This is restated as a non-negotiable constraint in
 The vision proceeds in three horizons. Direction is held with high confidence;
 sequencing and implementation remain subject to validation. That confidence
 qualifier is doctrine, imported from the reasoning archive in PR #180, and it
-must survive into any restatement of the horizons.
+must survive into any restatement of the horizons. The ordering of Horizons 2
+and 3 below was set by founder decision on 2026-07-15, superseding the
+sequence in the PR #180 drafts; the decision is recorded in the amendment log
+and in [PR180_RECONCILIATION.md](PR180_RECONCILIATION.md). Finance remains the
+trust anchor throughout all three horizons.
 
-- Horizon 1: a continuous CFO reasoning system. AI.FO maintains an evolving
-  view of the business, identifies financial signals, explains them, and
-  updates priorities as data arrives.
-- Horizon 2: expansion outward from finance, not a pivot away from finance,
-  into commercial, workforce, customer, contractual, and operating
-  information: a living decision model of the company.
-- Horizon 3: network intelligence. The experience of one company helps many
-  companies, and the experience of many companies helps each one. Horizon 3
-  carries unresolved privacy, consent, data-governance, and causal-inference
-  requirements; see [Section 19](#19-network-intelligence-vision).
+### Horizon 1: Continuous financial reasoning
 
-Finance is the proving ground, not the endpoint. Company finances are where
-trust is hardest to earn: errors are consequential, claims must be verifiable,
-and judgment matters. By earning trust in the hardest domain, AI.FO
-establishes the right to expand.
+AI.FO begins as a continuous CFO reasoning system for founder-led companies.
+It maintains an evolving view of each business, identifies financial signals,
+explains what they mean, models possible outcomes, and updates priorities as
+new data arrives.
 
-Practical consequence: work that advances Horizon 1 credibility outranks work
-that advances Horizon 2 or 3 optionality. No public claim may describe a later
-horizon as a present capability.
+Finance is the proving ground because trust is hardest to earn there. Errors
+are consequential, claims must be verifiable, and recommendations require
+judgment, lineage, and accountability. By earning trust in the hardest
+domain, AI.FO establishes the right to expand. Finance is the proving ground,
+not the endpoint.
+
+### Horizon 2: Network intelligence
+
+The next horizon is privacy-preserving network intelligence. Each company
+initially reasons only from its own history. Over time, appropriately
+anonymized, permissioned, and governed signals across many companies can
+create intelligence that no individual company could build alone.
+
+This may include patterns in payment behavior, customer risk, working-capital
+cycles, operating performance, and industry-specific decision outcomes. The
+experience of one company can help many companies, and the experience of many
+companies can help each one.
+
+Network intelligence is not a separate future product layered onto AI.FO
+after finance. It is the compounding mechanism that begins within finance and
+creates the foundation for the larger company vision.
+
+This horizon carries unresolved requirements involving privacy, consent, data
+governance, security, representativeness, and causal inference. Those
+requirements are binding design constraints, not implementation details; see
+[Section 19](#19-network-intelligence-vision).
+
+### Horizon 3: A living decision model of the company
+
+Once AI.FO has earned trust in financial reasoning and established a governed
+network-intelligence foundation, it can expand outward from finance into
+commercial, workforce, customer, contractual, and operating information.
+
+The result is a living decision model of the company: a system that
+understands how financial and operating decisions interact, preserves the
+reasoning and outcomes behind those decisions, and helps leaders make better
+choices across the business.
+
+This expansion is not a pivot away from finance. Finance remains the trust
+anchor, integration layer, and common language through which broader company
+decisions can be evaluated.
+
+Practical consequence: work that strengthens Horizon 1 trust and the
+Horizon 2 network foundation outranks speculative expansion into Horizon 3.
+No public claim may describe a later horizon as a present capability.
 
 ## 4. Product philosophy
 
@@ -763,19 +800,26 @@ recorded amendment changes them.
 
 ## 19. Network-intelligence vision
 
-The long-term thesis: experience, not merely expertise, is the network
-asset. Expertise is what someone knows; experience includes what happened,
-what was decided, what worked, what failed, and what followed. AI.FO should
-eventually allow anonymized operating histories, decisions, contexts, and
-outcomes to give small businesses the pattern recognition that historically
-existed only inside large enterprises, experienced executive teams, boards,
-and well-connected networks. The experiences of one should help the many,
-and the experiences of the many should help each one.
+The thesis: experience, not merely expertise, is the network asset.
+Expertise is what someone knows; experience includes what happened, what was
+decided, what worked, what failed, and what followed. AI.FO should allow
+anonymized, permissioned, and governed operating histories, decisions,
+contexts, and outcomes to give small businesses the pattern recognition that
+historically existed only inside large enterprises, experienced executive
+teams, boards, and well-connected networks. The experiences of one should
+help the many, and the experiences of the many should help each one.
+
+Network intelligence is Horizon 2 of the company vision
+([Section 3](#3-long-term-company-vision)): it begins within finance and is
+the compounding mechanism that creates the foundation for the broader living
+decision model, not a separate future product layered on after expansion
+beyond finance.
 
 This horizon is held with high confidence as a thesis, and its preconditions
 are explicitly unresolved: privacy architecture, customer consent, data
-governance, and causal inference from observational operating data. Those
-are requirements to be satisfied, not details to be handled later.
+governance, security, representativeness, and causal inference from
+observational operating data. Those are binding design constraints to be
+satisfied, not details to be handled later.
 
 Binding constraints until then:
 

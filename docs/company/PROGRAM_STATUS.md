@@ -99,14 +99,16 @@ The product has functioning QBO **sandbox** and CSV ingestion. It does **not cur
 
 ## 5. Company operations
 
-### Active workstreams (detail in [ACTIVE_WORKSTREAMS.md](ACTIVE_WORKSTREAMS.md))
+### Active workstreams (this list mirrors the in-flight table in [ACTIVE_WORKSTREAMS.md](ACTIVE_WORKSTREAMS.md) — that file is the detail page)
 1. [FACT] Post-merge demo deployment — deploy and validate product baseline `3329c99` on the live Replit demo; telemetry refresh pending; connector activation separately gated.
 2. [PR] Founder/constitution working drafts — PR #180 (AI.FO-Demo), pending reconciliation into a Founder Operating Manual.
-3. [PR] Product runtime architecture decision package — PR #13 (AIFO-Control-Plane, draft), pending founder review.
-4. [RUN] Study A live collection — running (~36% at checkpoint), conditionally authorized through scoring/measurement gates.
-5. [FACT] Nightly telemetry operations — launchd + deadman; steady state, recent integrity fixes (#187–#189).
-6. [FACT] Control-plane operational refinement — workqueue empty ("In Progress: None"); blocked items WQ-023 (product runtime hosting) and WQ-035 (apply automation) await founder decisions.
+3. [PR] Session-checkpoint disposition — PR #195 (AI.FO-Demo), awaiting the refresh / supersede / close decision.
+4. [PR] Product runtime architecture decision package — PR #13 (AIFO-Control-Plane, draft), pending founder review.
+5. [RUN] Study A live collection — running (~36% at the 2026-07-14 PT checkpoint), conditionally authorized through scoring/measurement gates.
+6. [FACT] Nightly telemetry operations — launchd + deadman; steady state, recent integrity fixes (#187–#189).
 7. This consolidation — Control-Plane worktree `claude/company-program-state-consolidation-2026-07`, new files under `docs/company/` only.
+
+Not an active workstream: the control-plane work queue is dormant ("In Progress: None"), with WQ-023 (product runtime hosting) and WQ-035 (apply automation) **Blocked** awaiting founder decisions — see "Dormant but live surfaces" in ACTIVE_WORKSTREAMS.md.
 
 ### Ownership — [FACT]
 - All gates route to **Joe** (sole founder; first engineering hire not yet made). Executing agents: Claude Code and Codex sessions, plus independent adversarial "fresh reader" agents in the study. Airtable is the operational ledger (nightly runs) and the study's decision log.

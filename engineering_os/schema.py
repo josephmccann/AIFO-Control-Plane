@@ -1,6 +1,7 @@
 """Small dependency-free validator for the repository's closed JSON contracts."""
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -49,6 +50,10 @@ def _type_matches(expected: str, value: Any) -> bool:
 
 
 def _walk(schema: Dict[str, Any], value: Any, path: str, kind: str) -> Iterable[Violation]:
+    if isinstance(value, float) and not math.isfinite(value):
+        yield _violation("SCHEMA_NUMBER_NOT_FINITE", "JSON numbers must be finite", path)
+        return
+
     expected = schema.get("type")
     if expected is not None:
         expected_types = [expected] if isinstance(expected, str) else expected

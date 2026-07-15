@@ -1,4 +1,5 @@
 import copy
+import math
 import unittest
 
 from engineering_os.canonical import canonical_json, content_sha256
@@ -14,6 +15,12 @@ class CanonicalTests(unittest.TestCase):
     def test_audit_hash_ignores_its_event_hash(self):
         event = {"sequence": 1, "type": "mission.ready", "event_hash": "stale"}
         self.assertEqual(content_sha256(event), content_sha256({"sequence": 1, "type": "mission.ready"}))
+
+    def test_canonical_json_rejects_non_finite_numbers(self):
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    canonical_json({"value": value})
 
 
 class SchemaTests(unittest.TestCase):
@@ -68,6 +75,24 @@ class SchemaTests(unittest.TestCase):
         mission["rollback"]["class"] = "magic"
         codes = {item.code for item in validate_document("mission", mission)}
         self.assertIn("SCHEMA_ENUM", codes)
+
+    def test_schema_number_validation_rejects_non_finite_values(self):
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value):
+                mission = load_fixture("mission-valid.json")
+                mission["budgets"]["model_cost_usd"] = value
+                codes = {item.code for item in validate_document("mission", mission)}
+                self.assertIn("SCHEMA_NUMBER_NOT_FINITE", codes)
+
+    def test_policy_schema_rejects_role_loosening_and_unknown_transitions(self):
+        policy = load_fixture("policy-control-plane.json")
+        policy["transition_roles"] = {
+            "approval.granted": ["producer"],
+            "mission.teleport": ["founder"],
+        }
+        codes = {item.code for item in validate_document("repository-policy", policy)}
+        self.assertIn("SCHEMA_ENUM", codes)
+        self.assertIn("SCHEMA_ADDITIONAL_PROPERTY", codes)
 
     def test_unknown_document_kind_fails_closed(self):
         violations = validate_document("not-a-contract", {})

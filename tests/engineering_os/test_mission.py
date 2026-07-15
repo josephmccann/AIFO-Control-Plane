@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import unittest
 
 from engineering_os.canonical import content_sha256
@@ -29,6 +30,18 @@ class MissionTests(unittest.TestCase):
         with self.assertRaises(MissionParseError):
             parse_issue_body("<!-- EOS:MISSION:BEGIN -->\n{broken\n<!-- EOS:MISSION:END -->")
 
+    def test_non_finite_json_numbers_are_rejected(self):
+        for token in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(token=token):
+                body = "<!-- EOS:MISSION:BEGIN -->\n{\"value\": %s}\n<!-- EOS:MISSION:END -->" % token
+                with self.assertRaises(MissionParseError):
+                    parse_issue_body(body)
+
+    def test_reversed_markers_raise_mission_parse_error(self):
+        body = "<!-- EOS:MISSION:END -->\n{}\n<!-- EOS:MISSION:BEGIN -->".format(json.dumps(self.mission))
+        with self.assertRaises(MissionParseError):
+            parse_issue_body(body)
+
     def test_complete_mission_is_ready(self):
         self.assertEqual(validate_ready(self.mission), [])
 
@@ -57,6 +70,14 @@ class MissionTests(unittest.TestCase):
         details = [v.details for v in violations if v.code == "MISSION_NOT_READY"]
         self.assertTrue(any(item.get("field") == "acceptance_criteria" for item in details))
         self.assertTrue(any(item.get("field") == "assignments" for item in details))
+
+    def test_definition_of_ready_rejects_non_finite_budgets(self):
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value):
+                mission = copy.deepcopy(self.mission)
+                mission["budgets"]["model_cost_usd"] = value
+                codes = {item.code for item in validate_ready(mission)}
+                self.assertIn("MISSION_NOT_READY", codes)
 
 
 if __name__ == "__main__":

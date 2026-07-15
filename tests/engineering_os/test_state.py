@@ -29,7 +29,7 @@ class MissionStateTests(unittest.TestCase):
 
     def test_each_event_is_denied_from_every_invalid_state(self):
         valid_sources = {
-            "mission.ready": {"Proposed", "Parked"},
+            "mission.ready": {"Proposed"},
             "mission.claimed": {"Ready"},
             "mission.started": {"Claimed"},
             "review.requested": {"In Progress"},
@@ -78,6 +78,39 @@ class MissionStateTests(unittest.TestCase):
         self.assertFalse(denied.allowed)
         self.assertEqual(denied.code, "STATE_ROLE_DENIED")
 
+    def test_policy_cannot_grant_producer_founder_only_authority(self):
+        cases = (
+            ("Founder Approval", "approval.granted"),
+            ("Merge Authorized", "mission.merged"),
+        )
+        for state, event_type in cases:
+            with self.subTest(event=event_type):
+                policy = {"transition_roles": {event_type: ["producer"]}}
+                decision = authorize_transition(MissionProjection(state=state), event(event_type, "producer"), policy)
+                self.assertFalse(decision.allowed)
+                self.assertEqual(decision.code, "STATE_POLICY_INVALID")
+
+    def test_malformed_policy_role_values_fail_closed(self):
+        malformed_values = (None, "founder", {"founder": True}, ["founder", 7], ["unknown-role"])
+        for value in malformed_values:
+            with self.subTest(value=value):
+                policy = {"transition_roles": {"approval.granted": value}}
+                decision = authorize_transition(
+                    MissionProjection(state="Founder Approval"),
+                    event("approval.granted", "founder"),
+                    policy,
+                )
+                self.assertFalse(decision.allowed)
+                self.assertEqual(decision.code, "STATE_POLICY_INVALID")
+
+    def test_policy_can_only_tighten_default_roles(self):
+        policy = {"transition_roles": {"mission.parked": ["adversary"]}}
+        producer = authorize_transition(MissionProjection(), event("mission.parked", "producer"), policy)
+        adversary = authorize_transition(MissionProjection(), event("mission.parked", "adversary"), policy)
+        self.assertFalse(producer.allowed)
+        self.assertEqual(producer.code, "STATE_ROLE_DENIED")
+        self.assertTrue(adversary.allowed)
+
     def test_valid_finding_returns_to_in_progress_and_counts_remediation(self):
         projection = MissionProjection(state="Adversarial Review", remediation_cycles=0)
         decision = authorize_transition(projection, event("finding.valid", "adversary"), POLICY)
@@ -93,6 +126,9 @@ class MissionStateTests(unittest.TestCase):
     def test_parked_recovery_incident_and_cancelled_paths(self):
         parked = project_state([event("mission.parked", "producer")])
         self.assertEqual(parked.state, "Parked")
+        ordinary_ready = authorize_transition(parked, event("mission.ready", "producer"), POLICY)
+        self.assertFalse(ordinary_ready.allowed)
+        self.assertEqual(ordinary_ready.code, "STATE_TRANSITION_DENIED")
         recovered = authorize_transition(parked, event("mission.recovered", "founder"), POLICY)
         self.assertTrue(recovered.allowed)
         self.assertEqual(recovered.details["to_state"], "Ready")

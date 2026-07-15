@@ -1,6 +1,7 @@
 """Mission issue parsing and Definition of Ready validation."""
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -24,13 +25,19 @@ def parse_issue_body(body: str) -> Dict[str, Any]:
 
     if body.count(MISSION_BEGIN) != 1 or body.count(MISSION_END) != 1:
         raise MissionParseError("issue body must contain exactly one EOS mission block")
-    begin = body.index(MISSION_BEGIN) + len(MISSION_BEGIN)
-    end = body.index(MISSION_END, begin)
-    if end <= begin:
+    begin_marker = body.index(MISSION_BEGIN)
+    end_marker = body.index(MISSION_END)
+    if end_marker < begin_marker:
         raise MissionParseError("EOS mission markers are out of order")
+    begin = begin_marker + len(MISSION_BEGIN)
+    end = end_marker
+
+    def reject_non_finite(token: str) -> None:
+        raise ValueError("non-finite JSON number: %s" % token)
+
     try:
-        value = json.loads(body[begin:end].strip())
-    except json.JSONDecodeError as error:
+        value = json.loads(body[begin:end].strip(), parse_constant=reject_non_finite)
+    except (json.JSONDecodeError, ValueError) as error:
         raise MissionParseError("EOS mission block is not valid JSON: %s" % error) from error
     if not isinstance(value, dict):
         raise MissionParseError("EOS mission declaration must be a JSON object")
@@ -78,7 +85,13 @@ def validate_ready(mission: Dict[str, Any]) -> List[Violation]:
         violations.append(_not_ready("rollback", "a non-empty rollback or recovery plan is required"))
 
     budgets = mission.get("budgets")
-    if not isinstance(budgets, dict) or any(not isinstance(value, (int, float)) or value <= 0 for value in budgets.values()):
+    if not isinstance(budgets, dict) or any(
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or value <= 0
+        for value in budgets.values()
+    ):
         violations.append(_not_ready("budgets", "all model, time, remediation, concurrency, and CI caps must be positive"))
 
     assignments = mission.get("assignments")

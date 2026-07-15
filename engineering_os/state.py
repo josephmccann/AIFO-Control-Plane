@@ -22,7 +22,7 @@ class MissionProjection:
 
 
 TRANSITIONS = {
-    "mission.ready": ({"Proposed", "Parked"}, "Ready", {"producer", "founder"}),
+    "mission.ready": ({"Proposed"}, "Ready", {"producer", "founder"}),
     "mission.recovered": ({"Parked"}, "Ready", {"founder"}),
     "mission.claimed": ({"Ready"}, "Claimed", {"producer"}),
     "mission.started": ({"Claimed"}, "In Progress", {"producer"}),
@@ -63,8 +63,34 @@ def authorize_transition(projection: MissionProjection, event: Mapping[str, Any]
             "from_state": projection.state,
             "allowed_from": sorted(sources),
         })
-    configured = policy.get("transition_roles", {}) if isinstance(policy, Mapping) else {}
-    roles = set(configured.get(event_type, default_roles)) if isinstance(configured, Mapping) else set(default_roles)
+    if not isinstance(policy, Mapping):
+        return Decision(False, "STATE_POLICY_INVALID", {"reason": "policy must be an object"})
+    configured = policy.get("transition_roles", {})
+    if not isinstance(configured, Mapping):
+        return Decision(False, "STATE_POLICY_INVALID", {"reason": "transition_roles must be an object"})
+    normalized_roles = {}
+    for configured_event, configured_value in configured.items():
+        configured_rule = TRANSITIONS.get(configured_event)
+        if configured_rule is None:
+            return Decision(False, "STATE_POLICY_INVALID", {
+                "reason": "transition_roles contains an unknown event",
+                "event_type": configured_event,
+            })
+        if not isinstance(configured_value, list) or any(not isinstance(item, str) for item in configured_value):
+            return Decision(False, "STATE_POLICY_INVALID", {
+                "reason": "transition roles must be an array of role strings",
+                "event_type": configured_event,
+            })
+        role_set = set(configured_value)
+        configured_defaults = configured_rule[2]
+        if len(role_set) != len(configured_value) or not role_set.issubset(configured_defaults):
+            return Decision(False, "STATE_POLICY_INVALID", {
+                "reason": "transition roles may only tighten default authority",
+                "event_type": configured_event,
+                "default_roles": sorted(configured_defaults),
+            })
+        normalized_roles[configured_event] = role_set
+    roles = normalized_roles.get(event_type, set(default_roles))
     role = event.get("actor_role")
     if role not in roles:
         return Decision(False, "STATE_ROLE_DENIED", {

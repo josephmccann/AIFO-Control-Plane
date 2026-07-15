@@ -9,7 +9,7 @@ from typing import Any
 def canonical_json(value: Any) -> str:
     """Return deterministic UTF-8 JSON text without insignificant whitespace."""
 
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
 def content_sha256(value: Any) -> str:

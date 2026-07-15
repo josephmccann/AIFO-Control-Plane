@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 The approved current-scope AWS control-plane baseline is operationally complete in AWS account `350480401760`, Region `us-west-2`.
 
@@ -38,10 +38,10 @@ Current validation state:
 - EC2 instance state: `stopped`.
 - GitHub plan-role policy default version: `v4`.
 
-Skipped:
+Local tooling verification:
 
-- `shellcheck`, because it is not installed locally.
-- `actionlint`, because it is not installed locally.
+- ShellCheck v0.11.0 installed through the repository-pinned, checksum-verified installer and passed.
+- `actionlint` v1.7.12 installed through the repository-pinned, checksum-verified installer and passed.
 
 ## Bootstrap Execution Results
 

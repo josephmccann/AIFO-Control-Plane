@@ -2,7 +2,7 @@
 
 Status: AWS control-plane baseline operationally complete for the approved current scope.
 
-Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 This review is not approval to deploy product runtime infrastructure or to create an apply workflow.
 

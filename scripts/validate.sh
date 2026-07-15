@@ -25,13 +25,20 @@ for tf_dir in "${TF_ROOTS[@]}"; do
 done
 
 echo "Checking shell syntax."
-bash -n "$ROOT_DIR"/scripts/*.sh
+bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/tests/*.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "Running shellcheck."
-  shellcheck "$ROOT_DIR"/scripts/*.sh
+  shellcheck "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/tests/*.sh
 else
-  echo "shellcheck not found; skipping shell lint."
+  echo "shellcheck not found; install pinned lint tools with ./scripts/install-dev-tools.sh."
+fi
+
+if command -v actionlint >/dev/null 2>&1; then
+  echo "Running actionlint."
+  actionlint "$ROOT_DIR"/.github/workflows/*.yml
+else
+  echo "actionlint not found; install pinned lint tools with ./scripts/install-dev-tools.sh."
 fi
 
 echo "Validation complete."

@@ -1,0 +1,174 @@
+name: Reusable orphan recovery
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: Discover and report only
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Discover and report only
+        required: true
+        default: true
+        type: boolean
+  schedule:
+    - cron: "17 * * * *"
+
+permissions: {}
+
+concurrency:
+  group: eos-orphan-recovery-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Dry-run orphan discovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" > "$RUNNER_TEMP/issues.json"
+          jq -r '.[].number' "$RUNNER_TEMP/issues.json" | while read -r issue; do
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments" > "$RUNNER_TEMP/comments-${issue}.json"
+          done
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from datetime import datetime, timezone
+
+          from engineering_os.commands import validate_event_chain
+          from engineering_os.lease import find_orphans
+
+          issues = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "issues.json"), encoding="utf-8"))
+          marker = re.compile(r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->", re.S)
+          observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+          orphaned = []
+          for issue in issues:
+              path = os.path.join(os.environ["RUNNER_TEMP"], "comments-%s.json" % issue["number"])
+              comments = json.load(open(path, encoding="utf-8"))
+              comments_by_url = {comment["html_url"]: comment for comment in comments}
+              events = []
+              for comment in comments:
+                  match = marker.fullmatch(comment["body"].strip())
+                  if match:
+                      event = json.loads(match.group(1))
+                      source = comments_by_url.get(event["source_url"])
+                      system_source = (
+                          event.get("actor") == "system"
+                          and event.get("actor_role") == "system"
+                          and event["source_url"].startswith("https://github.com/%s/actions/runs/" % os.environ["GITHUB_REPOSITORY"])
+                      )
+                      if not system_source and (source is None
+                              or event.get("actor") != source["user"]["login"]
+                              or event.get("occurred_at") != source["created_at"]):
+                          raise SystemExit("issue %s has unauthenticated event metadata" % issue["number"])
+                      events.append(event)
+              valid, code = validate_event_chain(events)
+              if not valid:
+                  raise SystemExit("issue %s: %s" % (issue["number"], code))
+              orphaned.extend({"issue": issue["number"], **orphan.__dict__} for orphan in find_orphans(events, now=observed_at))
+          report = {"dry_run": True, "mutation_performed": False, "issues_scanned": len(issues), "orphans": orphaned}
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write("## EOS orphan recovery dry run\n\n`%s`\n" % json.dumps(report, sort_keys=True))
+          PY
+
+  recover:
+    needs: discover
+    if: ${{ inputs.dry_run == false && vars.EOS_ORPHAN_RECOVERY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Propose recovery events for adapter validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" > "$RUNNER_TEMP/issues.json"
+          jq -r '.[].number' "$RUNNER_TEMP/issues.json" | while read -r issue; do
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments" > "$RUNNER_TEMP/comments-${issue}.json"
+          done
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          from datetime import datetime, timezone
+
+          from engineering_os.canonical import content_sha256
+          from engineering_os.commands import validate_event_chain
+          from engineering_os.lease import find_orphans, release_mission
+
+          issues = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "issues.json"), encoding="utf-8"))
+          marker = re.compile(r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->", re.S)
+          now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+          recoveries = []
+          for issue in issues:
+              comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments-%s.json" % issue["number"]), encoding="utf-8"))
+              comments_by_url = {comment["html_url"]: comment for comment in comments}
+              events = []
+              for comment in comments:
+                  match = marker.fullmatch(comment["body"].strip())
+                  if match:
+                      event = json.loads(match.group(1))
+                      source = comments_by_url.get(event["source_url"])
+                      system_source = (
+                          event.get("actor") == "system"
+                          and event.get("actor_role") == "system"
+                          and event["source_url"].startswith("https://github.com/%s/actions/runs/" % os.environ["GITHUB_REPOSITORY"])
+                      )
+                      if not system_source and (source is None
+                              or event.get("actor") != source["user"]["login"]
+                              or event.get("occurred_at") != source["created_at"]):
+                          raise SystemExit("issue %s has unauthenticated event metadata" % issue["number"])
+                      events.append(event)
+              valid, code = validate_event_chain(events)
+              if not valid:
+                  raise SystemExit("issue %s: %s" % (issue["number"], code))
+              for orphan in find_orphans(events, now=now):
+                  decision = release_mission(
+                      events, mission_id=orphan.mission_id, owner="system",
+                      now=now, nonce=orphan.nonce, recovery=True,
+                  )
+                  if not decision.allowed:
+                      raise SystemExit(decision.code)
+                  event = dict(decision.event)
+                  event.update({
+                      "schema_version": "1.0.0", "sequence": len(events) + 1,
+                      "source_url": os.environ["SOURCE_URL"],
+                      "previous_event_hash": events[-1]["event_hash"] if events else None,
+                  })
+                  event["event_hash"] = content_sha256(event)
+                  valid, code = validate_event_chain(events + [event])
+                  if not valid:
+                      raise SystemExit(code)
+                  recoveries.append({
+                      "issue": issue["number"],
+                      "event": base64.b64encode(json.dumps(event, sort_keys=True, separators=(",", ":")).encode()).decode(),
+                  })
+                  events.append(event)
+          json.dump(recoveries, open(os.path.join(os.environ["RUNNER_TEMP"], "recoveries.json"), "w", encoding="utf-8"))
+          PY
+          jq -r '.[] | [.issue, .event] | @tsv' "$RUNNER_TEMP/recoveries.json" | while IFS=$'\t' read -r issue encoded; do
+            event="$(printf '%s' "$encoded" | base64 --decode)"
+            body="$(printf '<!-- EOS:EVENT:BEGIN -->\n%s\n<!-- EOS:EVENT:END -->' "$event")"
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments" -f body="$body" >/dev/null
+          done
+          printf '%s\n' '{"dry_run":false,"mutation_performed":true}' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,15 @@
+[
+  {
+    "mission_id": "aifo-102",
+    "type": "mission.claimed",
+    "actor": "agent-a",
+    "actor_role": "producer",
+    "occurred_at": "2026-07-15T09:00:00Z",
+    "details": {
+      "lease_owner": "agent-a",
+      "lease_nonce": "nonce-102",
+      "lease_expires_at": "2026-07-15T09:15:00Z",
+      "paths": ["engineering_os/**"]
+    }
+  }
+]

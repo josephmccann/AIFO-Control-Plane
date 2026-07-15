@@ -1,0 +1,185 @@
+name: Mission command
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: eos-mission-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ github.event.issue.pull_request == null }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      append: ${{ steps.command.outputs.append }}
+      encoded_event: ${{ steps.command.outputs.encoded_event }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read authenticated issue history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" > "$RUNNER_TEMP/comments.json"
+      - name: Authorize exact command and validate full chain
+        id: command
+        env:
+          ACTOR: ${{ github.event.comment.user.login }}
+          BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          COMMENTS_FILE: ${{ runner.temp }}/comments.json
+          CREATED_AT: ${{ github.event.comment.created_at }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          SOURCE_URL: ${{ github.event.comment.html_url }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          from datetime import datetime, timedelta, timezone
+
+          from engineering_os.canonical import content_sha256
+          from engineering_os.commands import parse_command, validate_event_chain
+          from engineering_os.lease import claim_mission, heartbeat_lease, release_mission
+          from engineering_os.mission import parse_issue_body
+          from engineering_os.state import TRANSITIONS, authorize_transition, project_state
+
+          output = os.environ["GITHUB_OUTPUT"]
+          parsed = parse_command(os.environ["BODY"])
+          if parsed is None:
+              with open(output, "a", encoding="utf-8") as stream:
+                  stream.write("append=false\n")
+              raise SystemExit(0)
+
+          mission = parse_issue_body(os.environ["ISSUE_BODY"])
+          policy = json.load(open(".aifo/engineering-os-policy.json", encoding="utf-8"))
+          actor = os.environ["ACTOR"]
+          roles = set()
+          if actor in policy["founder_identities"]:
+              roles.add("founder")
+          for role in ("producer", "adversary"):
+              if actor.casefold() == mission["assignments"][role]["identity"].casefold():
+                  roles.add(role)
+
+          command, arguments = parsed
+          permitted = {
+              "claim": {"producer"}, "heartbeat": {"producer"}, "release": {"producer"},
+              "ready": {"producer", "founder"}, "start": {"producer"},
+              "review": {"producer"}, "approve": {"founder"}, "merge": {"founder"},
+              "verify": {"adversary", "founder"}, "close": {"founder"},
+              "park": {"producer", "adversary", "founder"}, "cancel": {"founder"},
+          }
+          eligible = roles & permitted.get(command, set())
+          if not eligible or command == "recover":
+              raise SystemExit("actor is not authorized for this exact /eos command")
+          role = "founder" if "founder" in eligible else sorted(eligible)[0]
+
+          marker = re.compile(r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->", re.S)
+          comments = json.load(open(os.environ["COMMENTS_FILE"], encoding="utf-8"))
+          comments_by_url = {comment["html_url"]: comment for comment in comments}
+          events = []
+          for comment in comments:
+              match = marker.fullmatch(comment["body"].strip())
+              if not match:
+                  continue
+              event = json.loads(match.group(1))
+              source = comments_by_url.get(event["source_url"])
+              system_source = (
+                  event.get("actor") == "system"
+                  and event.get("actor_role") == "system"
+                  and event["source_url"].startswith("https://github.com/%s/actions/runs/" % os.environ["GITHUB_REPOSITORY"])
+              )
+              if not system_source and (source is None
+                      or event.get("actor") != source["user"]["login"]
+                      or event.get("occurred_at") != source["created_at"]):
+                  raise SystemExit("event metadata does not match authenticated GitHub metadata")
+              events.append(event)
+          valid, code = validate_event_chain(events)
+          if not valid:
+              raise SystemExit(code)
+
+          now = os.environ["CREATED_AT"]
+          expiry = (datetime.fromisoformat(now.replace("Z", "+00:00")) + timedelta(minutes=15)).astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+          nonce = "github-comment-%s" % os.environ["COMMENT_ID"]
+          lease_events = [event for event in events if event["type"].startswith("lease.") or event["type"] == "mission.claimed"]
+          if command == "claim":
+              decision = claim_mission(
+                  lease_events, mission_id=mission["mission_id"], owner=actor,
+                  actor_role=role, now=now, expires_at=expiry, nonce=nonce,
+                  paths=mission["allowed_paths"],
+              )
+          elif command == "heartbeat":
+              decision = heartbeat_lease(
+                  lease_events, mission_id=mission["mission_id"], owner=actor,
+                  now=now, expires_at=expiry, nonce=arguments[0],
+              )
+          elif command == "release":
+              decision = release_mission(
+                  lease_events, mission_id=mission["mission_id"], owner=actor,
+                  now=now, nonce=arguments[0],
+              )
+          else:
+              event_types = {
+                  "ready": "mission.ready", "start": "mission.started",
+                  "review": "review.requested", "approve": "approval.granted",
+                  "merge": "mission.merged", "verify": "verification.passed",
+                  "close": "mission.closed", "park": "mission.parked",
+                  "cancel": "mission.cancelled",
+              }
+              event_type = event_types[command]
+              state_events = [event for event in events if event["type"] in TRANSITIONS]
+              projection = project_state(state_events, policy)
+              transition = authorize_transition(projection, {"type": event_type, "actor_role": role}, policy)
+              if not transition.allowed:
+                  raise SystemExit(transition.code)
+              class Allowed:
+                  allowed = True
+                  event = {
+                      "mission_id": mission["mission_id"], "type": event_type,
+                      "actor": actor, "actor_role": role, "occurred_at": now,
+                      "details": {"nonce": nonce},
+                  }
+              decision = Allowed()
+          if not decision.allowed:
+              raise SystemExit(decision.code)
+
+          proposed = dict(decision.event)
+          proposed["schema_version"] = "1.0.0"
+          proposed["sequence"] = len(events) + 1
+          proposed["source_url"] = os.environ["SOURCE_URL"]
+          proposed["previous_event_hash"] = events[-1]["event_hash"] if events else None
+          proposed["event_hash"] = content_sha256(proposed)
+          valid, code = validate_event_chain(events + [proposed])
+          if not valid:
+              raise SystemExit(code)
+          encoded = base64.b64encode(json.dumps(proposed, sort_keys=True, separators=(",", ":")).encode()).decode()
+          with open(output, "a", encoding="utf-8") as stream:
+              stream.write("append=true\nencoded_event=%s\n" % encoded)
+          PY
+
+  append:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.append == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Append only the validated authenticated event
+        env:
+          ENCODED_EVENT: ${{ needs.prepare.outputs.encoded_event }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          event="$(printf '%s' "$ENCODED_EVENT" | base64 --decode)"
+          body="$(printf '<!-- EOS:EVENT:BEGIN -->\n%s\n<!-- EOS:EVENT:END -->' "$event")"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$body" >/dev/null

@@ -1,0 +1,28 @@
+[
+  {
+    "mission_id": "aifo-103",
+    "type": "mission.claimed",
+    "actor": "agent-a",
+    "actor_role": "producer",
+    "occurred_at": "2026-07-15T10:00:00Z",
+    "details": {
+      "lease_owner": "agent-a",
+      "lease_nonce": "nonce-first",
+      "lease_expires_at": "2026-07-15T10:15:00Z",
+      "paths": ["engineering_os/**"]
+    }
+  },
+  {
+    "mission_id": "aifo-103",
+    "type": "mission.claimed",
+    "actor": "agent-b",
+    "actor_role": "producer",
+    "occurred_at": "2026-07-15T10:00:01Z",
+    "details": {
+      "lease_owner": "agent-b",
+      "lease_nonce": "nonce-second",
+      "lease_expires_at": "2026-07-15T10:15:01Z",
+      "paths": ["engineering_os/**"]
+    }
+  }
+]

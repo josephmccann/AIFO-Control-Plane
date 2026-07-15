@@ -1,0 +1,63 @@
+name: Reusable mission validation
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: Mission issue number
+        required: true
+        type: number
+
+permissions: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read authenticated issue history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" > "$RUNNER_TEMP/comments.json"
+      - name: Validate the complete event chain
+        env:
+          COMMENTS_FILE: ${{ runner.temp }}/comments.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from engineering_os.commands import validate_event_chain
+
+          marker = re.compile(r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->", re.S)
+          comments = json.load(open(os.environ["COMMENTS_FILE"], encoding="utf-8"))
+          comments_by_url = {comment["html_url"]: comment for comment in comments}
+          events = []
+          for comment in comments:
+              match = marker.fullmatch(comment["body"].strip())
+              if not match:
+                  continue
+              event = json.loads(match.group(1))
+              source = comments_by_url.get(event["source_url"])
+              system_source = (
+                  event.get("actor") == "system"
+                  and event.get("actor_role") == "system"
+                  and event["source_url"].startswith("https://github.com/%s/actions/runs/" % os.environ["GITHUB_REPOSITORY"])
+              )
+              if not system_source and (source is None
+                      or event.get("actor") != source["user"]["login"]
+                      or event.get("occurred_at") != source["created_at"]):
+                  raise SystemExit("event metadata does not match authenticated GitHub metadata")
+              events.append(event)
+          valid, code = validate_event_chain(events)
+          if not valid:
+              raise SystemExit(code)
+          print(code)
+          PY

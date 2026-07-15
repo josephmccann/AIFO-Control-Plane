@@ -11,13 +11,12 @@ Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 ## Next
 
-- Define the host patching and maintenance procedure.
 - Add periodic documentation checks for stale deployment status.
 - Add a cost-review cadence and lightweight monthly cost evidence.
 
 ## Later
 
-- Add patch management.
+- Evaluate automated Patch Manager or immutable-host replacement when scale or compliance justifies it.
 - Review whether to add CloudTrail data events after product runtime storage exists.
 - Review whether to add S3 Session Manager log duplication after a compliance requirement exists.
 - Design product runtime architecture.

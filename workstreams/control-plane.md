@@ -13,7 +13,9 @@ Build a secure, reproducible AWS control plane for AI.FO infrastructure operatio
 - Remote state and lockfile design.
 - Deployed CloudTrail management-events baseline.
 - Deployed Session Manager logging.
-- Partially deployed EventBridge Scheduler automation: group, role, and DLQ exist; start/stop schedules wait for the EC2 instance.
+- Deployed EC2 host `i-0254a9e2fcbcdebd7`, currently stopped.
+- Deployed EventBridge Scheduler group, role, DLQ, and enabled start/stop schedules.
+- Approval-gated manual host patching procedure.
 
 ## Out Of Scope For Now
 
@@ -24,7 +26,6 @@ Build a secure, reproducible AWS control plane for AI.FO infrastructure operatio
 
 ## Next Work
 
-- Validate branch changes.
-- Record the partial apply.
-- Wait for AWS account validation to clear.
-- Resume apply only after renewed explicit approval.
+- Keep Terraform and GitHub plans clean.
+- Run approved host maintenance inside the existing schedule.
+- Add periodic deployment-status documentation checks.

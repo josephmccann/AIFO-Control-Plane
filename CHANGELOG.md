@@ -8,6 +8,8 @@ All notable changes to this repository are recorded here.
 - Extended standard validation to lint repository shell scripts, installer tests, and GitHub Actions workflows when the pinned tools are on `PATH`.
 - Grouped Terraform Plan step outputs into a single redirect to satisfy the newly enforced workflow shell lint without changing plan-gate behavior.
 - Advanced canonical repository state from the pre-update parked checkpoint to active operational refinement; retained the dated session handoff as historical evidence.
+- Added ADR-0010 and a manual, approval-gated monthly patching runbook for the single SSM-only control-plane host; automated Patch Manager remains deferred.
+- Reconciled stale security and control-plane workstreams with the deployed CloudTrail, Session Manager, EC2, and Scheduler baseline.
 - Checkpointed the operationally complete current-scope AWS control-plane baseline before Codex CLI update.
 - Added dated session handoff at `docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md`.
 - Updated canonical state, readiness, roadmap, security, and workqueue documents to record `PARKED — SAFE FOR CODEX CLI UPDATE`.

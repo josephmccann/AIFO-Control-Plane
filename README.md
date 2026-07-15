@@ -144,6 +144,7 @@ terraform -chdir=terraform/environments/control-plane plan \
 - Deployment readiness: [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md)
 - Control-plane handoff: [docs/handoffs/HANDOFF_CONTROL_PLANE.md](docs/handoffs/HANDOFF_CONTROL_PLANE.md)
 - Session handoff: [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md)
+- Host patching: [docs/runbooks/host-patching.md](docs/runbooks/host-patching.md)
 
 ## Product Runtime Boundary
 

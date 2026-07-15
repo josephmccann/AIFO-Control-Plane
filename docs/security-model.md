@@ -70,10 +70,11 @@ Implemented pre-deployment hardening adds:
 - Multi-Region CloudTrail management events with log-file validation.
 - Dedicated encrypted S3 bucket for CloudTrail logs with 365-day lifecycle expiration.
 - EventBridge Scheduler start/stop automation scoped to the single host.
+- Approval-gated monthly host patching through Session Manager, with automatic patch orchestration deferred for the current single-host scope.
 
 Future hardening should add:
 
-- Centralized patch policy.
+- Terraform-managed Patch Manager policy or immutable-host replacement when scale or compliance justifies it.
 - CloudWatch agent configuration if host metrics/logs require it.
 - Host-level vulnerability scanning.
 - EDR or equivalent workload protection if required.

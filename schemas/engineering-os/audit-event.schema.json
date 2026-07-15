@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/audit-event.schema.json",
+  "title": "AI.FO Audit Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission_id", "sequence", "type", "actor", "actor_role", "occurred_at", "source_url", "previous_event_hash", "event_hash", "details"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "mission_id": {"type": "string", "minLength": 1}, "sequence": {"type": "integer", "minimum": 1}, "type": {"type": "string", "minLength": 1}, "actor": {"type": "string", "minLength": 1}, "actor_role": {"enum": ["producer", "adversary", "founder", "system"]}, "occurred_at": {"type": "string", "minLength": 1}, "source_url": {"type": "string", "minLength": 1}, "previous_event_hash": {"type": ["string", "null"]}, "event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "details": {"type": "object"}
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "mission_id": "aifo-control-plane-101",
+  "repository": "josephmccann/AIFO-Control-Plane",
+  "title": "Establish EOS contracts",
+  "objective": "Create deterministic, reviewable engineering operating system contracts.",
+  "acceptance_criteria": [
+    "All package 1 unit tests pass",
+    "The repository policy remains fail closed"
+  ],
+  "allowed_paths": [
+    "docs/engineering-os/**",
+    "schemas/engineering-os/**",
+    "engineering_os/**",
+    "tests/engineering_os/**"
+  ],
+  "prohibited_paths": [
+    "terraform/**"
+  ],
+  "dependencies": [],
+  "founder_decisions": [
+    "2026-07-15 founder mission directive"
+  ],
+  "risk_tier": "Tier 2",
+  "capabilities": [
+    "read",
+    "write"
+  ],
+  "budgets": {
+    "model_cost_usd": 25.0,
+    "model_tokens": 250000,
+    "wall_clock_minutes": 240,
+    "remediation_cycles": 2,
+    "concurrent_agents": 4,
+    "ci_reruns": 3
+  },
+  "validation_commands": [
+    "python3 -m unittest tests.engineering_os.test_schema tests.engineering_os.test_mission tests.engineering_os.test_state -v",
+    "git diff --check"
+  ],
+  "rollback": {
+    "class": "clean_revert",
+    "plan": "Revert the package commit; no external system is mutated."
+  },
+  "assignments": {
+    "producer": {
+      "identity": "codex",
+      "model_family": "openai"
+    },
+    "adversary": {
+      "identity": "claude",
+      "model_family": "anthropic"
+    }
+  },
+  "eos": {
+    "version": "1.0.0",
+    "constitution_sha256": "__CONSTITUTION_SHA256__"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/repository-policy.schema.json",
+  "title": "AI.FO Repository Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repository", "eos_version", "constitution_sha256", "founder_identities", "semantic_domains", "tier_2_paths", "required_status_checks", "default_limits", "transition_roles", "auto_merge_enabled", "airtable_live_enabled", "deployment_enabled", "edgar_integration_enabled"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
+    "eos_version": {"const": "1.0.0"},
+    "constitution_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "founder_identities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "semantic_domains": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["name", "paths", "minimum_tier", "owners", "conflict_group"], "properties": {"name": {"type": "string", "minLength": 1}, "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "minimum_tier": {"enum": ["Tier 0", "Tier 1", "Tier 2"]}, "owners": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "conflict_group": {"type": "string", "minLength": 1}}}},
+    "tier_2_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "required_status_checks": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "default_limits": {"type": "object", "additionalProperties": false, "required": ["model_cost_usd", "model_tokens", "wall_clock_minutes", "remediation_cycles", "concurrent_agents", "ci_reruns"], "properties": {"model_cost_usd": {"type": "number", "minimum": 0}, "model_tokens": {"type": "integer", "minimum": 0}, "wall_clock_minutes": {"type": "integer", "minimum": 0}, "remediation_cycles": {"type": "integer", "minimum": 0}, "concurrent_agents": {"type": "integer", "minimum": 0}, "ci_reruns": {"type": "integer", "minimum": 0}}},
+    "transition_roles": {"type": "object"},
+    "auto_merge_enabled": {"type": "boolean"},
+    "airtable_live_enabled": {"type": "boolean"},
+    "deployment_enabled": {"type": "boolean"},
+    "edgar_integration_enabled": {"type": "boolean"}
+  }
+}

@@ -1,0 +1,78 @@
+import copy
+import unittest
+
+from engineering_os.canonical import canonical_json, content_sha256
+from engineering_os.schema import DOCUMENT_KINDS, validate_document
+
+from .helpers import load_fixture
+
+
+class CanonicalTests(unittest.TestCase):
+    def test_canonical_json_is_sorted_and_compact(self):
+        self.assertEqual(canonical_json({"z": 1, "a": [3, 2]}), '{"a":[3,2],"z":1}')
+
+    def test_audit_hash_ignores_its_event_hash(self):
+        event = {"sequence": 1, "type": "mission.ready", "event_hash": "stale"}
+        self.assertEqual(content_sha256(event), content_sha256({"sequence": 1, "type": "mission.ready"}))
+
+
+class SchemaTests(unittest.TestCase):
+    def test_all_contract_schema_kinds_are_available(self):
+        self.assertEqual(
+            set(DOCUMENT_KINDS),
+            {
+                "mission",
+                "evidence",
+                "approval",
+                "audit-event",
+                "repository-policy",
+                "frozen-path",
+                "incident",
+                "mission-state",
+                "finding",
+                "authority",
+                "metrics",
+                "airtable-record",
+            },
+        )
+
+    def test_each_contract_schema_is_present_and_loadable(self):
+        for kind in DOCUMENT_KINDS:
+            with self.subTest(kind=kind):
+                codes = {item.code for item in validate_document(kind, {})}
+                self.assertNotIn("SCHEMA_NOT_FOUND", codes)
+                self.assertNotIn("SCHEMA_INVALID", codes)
+
+    def test_valid_mission_and_policy_conform(self):
+        self.assertEqual(validate_document("mission", load_fixture("mission-valid.json")), [])
+        self.assertEqual(validate_document("repository-policy", load_fixture("policy-control-plane.json")), [])
+
+    def test_every_required_mission_field_is_enforced(self):
+        mission = load_fixture("mission-valid.json")
+        for field in mission:
+            with self.subTest(field=field):
+                candidate = copy.deepcopy(mission)
+                del candidate[field]
+                violations = validate_document("mission", candidate)
+                self.assertIn("MISSION_FIELD_REQUIRED", {item.code for item in violations})
+
+    def test_closed_records_reject_unknown_properties(self):
+        mission = load_fixture("mission-valid.json")
+        mission["unreviewed_escape_hatch"] = True
+        violations = validate_document("mission", mission)
+        self.assertIn("SCHEMA_ADDITIONAL_PROPERTY", {item.code for item in violations})
+
+    def test_explicit_enums_reject_unknown_tier_and_rollback(self):
+        mission = load_fixture("mission-valid.json")
+        mission["risk_tier"] = "Tier 9"
+        mission["rollback"]["class"] = "magic"
+        codes = {item.code for item in validate_document("mission", mission)}
+        self.assertIn("SCHEMA_ENUM", codes)
+
+    def test_unknown_document_kind_fails_closed(self):
+        violations = validate_document("not-a-contract", {})
+        self.assertEqual([item.code for item in violations], ["SCHEMA_KIND_UNKNOWN"])
+
+
+if __name__ == "__main__":
+    unittest.main()

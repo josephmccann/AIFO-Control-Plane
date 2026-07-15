@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/incident.schema.json",
+  "title": "AI.FO Engineering Incident",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "incident_id", "origin_mission_id", "repository", "pull_request", "severity", "status", "summary", "kill_switch", "recovery_actions", "verification"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "incident_id": {"type": "string", "minLength": 1}, "origin_mission_id": {"type": "string", "minLength": 1}, "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}, "pull_request": {"type": "integer", "minimum": 1}, "severity": {"enum": ["SEV0", "SEV1", "SEV2", "SEV3"]}, "status": {"enum": ["open", "mitigating", "recovering", "verified", "closed"]}, "summary": {"type": "string", "minLength": 1}, "kill_switch": {"type": "string", "minLength": 1}, "recovery_actions": {"type": "array", "items": {"type": "string", "minLength": 1}}, "verification": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "mission_id": "aifo-control-plane-102",
+  "repository": "josephmccann/AIFO-Control-Plane",
+  "title": "Incomplete mission",
+  "objective": "Demonstrate fail-closed readiness.",
+  "acceptance_criteria": [],
+  "allowed_paths": [],
+  "prohibited_paths": [],
+  "dependencies": [],
+  "founder_decisions": [],
+  "risk_tier": "Tier 2",
+  "capabilities": ["read"],
+  "budgets": {
+    "model_cost_usd": 0,
+    "model_tokens": 0,
+    "wall_clock_minutes": 0,
+    "remediation_cycles": 0,
+    "concurrent_agents": 0,
+    "ci_reruns": 0
+  },
+  "validation_commands": [],
+  "rollback": {
+    "class": "clean_revert",
+    "plan": ""
+  },
+  "assignments": {
+    "producer": {
+      "identity": "same-agent",
+      "model_family": "openai"
+    },
+    "adversary": {
+      "identity": "same-agent",
+      "model_family": "openai"
+    }
+  },
+  "eos": {
+    "version": "1.0.0",
+    "constitution_sha256": "__CONSTITUTION_SHA256__"
+  }
+}

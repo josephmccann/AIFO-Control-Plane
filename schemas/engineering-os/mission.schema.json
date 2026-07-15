@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/mission.schema.json",
+  "title": "AI.FO Engineering Mission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission_id", "repository", "title", "objective", "acceptance_criteria", "allowed_paths", "prohibited_paths", "dependencies", "founder_decisions", "risk_tier", "capabilities", "budgets", "validation_commands", "rollback", "assignments", "eos"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "mission_id": {"type": "string", "minLength": 1},
+    "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
+    "title": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "acceptance_criteria": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "allowed_paths": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "prohibited_paths": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "dependencies": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "founder_decisions": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "risk_tier": {"enum": ["Tier 0", "Tier 1", "Tier 2"]},
+    "capabilities": {"type": "array", "items": {"enum": ["read", "write", "merge", "deploy", "cloud_mutation", "secrets", "customer_data", "spend", "cutover"]}, "uniqueItems": true},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_cost_usd", "model_tokens", "wall_clock_minutes", "remediation_cycles", "concurrent_agents", "ci_reruns"],
+      "properties": {
+        "model_cost_usd": {"type": "number", "minimum": 0},
+        "model_tokens": {"type": "integer", "minimum": 0},
+        "wall_clock_minutes": {"type": "integer", "minimum": 0},
+        "remediation_cycles": {"type": "integer", "minimum": 0},
+        "concurrent_agents": {"type": "integer", "minimum": 0},
+        "ci_reruns": {"type": "integer", "minimum": 0}
+      }
+    },
+    "validation_commands": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "plan"],
+      "properties": {
+        "class": {"enum": ["clean_revert", "forward_fix", "point_in_time_restore", "data_migration_recovery", "irreversible"]},
+        "plan": {"type": "string"}
+      }
+    },
+    "assignments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer", "adversary"],
+      "properties": {
+        "producer": {"type": "object", "additionalProperties": false, "required": ["identity", "model_family"], "properties": {"identity": {"type": "string", "minLength": 1}, "model_family": {"type": "string", "minLength": 1}}},
+        "adversary": {"type": "object", "additionalProperties": false, "required": ["identity", "model_family"], "properties": {"identity": {"type": "string", "minLength": 1}, "model_family": {"type": "string", "minLength": 1}}}
+      }
+    },
+    "eos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "constitution_sha256"],
+      "properties": {
+        "version": {"const": "1.0.0"},
+        "constitution_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

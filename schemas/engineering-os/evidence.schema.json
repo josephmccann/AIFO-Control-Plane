@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/evidence.schema.json",
+  "title": "AI.FO Evidence Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission_id", "repository", "pull_request", "base_sha", "head_sha", "generated_at", "policy_hash", "mission_hash", "audit_head_hash", "status_checks", "artifacts", "cleanup_state", "deployment_state"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "mission_id": {"type": "string", "minLength": 1}, "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}, "pull_request": {"type": "integer", "minimum": 1}, "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "generated_at": {"type": "string", "minLength": 1}, "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "mission_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "audit_head_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "status_checks": {"type": "array", "items": {"type": "object"}}, "artifacts": {"type": "array", "items": {"type": "object"}}, "cleanup_state": {"enum": ["not_required", "pending", "complete", "failed"]}, "deployment_state": {"enum": ["not_authorized", "not_deployed", "deployed", "rolled_back"]}
+  }
+}

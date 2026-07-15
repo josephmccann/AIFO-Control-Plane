@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/approval.schema.json",
+  "title": "AI.FO Founder Approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission_id", "action", "repository", "pull_request", "head_sha", "environment", "merge_method", "issuer", "issued_at", "expires_at", "deployment_authorized", "cutover_authorized"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "mission_id": {"type": "string", "minLength": 1}, "action": {"enum": ["merge", "deploy", "cutover", "cloud_mutation", "spend", "exception"]}, "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}, "pull_request": {"type": "integer", "minimum": 1}, "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "environment": {"type": "string", "minLength": 1}, "merge_method": {"enum": ["merge", "squash", "rebase"]}, "issuer": {"type": "string", "minLength": 1}, "issued_at": {"type": "string", "minLength": 1}, "expires_at": {"type": "string", "minLength": 1}, "deployment_authorized": {"type": "boolean"}, "cutover_authorized": {"type": "boolean"}
+  }
+}

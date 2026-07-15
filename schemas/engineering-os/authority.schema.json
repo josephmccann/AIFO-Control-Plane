@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/authority.schema.json",
+  "title": "AI.FO Mission Authority",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "authority_id", "repository", "paths", "capabilities", "issuer", "subject", "mission_id", "pull_request", "head_sha", "starts_at", "expires_at", "status"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "authority_id": {"type": "string", "minLength": 1}, "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}, "paths": {"type": "array", "items": {"type": "string", "minLength": 1}}, "capabilities": {"type": "array", "items": {"enum": ["read", "write", "merge", "deploy", "cloud_mutation", "secrets", "customer_data", "spend", "cutover"]}}, "issuer": {"type": "string", "minLength": 1}, "subject": {"type": "string", "minLength": 1}, "mission_id": {"type": "string", "minLength": 1}, "pull_request": {"type": "integer", "minimum": 1}, "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "starts_at": {"type": "string", "minLength": 1}, "expires_at": {"type": "string", "minLength": 1}, "status": {"enum": ["active", "expired", "revoked", "consumed"]}
+  }
+}

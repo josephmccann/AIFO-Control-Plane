@@ -18,3 +18,4 @@ Use `0000-adr-template.md` for new records. Do not replace current-state docs or
 | [0008](0008-cloudtrail-management-events-baseline.md) | Accepted for first deployment | Create a multi-Region CloudTrail management-events baseline |
 | [0009](0009-automated-ec2-operating-schedule.md) | Accepted for first deployment | Automate control-plane host start/stop with EventBridge Scheduler |
 | [0010](0010-manual-host-patching.md) | Accepted for current single-host control plane | Use approval-gated manual patching and defer automation until scale or compliance justifies it |
+| [0011](0011-github-native-engineering-operating-system.md) | Accepted by the 2026-07-15 founder mission directive | Use GitHub-native mission authority with a dependency-free, deny-by-default policy kernel |

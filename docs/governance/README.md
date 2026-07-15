@@ -2,10 +2,11 @@
 
 Canonical founder and company governance documents for AI.FO.
 
-Status: DRAFT set, pending founder review and merge approval. Until the
-founder merges these documents, they are proposed text, and all doctrine
-sources remain as described in
-[SOURCE_MATERIAL_INDEX.md](SOURCE_MATERIAL_INDEX.md).
+Status: ADOPTED by the founder on 2026-07-15. These documents are the
+canonical home for AI.FO founder doctrine; their provenance is recorded in
+[SOURCE_MATERIAL_INDEX.md](SOURCE_MATERIAL_INDEX.md), and they change only
+through
+[AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md).
 
 ## Documents
 

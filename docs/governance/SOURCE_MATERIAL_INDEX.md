@@ -1,6 +1,6 @@
 # Source Material Index
 
-Status: DRAFT, pending founder review.
+Status: ADOPTED with the Manual on 2026-07-15.
 
 Pinned sources for every document in `docs/governance/`. Doctrine in the
 [Founder Operating Manual](FOUNDER_OPERATING_MANUAL.md) traces to these

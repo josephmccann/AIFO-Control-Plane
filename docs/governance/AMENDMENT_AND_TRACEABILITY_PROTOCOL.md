@@ -1,7 +1,7 @@
 # Amendment and Traceability Protocol
 
-Status: DRAFT, pending founder review. Becomes binding when
-[FOUNDER_OPERATING_MANUAL.md](FOUNDER_OPERATING_MANUAL.md) is adopted.
+Status: ADOPTED and binding, with
+[FOUNDER_OPERATING_MANUAL.md](FOUNDER_OPERATING_MANUAL.md), on 2026-07-15.
 
 This protocol governs how the Founder Operating Manual and the other
 documents in `docs/governance/` change, how changes are traced, and how
@@ -80,10 +80,7 @@ bump minor, authority-affecting amendments bump major.
 |------|---------|-------|--------|-----------|---------------------|
 | 2026-07-14 | 0.1.0 | Material (initial) | Initial draft of the manual and companion documents | Founder doctrine had no canonical home | Founder task directive; PR #14 hierarchy row; reconciliation of AI.FO-Demo PR #180 in [PR180_RECONCILIATION.md](PR180_RECONCILIATION.md) |
 | 2026-07-15 | 0.2.0 | Material | Resequenced the three horizons in Manual section 3: network intelligence is now Horizon 2 and the living decision model of the company is Horizon 3; section 19 aligned; finance stated as the trust anchor throughout | Network intelligence begins within finance and is the compounding mechanism that creates the foundation for the broader company vision, not a later layer added after expansion beyond finance | Founder decision of 2026-07-15, delivered as an explicit written directive; supersedes the sequencing in the PR #180 drafts (CONST-09 to CONST-11, RA-03, CCS-11). The confidence qualifier (direction high confidence; sequencing and implementation subject to validation) is unchanged |
-
-Adoption note: when the founder merges the initial PR, the version moves to
-1.0.0 in the same merge or an immediately following editorial change, and
-that adoption is logged as its own row.
+| 2026-07-15 | 1.0.0 | Material (adoption) | The Manual and the governance framework (this protocol, the reconciliation, the source index) move from draft to adopted; the Manual becomes the canonical home for founder doctrine | Founder approval of PR #15 for final adoption | Explicit written founder approval of 2026-07-15 at reviewed head `3a834ebfaa591f3becd7d5697b0b1d5319a06ad2`; Codex review of that head reported no major issues and no review threads remained unresolved |
 
 ## 6. Traceability requirements
 

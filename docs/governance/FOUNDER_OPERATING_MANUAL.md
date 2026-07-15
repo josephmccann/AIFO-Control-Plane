@@ -1,13 +1,14 @@
 # AI.FO Founder Operating Manual
 
-Status: DRAFT, pending founder review and merge approval.
+Status: ADOPTED.
 Owner: Joseph McCann (founder).
-Version: 0.2.0 (pre-adoption draft).
-Created: 2026-07-14.
+Version: 1.0.0.
+Created: 2026-07-14. Adopted: 2026-07-15.
 
-This document becomes the canonical home for AI.FO founder doctrine when the
-founder merges it. Until merge, treat it as proposed text. After merge, it is
-amended only through the process in
+This document is the canonical home for AI.FO founder doctrine, adopted by
+the founder on 2026-07-15 at reviewed head
+`3a834ebfaa591f3becd7d5697b0b1d5319a06ad2`. It is amended only through the
+process in
 [AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md).
 
 Every statement in this manual is doctrine unless it is explicitly marked as a

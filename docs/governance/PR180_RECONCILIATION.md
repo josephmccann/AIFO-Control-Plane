@@ -1,6 +1,7 @@
 # PR #180 Reconciliation
 
-Status: DRAFT, pending founder review.
+Status: ADOPTED with the Manual on 2026-07-15 (decisions D-1 to D-3
+resolved; D-4 to D-6 remain open).
 Subject: AI.FO-Demo draft PR #180, "Document founder context and AI.FO
 constitutional principles", branch `docs/founder-aifo-context`, reviewed at
 head `5d058ee31f60d2e4f84c652a92c9fd310bb20d2c`.
@@ -41,7 +42,7 @@ so that every item or sub-item has exactly one disposition.
 | Rejected as durable doctrine (reclassified) | CONST-07b (channel list); CCS-06 placement |
 | Classified as temporary company state | CCS-01 to CCS-05, CCS-07 to CCS-14; FC-16b (stage-bound hiring framing); RM-03 (working-draft status statement) |
 | Retained in reasoning archive only | FC-01 to FC-03, FC-06, FC-07; RA-01 to RA-08; CONST-27b (decision-ledger detail) |
-| Founder decision still required | D-1 to D-6 below |
+| Founder decisions | D-1 to D-3 resolved 2026-07-15; D-4 to D-6 open (see below) |
 
 Nothing in PR #180 was found false or contrary to repository evidence; no
 item is rejected outright. "Rejected as durable doctrine" means the item is
@@ -129,16 +130,16 @@ PR #180 also adds eight files not covered by the constitution/context scope:
 here. Recommendation: treat them as separate proposals to be re-raised as
 their own scoped PRs if still wanted (decision D-5).
 
-## Founder decisions still required
+## Founder decisions
 
-| ID | Decision | Recommendation |
-|----|----------|----------------|
-| D-1 | Adopt this manual as the canonical home for founder doctrine (merges this PR) | Adopt; PR #14's hierarchy row already anticipates it |
-| D-2 | Disposition of PR #180 itself | Supersede and close (below) |
-| D-3 | Adopt the authority hierarchy in Manual 1.4, which also makes the company digest's precedence rules binding | Adopt |
-| D-4 | Whether the market band (currently "below $50M revenue") remains a current-state parameter or is promoted to doctrine | Keep as current-state parameter |
-| D-5 | Disposition of the eight out-of-scope PR #180 files | Re-raise separately if wanted; do not merge as a side effect of doctrine work |
-| D-6 | Where the durable reasoning-archive practice lives going forward (per repository, or a single company archive) | Single archive alongside this manual's amendment log, decided when the first new entry is written |
+| ID | Decision | Recommendation | Status |
+|----|----------|----------------|--------|
+| D-1 | Adopt this manual as the canonical home for founder doctrine (merges this PR) | Adopt; PR #14's hierarchy row already anticipates it | RESOLVED: adopted by explicit founder approval on 2026-07-15 at reviewed head `3a834ebfaa591f3becd7d5697b0b1d5319a06ad2` |
+| D-2 | Disposition of PR #180 itself | Supersede and close (below) | RESOLVED as a decision on 2026-07-15: supersede and close. Execution is deferred: PR #180 is to be closed as superseded only after this PR merges, in a separate action; the adoption mission itself does not close it. All PR #180 history and files are preserved via the pinned head `5d058ee31f60d2e4f84c652a92c9fd310bb20d2c` |
+| D-3 | Adopt the authority hierarchy in Manual 1.4, which also makes the company digest's precedence rules binding | Adopt | RESOLVED: adopted with the Manual on 2026-07-15 |
+| D-4 | Whether the market band (currently "below $50M revenue") remains a current-state parameter or is promoted to doctrine | Keep as current-state parameter | OPEN (the recommendation applies by default until the founder rules otherwise) |
+| D-5 | Disposition of the eight out-of-scope PR #180 files | Re-raise separately if wanted; do not merge as a side effect of doctrine work | OPEN; decide no later than the PR #180 closing comment |
+| D-6 | Where the durable reasoning-archive practice lives going forward (per repository, or a single company archive) | Single archive alongside this manual's amendment log, decided when the first new entry is written | OPEN |
 
 ## Recommended disposition
 
@@ -171,5 +172,8 @@ Conditions attached to the recommendation:
 4. Decide D-5 (the eight out-of-scope files) explicitly in the same closing
    comment, so nothing stops silently.
 
-This document does not execute any of the above. PR #180 remains open and
-unchanged until the founder decides.
+Adoption note (2026-07-15): the founder approved this disposition with the
+Manual (D-2). PR #180 is to be closed as superseded only after this PR
+merges, as a separate action that follows the four conditions above. The
+adoption itself changes nothing in PR #180: its branch, history, and files
+are preserved, and the pinned head remains the permanent evidence record.

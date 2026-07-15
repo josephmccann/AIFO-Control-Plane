@@ -44,12 +44,14 @@ pure kernel validates complete authenticated input.
 
 Mission commands and explicit orphan recovery serialize on the same
 repository-and-issue concurrency key. Claims additionally serialize on a
-repository-wide claim lock. Inside that lock, the adapter re-fetches every open
-EOS mission issue and its complete paginated history, authenticates all of them,
-and exposes their lease events to conflict evaluation. An expired lease remains
-conflicting until its authenticated release. Malformed candidate mission
-declarations or histories fail the repository snapshot closed; only issue bodies
-with no EOS mission marker are skipped. Scheduled orphan discovery is always
+repository-wide claim lock. Inside that lock, the adapter re-fetches open and
+closed issues plus their complete paginated histories. An issue with declaration
+markers or EOS event comments is a mission candidate; every candidate must retain
+a complete valid current declaration and authenticated history. Active leases are
+exposed to conflict evaluation regardless of issue state and remain conflicting
+until an authenticated release, park, or cancellation. Malformed candidate
+declarations or histories fail the repository snapshot closed; only issues with
+neither declaration nor event markers are skipped. Scheduled orphan discovery is always
 read-only. Recovery mutation additionally requires a non-dry manual or reusable
 workflow invocation and the versioned `orphan_recovery_enabled` policy flag,
 which is false by default. Recovery re-fetches the chain, referenced Actions run

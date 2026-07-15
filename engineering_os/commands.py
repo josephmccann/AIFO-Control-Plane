@@ -18,7 +18,7 @@ from .lease import (
     release_mission,
 )
 from .limits import LIMIT_NAMES, evaluate_limits
-from .mission import validate_ready
+from .mission import MISSION_BEGIN, MISSION_END, MissionParseError, parse_issue_body, validate_ready
 from .schema import validate_document
 from .state import MissionProjection, authorize_transition, project_state
 
@@ -57,6 +57,8 @@ _EVENT_MARKER = re.compile(
     r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->",
     re.S,
 )
+_EVENT_BEGIN = "<!-- EOS:EVENT:BEGIN -->"
+_EVENT_END = "<!-- EOS:EVENT:END -->"
 _BOT = "github-actions[bot]"
 _RECOVERY_EVENTS = frozenset(("workflow_dispatch",))
 
@@ -86,6 +88,14 @@ class RepositoryLeaseDecision:
     details: Dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class RepositoryDiscoveryDecision:
+    allowed: bool
+    code: str
+    candidates: Tuple[Dict[str, Any], ...] = ()
+    details: Dict[str, Any] = field(default_factory=dict)
+
+
 def parse_command(text: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
     """Parse only a complete, single-line, lower-case ``/eos`` command."""
 
@@ -112,6 +122,63 @@ def flatten_paginated(pages: Sequence[Sequence[Dict[str, Any]]]) -> List[Dict[st
     if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
         raise ValueError("paginated API output must be an array of arrays")
     return [item for page in pages for item in page]
+
+
+def discover_repository_mission_candidates(
+    issues: Sequence[Mapping[str, Any]],
+    comments_by_issue: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> RepositoryDiscoveryDecision:
+    """Find all state-independent declaration or event-bearing mission issues."""
+
+    if not isinstance(issues, list) or not isinstance(comments_by_issue, Mapping):
+        return RepositoryDiscoveryDecision(False, "REPOSITORY_DISCOVERY_INPUT_INVALID")
+    candidates = []
+    seen_issues = set()
+    for issue in issues:
+        if not isinstance(issue, Mapping):
+            return RepositoryDiscoveryDecision(False, "REPOSITORY_DISCOVERY_INPUT_INVALID")
+        if "pull_request" in issue:
+            continue
+        issue_number = issue.get("number")
+        comments = comments_by_issue.get(str(issue_number))
+        body = issue.get("body") or ""
+        if (
+            not isinstance(issue_number, int)
+            or isinstance(issue_number, bool)
+            or issue_number < 1
+            or issue_number in seen_issues
+            or not isinstance(body, str)
+            or not isinstance(comments, list)
+        ):
+            return RepositoryDiscoveryDecision(
+                False, "REPOSITORY_DISCOVERY_INPUT_INVALID",
+                details={"issue_number": issue_number},
+            )
+        seen_issues.add(issue_number)
+        declaration_bearing = MISSION_BEGIN in body or MISSION_END in body
+        event_bearing = any(
+            isinstance(comment, Mapping)
+            and isinstance(comment.get("body"), str)
+            and (_EVENT_BEGIN in comment["body"] or _EVENT_END in comment["body"])
+            for comment in comments
+        )
+        if not declaration_bearing and not event_bearing:
+            continue
+        try:
+            mission = parse_issue_body(body)
+        except MissionParseError as error:
+            return RepositoryDiscoveryDecision(
+                False, "REPOSITORY_MISSION_DECLARATION_INVALID",
+                details={"issue_number": issue_number, "error": str(error)},
+            )
+        candidates.append({
+            "issue_number": issue_number,
+            "mission": mission,
+            "comments": comments,
+        })
+    return RepositoryDiscoveryDecision(
+        True, "REPOSITORY_MISSION_CANDIDATES_DISCOVERED", tuple(candidates)
+    )
 
 
 def recovery_mutation_allowed(event_name: str, dry_run: bool, policy: Mapping[str, Any]) -> bool:
@@ -548,11 +615,15 @@ def authenticate_repository_lease_events(
                 False, "REPOSITORY_MISSION_HISTORY_INVALID",
                 details={"issue_number": issue_number, "cause": history.code},
             )
-        lease_events.extend(
-            event for event in history.events if event.get("type") in {
+        authenticated_mission_leases = []
+        for event in history.events:
+            if event.get("type") in {"mission.parked", "mission.cancelled"}:
+                authenticated_mission_leases = []
+            elif event.get("type") in {
                 "mission.claimed", "lease.heartbeat", "mission.orphaned", "mission.released",
-            }
-        )
+            }:
+                authenticated_mission_leases.append(event)
+        lease_events.extend(authenticated_mission_leases)
     return RepositoryLeaseDecision(
         True, "REPOSITORY_LEASE_EVENTS_AUTHENTICATED", tuple(lease_events)
     )

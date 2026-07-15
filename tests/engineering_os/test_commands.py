@@ -15,6 +15,7 @@ from engineering_os.commands import (
     propose_event,
     recovery_mutation_allowed,
 )
+from engineering_os.mission import MISSION_BEGIN, MISSION_END
 from tests.engineering_os.helpers import load_fixture
 
 
@@ -166,6 +167,50 @@ def claimed_mission_candidate(*, issue=202, paths=None, expires_at="2026-07-15T1
         ],
         "actions_runs": [],
     }
+
+
+def issue_record(candidate, *, state="closed", body=None):
+    declaration = "%s\n%s\n%s" % (
+        MISSION_BEGIN,
+        json.dumps(candidate["mission"], sort_keys=True, separators=(",", ":")),
+        MISSION_END,
+    )
+    return {
+        "number": candidate["issue_number"],
+        "state": state,
+        "body": declaration if body is None else body,
+    }
+
+
+def terminal_candidate(event_type):
+    candidate = claimed_mission_candidate()
+    claim = json.loads(command_kernel._EVENT_MARKER.search(candidate["comments"][-1]["body"]).group(1))
+    comment_id = 2090 + {"mission.released": 1, "mission.parked": 2, "mission.cancelled": 3}[event_type]
+    nonce = claim["details"]["lease_nonce"]
+    if event_type == "mission.released":
+        actor, role, command = "agent-b", "producer", "/eos release %s" % nonce
+        details = {
+            "lease_owner": "agent-b", "lease_nonce": nonce,
+            "recovery": False, "recommended_action": "Ready",
+        }
+    elif event_type == "mission.parked":
+        actor, role, command = "agent-b", "producer", "/eos park"
+        details = {"nonce": "github-comment-%s" % comment_id}
+    else:
+        actor, role, command = "josephmccann", "founder", "/eos cancel"
+        details = {"nonce": "github-comment-%s" % comment_id}
+    source = source_comment(
+        comment_id, actor, command, "2026-07-15T09:05:00Z", issue=candidate["issue_number"],
+    )
+    terminal = audit_event(
+        event_type, actor, role, source["html_url"], source["created_at"],
+        3, claim["event_hash"], details, mission_id=candidate["mission"]["mission_id"],
+    )
+    candidate["comments"].extend([
+        source,
+        event_comment(comment_id + 10, [terminal], issue=candidate["issue_number"]),
+    ])
+    return candidate
 
 
 class CommandTests(unittest.TestCase):
@@ -549,6 +594,77 @@ class CommandTests(unittest.TestCase):
                 self.assertFalse(decision.allowed)
                 self.assertEqual(decision.code, "LEASE_PATH_CONFLICT")
 
+    def test_closed_issue_with_active_lease_remains_a_repository_candidate(self):
+        mission, policy = valid_context()
+        candidate = claimed_mission_candidate()
+        discovery = command_kernel.discover_repository_mission_candidates(
+            [issue_record(candidate, state="closed")],
+            {str(candidate["issue_number"]): candidate["comments"]},
+        )
+        self.assertTrue(discovery.allowed, discovery.code)
+        self.assertEqual(discovery.candidates[0]["issue_number"], candidate["issue_number"])
+        repository_history = command_kernel.authenticate_repository_lease_events(
+            [dict(discovery.candidates[0], actions_runs=[])],
+            policy, repository=REPOSITORY,
+        )
+        ready_source = source_comment(190, "agent-a", "/eos ready", "2026-07-15T10:00:00Z")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-190"),
+        )
+        claim_source = source_comment(191, "agent-a", "/eos claim", "2026-07-15T10:01:00Z")
+        decision = authorize_command_proposal(
+            [ready_source, event_comment(192, [ready]), claim_source],
+            mission, policy, repository=REPOSITORY,
+            command_comment_url=claim_source["html_url"],
+            repository_lease_events=repository_history.events,
+        )
+        self.assertEqual(decision.code, "LEASE_PATH_CONFLICT")
+
+    def test_event_bearing_issue_without_complete_current_declaration_fails_closed(self):
+        candidate = claimed_mission_candidate()
+        comments = {str(candidate["issue_number"]): candidate["comments"]}
+        cases = {
+            "removed": "mission declaration was removed",
+            "partial-marker": "%s\n{}" % MISSION_BEGIN,
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                discovery = command_kernel.discover_repository_mission_candidates(
+                    [issue_record(candidate, body=body)], comments,
+                )
+                self.assertFalse(discovery.allowed)
+                self.assertEqual(discovery.code, "REPOSITORY_MISSION_DECLARATION_INVALID")
+
+        skipped = command_kernel.discover_repository_mission_candidates(
+            [{"number": 303, "state": "closed", "body": "ordinary issue"}],
+            {"303": []},
+        )
+        self.assertTrue(skipped.allowed, skipped.code)
+        self.assertEqual(skipped.candidates, ())
+
+    def test_authenticated_release_park_or_cancellation_clears_repository_lease(self):
+        mission, policy = valid_context()
+        ready_source = source_comment(200, "agent-a", "/eos ready", "2026-07-15T10:00:00Z")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-200"),
+        )
+        claim_source = source_comment(201, "agent-a", "/eos claim", "2026-07-15T10:01:00Z")
+        comments = [ready_source, event_comment(202, [ready]), claim_source]
+        for terminal_type in ("mission.released", "mission.parked", "mission.cancelled"):
+            with self.subTest(terminal_type=terminal_type):
+                repository_history = command_kernel.authenticate_repository_lease_events(
+                    [terminal_candidate(terminal_type)], policy, repository=REPOSITORY,
+                )
+                self.assertTrue(repository_history.allowed, repository_history.code)
+                decision = authorize_command_proposal(
+                    comments, mission, policy, repository=REPOSITORY,
+                    command_comment_url=claim_source["html_url"],
+                    repository_lease_events=repository_history.events,
+                )
+                self.assertTrue(decision.allowed, decision.code)
+
     def test_claim_allows_authenticated_non_overlapping_repository_lease(self):
         mission, policy = valid_context()
         ready_source = source_comment(180, "agent-a", "/eos ready", "2026-07-15T10:00:00Z")
@@ -605,11 +721,12 @@ class CommandTests(unittest.TestCase):
     def test_claim_adapter_refetches_paginated_repository_histories_under_claim_lock(self):
         workflow = (ROOT / ".github/workflows/mission-command.yml").read_text(encoding="utf-8")
         self.assertIn("group: eos-claim-${{ github.repository }}", workflow)
-        self.assertIn("issues?state=open&per_page=100", workflow)
+        self.assertIn("issues?state=all&per_page=100", workflow)
         self.assertIn("--paginate --slurp", workflow)
         self.assertIn("authenticate-repository-leases", workflow)
         self.assertIn("--repository-leases", workflow)
         self.assertIn("EOS:MISSION:BEGIN", workflow)
+        self.assertIn("EOS:EVENT:BEGIN", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
 
     def test_orphan_recovery_is_explicit_policy_gated_and_per_mission(self):

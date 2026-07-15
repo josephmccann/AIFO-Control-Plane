@@ -140,38 +140,39 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - name: Re-fetch all open mission histories and authorize claim under repository lock
+      - name: Re-fetch all-state mission histories and authorize claim under repository lock
         env:
           COMMAND_URL: ${{ github.event.comment.html_url }}
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
-          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" | jq 'add' > "$RUNNER_TEMP/open-issues.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/all-issues.json"
+          : > "$RUNNER_TEMP/comments-index.ndjson"
+          jq -r '.[] | select(has("pull_request") | not) | .number' "$RUNNER_TEMP/all-issues.json" | while read -r issue; do
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments-${issue}.json"
+            jq -n --arg issue "$issue" --slurpfile comments "$RUNNER_TEMP/comments-${issue}.json" \
+              '{($issue):$comments[0]}' >> "$RUNNER_TEMP/comments-index.ndjson"
+          done
+          jq -s 'reduce .[] as $item ({}; . + $item)' "$RUNNER_TEMP/comments-index.ndjson" > "$RUNNER_TEMP/comments-by-issue.json"
           python3 - <<'PY'
           import json
           import os
-          from engineering_os.mission import MISSION_BEGIN, MISSION_END, parse_issue_body
+          from engineering_os.commands import discover_repository_mission_candidates
 
-          issues = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "open-issues.json"), encoding="utf-8"))
-          candidates = []
-          for issue in issues:
-              if "pull_request" in issue:
-                  continue
-              body = issue.get("body") or ""
-              # Skip only issue bodies with no <!-- EOS:MISSION:BEGIN --> or end marker.
-              if MISSION_BEGIN not in body and MISSION_END not in body:
-                  continue
-              candidates.append({
-                  "issue_number": issue["number"],
-                  "mission": parse_issue_body(body),
-              })
+          issues = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "all-issues.json"), encoding="utf-8"))
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments-by-issue.json"), encoding="utf-8"))
+          # Event-bearing <!-- EOS:EVENT:BEGIN --> issues remain candidates even when <!-- EOS:MISSION:BEGIN --> markers were removed.
+          discovery = discover_repository_mission_candidates(issues, comments)
+          if not discovery.allowed:
+              raise SystemExit("%s: %s" % (discovery.code, discovery.details))
           with open(os.path.join(os.environ["RUNNER_TEMP"], "candidate-seeds.json"), "w", encoding="utf-8") as stream:
-              json.dump(candidates, stream, sort_keys=True, separators=(",", ":"))
+              json.dump(list(discovery.candidates), stream, sort_keys=True, separators=(",", ":"))
           PY
           : > "$RUNNER_TEMP/candidates.ndjson"
           jq -r '.[].issue_number' "$RUNNER_TEMP/candidate-seeds.json" | while read -r issue; do
-            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments-${issue}.json"
+            jq --argjson issue "$issue" '.[] | select(.issue_number == $issue) | .comments' \
+              "$RUNNER_TEMP/candidate-seeds.json" > "$RUNNER_TEMP/comments-${issue}.json"
             ISSUE="$issue" python3 - <<'PY'
           import json
           import os
@@ -207,7 +208,7 @@ jobs:
           done
           jq -s '.' "$RUNNER_TEMP/candidates.ndjson" > "$RUNNER_TEMP/candidates.json"
           matches="$(jq --argjson issue "$ISSUE_NUMBER" '[.[] | select(.issue_number == $issue)] | length' "$RUNNER_TEMP/candidates.json")"
-          [[ "$matches" == "1" ]] || { echo "current issue is not exactly one open EOS mission" >&2; exit 1; }
+          [[ "$matches" == "1" ]] || { echo "current issue is not exactly one state-independent EOS mission" >&2; exit 1; }
           jq --argjson issue "$ISSUE_NUMBER" '.[] | select(.issue_number == $issue) | .mission' "$RUNNER_TEMP/candidates.json" > "$RUNNER_TEMP/mission.json"
           jq --argjson issue "$ISSUE_NUMBER" '.[] | select(.issue_number == $issue) | .comments' "$RUNNER_TEMP/candidates.json" > "$RUNNER_TEMP/comments.json"
           jq --argjson issue "$ISSUE_NUMBER" '.[] | select(.issue_number == $issue) | .actions_runs' "$RUNNER_TEMP/candidates.json" > "$RUNNER_TEMP/runs.json"

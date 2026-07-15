@@ -5,9 +5,9 @@ Status: DRAFT, pending founder review.
 Pinned sources for every document in `docs/governance/`. Doctrine in the
 [Founder Operating Manual](FOUNDER_OPERATING_MANUAL.md) traces to these
 sources; the [reconciliation crosswalk](PR180_RECONCILIATION.md) cites them
-by item ID. Links to unmerged branches are pinned to commit SHAs so they
-remain stable evidence even if the branches move. AI.FO-Demo is a private
-repository; its links resolve only for authorized readers.
+by item ID. Cross-repository links are pinned to commit SHAs so the
+reviewed evidence stays reproducible even as branches move. AI.FO-Demo is a
+private repository; its links resolve only for authorized readers.
 
 Evidence rule reminder: repository evidence overrides earlier prose, merged
 beats unmerged, and pinned drafts are source material, not authority.
@@ -79,18 +79,25 @@ Reviewed head: `73caaddf401717250121276ca3ef7afb5321e5ee`
 
 ## 5. AI.FO-Demo (product repository, merged master)
 
+Reviewed head of `master` for this reconciliation:
+`fb7bf77e10848e4572ebc680c2151b45536466ce` (2026-07-15). Links are pinned to
+that commit so the reconciled evidence stays reproducible. The living
+documents on `master` remain canonical for their domains; if a pinned copy
+and current `master` differ, current `master` governs the domain and this
+index records only what was reviewed.
+
 | Source | Used for |
 |--------|----------|
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/AGENTS.md> | Agent integrity rules, tests as source of truth, signal-provenance triplet, derived-numbers rule, reproducibility P0 (Manual 7, 10) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/README.md> | "The separation is the product" (Manual 4.1) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/ARCHITECTURE.md> | Deterministic math contract, AI boundary negative test, token and data minimization (Manual 4.1, 8, 9) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/SIGNAL_METHODOLOGY.md> | Sole methodology authority; "The engine owns the math" (Manual 1.3, 4.1) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/scope/SNAPSHOT_ON_CLOSE_V1_SCOPE.md> | Doc-first amendment rule, "the demo is the product", multi-tenant from day one (Manual 4.6, 8) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/public-trust-telemetry-APPROACH-2026-06-10.md> | Public-claim integrity: generated never typed, synthetic labeled, round down, staleness flagged (Manual 17) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/VISUAL_IDENTITY.md> | Canonical design contract; visual language must not imply autonomous control of financial truth (Manual 1.3, 17) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/decisions/2026-07-14-category-and-stage-language.md> | Prohibited positioning terms; founder gate on category change (Manual 17) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/decisions/2026-05-18-sealed-snapshot-chronological-order.md> | Refusal of credibility-hole bypasses (Manual 4.6) |
-| <https://github.com/josephmccann/AI.FO-Demo/blob/master/docs/audits/aifo_dataflow_redteam_2026-06-15.md> | Adversarial-review habit, "raw can escape by path" method (Manual 9) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/AGENTS.md> | Agent integrity rules, tests as source of truth, signal-provenance triplet, derived-numbers rule, reproducibility P0 (Manual 7, 10) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/README.md> | "The separation is the product" (Manual 4.1) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/ARCHITECTURE.md> | Deterministic math contract, AI boundary negative test, token and data minimization (Manual 4.1, 8, 9) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/SIGNAL_METHODOLOGY.md> | Sole methodology authority; "The engine owns the math" (Manual 1.3, 4.1) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/scope/SNAPSHOT_ON_CLOSE_V1_SCOPE.md> | Doc-first amendment rule, "the demo is the product", multi-tenant from day one (Manual 4.6, 8) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/public-trust-telemetry-APPROACH-2026-06-10.md> | Public-claim integrity: generated never typed, synthetic labeled, round down, staleness flagged (Manual 17) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/VISUAL_IDENTITY.md> | Canonical design contract; visual language must not imply autonomous control of financial truth (Manual 1.3, 17) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/decisions/2026-07-14-category-and-stage-language.md> | Prohibited positioning terms; founder gate on category change (Manual 17) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/decisions/2026-05-18-sealed-snapshot-chronological-order.md> | Refusal of credibility-hole bypasses (Manual 4.6) |
+| <https://github.com/josephmccann/AI.FO-Demo/blob/fb7bf77e10848e4572ebc680c2151b45536466ce/docs/audits/aifo_dataflow_redteam_2026-06-15.md> | Adversarial-review habit, "raw can escape by path" method (Manual 9) |
 
 ## 6. Superseded or historical inputs
 

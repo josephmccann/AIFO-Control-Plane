@@ -79,6 +79,9 @@
     "ci_reruns": 3
   },
   "transition_roles": {},
+  "recovery_workflow_paths": [
+    ".github/workflows/reusable-orphan-recovery.yml"
+  ],
   "auto_merge_enabled": false,
   "airtable_live_enabled": false,
   "deployment_enabled": false,

@@ -4,6 +4,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from engineering_os import commands as command_kernel
 from engineering_os.canonical import content_sha256
 from engineering_os.commands import (
     authenticate_event_history,
@@ -23,10 +24,13 @@ BOT = "github-actions[bot]"
 RECOVERY_WORKFLOW = ".github/workflows/reusable-orphan-recovery.yml"
 
 
-def audit_event(event_type, actor, role, source_url, occurred_at, sequence, previous, details=None):
+def audit_event(
+    event_type, actor, role, source_url, occurred_at, sequence, previous,
+    details=None, mission_id="aifo-control-plane-101",
+):
     event = {
         "schema_version": "1.0.0",
-        "mission_id": "aifo-control-plane-101",
+        "mission_id": mission_id,
         "sequence": sequence,
         "type": event_type,
         "actor": actor,
@@ -41,17 +45,19 @@ def audit_event(event_type, actor, role, source_url, occurred_at, sequence, prev
     return event
 
 
-def source_comment(comment_id, actor, body, created_at="2026-07-15T10:00:00Z"):
+def source_comment(
+    comment_id, actor, body, created_at="2026-07-15T10:00:00Z", issue=101,
+):
     return {
         "id": comment_id,
         "body": body,
         "created_at": created_at,
-        "html_url": "https://github.com/%s/issues/101#issuecomment-%s" % (REPOSITORY, comment_id),
+        "html_url": "https://github.com/%s/issues/%s#issuecomment-%s" % (REPOSITORY, issue, comment_id),
         "user": {"login": actor},
     }
 
 
-def event_comment(comment_id, events, actor=BOT):
+def event_comment(comment_id, events, actor=BOT, issue=101):
     body = "\n".join(
         "<!-- EOS:EVENT:BEGIN -->\n%s\n<!-- EOS:EVENT:END -->"
         % json.dumps(event, sort_keys=True, separators=(",", ":"))
@@ -61,7 +67,7 @@ def event_comment(comment_id, events, actor=BOT):
         "id": comment_id,
         "body": body,
         "created_at": "2026-07-15T10:00:01Z",
-        "html_url": "https://github.com/%s/issues/101#issuecomment-%s" % (REPOSITORY, comment_id),
+        "html_url": "https://github.com/%s/issues/%s#issuecomment-%s" % (REPOSITORY, issue, comment_id),
         "user": {"login": actor},
     }
 
@@ -123,6 +129,43 @@ def recovery_fixture(recovery_time="2026-07-15T09:15:00Z"):
         event_comment(133, [claim]),
     ]
     return mission, policy, base_comments, orphaned, released, run
+
+
+def claimed_mission_candidate(*, issue=202, paths=None, expires_at="2026-07-15T10:15:00Z"):
+    mission = load_fixture("mission-valid.json")
+    mission["mission_id"] = "aifo-control-plane-%s" % issue
+    mission["assignments"]["producer"]["identity"] = "agent-b"
+    mission["allowed_paths"] = list(paths or ["engineering_os/**"])
+    ready_source = source_comment(
+        issue * 10, "agent-b", "/eos ready", "2026-07-15T08:59:00Z", issue=issue,
+    )
+    ready = audit_event(
+        "mission.ready", "agent-b", "producer", ready_source["html_url"],
+        ready_source["created_at"], 1, None,
+        ready_details(mission, "ready-%s" % issue), mission_id=mission["mission_id"],
+    )
+    claim_source = source_comment(
+        issue * 10 + 1, "agent-b", "/eos claim", "2026-07-15T09:00:00Z", issue=issue,
+    )
+    claim = audit_event(
+        "mission.claimed", "agent-b", "producer", claim_source["html_url"],
+        claim_source["created_at"], 2, ready["event_hash"],
+        {
+            "lease_owner": "agent-b", "lease_nonce": "github-comment-%s" % (issue * 10 + 1),
+            "lease_start": "2026-07-15T09:00:00Z", "lease_expires_at": expires_at,
+            "wall_clock_cap_minutes": 240, "paths": mission["allowed_paths"],
+        },
+        mission_id=mission["mission_id"],
+    )
+    return {
+        "issue_number": issue,
+        "mission": mission,
+        "comments": [
+            ready_source, event_comment(issue * 10 + 2, [ready], issue=issue),
+            claim_source, event_comment(issue * 10 + 3, [claim], issue=issue),
+        ],
+        "actions_runs": [],
+    }
 
 
 class CommandTests(unittest.TestCase):
@@ -240,6 +283,23 @@ class CommandTests(unittest.TestCase):
         )
         self.assertEqual(history.code, "MISSION_NOT_READY")
 
+    def test_malformed_ready_command_fails_stably_before_effective_limit_access(self):
+        for mutation, expected in (
+            (lambda mission, policy: mission.pop("budgets"), "MISSION_NOT_READY"),
+            (lambda mission, policy: mission.__setitem__("budgets", "not-an-object"), "MISSION_NOT_READY"),
+            (lambda mission, policy: policy["default_limits"].pop("model_tokens"), "REPOSITORY_POLICY_INVALID"),
+        ):
+            with self.subTest(expected=expected):
+                mission, policy = valid_context()
+                mutation(mission, policy)
+                source = source_comment(90, "agent-a", "/eos ready")
+                decision = authorize_command_proposal(
+                    [source], mission, policy, repository=REPOSITORY,
+                    command_comment_url=source["html_url"],
+                )
+                self.assertFalse(decision.allowed)
+                self.assertEqual(decision.code, expected)
+
     def test_claim_rejects_invalid_transition_and_projection(self):
         mission, policy = valid_context()
         source = source_comment(10, "agent-a", "/eos claim")
@@ -313,6 +373,39 @@ class CommandTests(unittest.TestCase):
             bundled, mission, policy, repository=REPOSITORY, actions_runs=[wrong_run]
         )
         self.assertEqual(wrong.code, "EVENT_SYSTEM_RUN_INVALID")
+
+    def test_recovery_run_path_uses_versioned_caller_allowlist_and_manual_event(self):
+        mission, policy, comments, orphaned, released, run = recovery_fixture()
+        caller_path = ".github/workflows/mission-recovery-dispatch.yml"
+        policy["recovery_workflow_paths"] = [RECOVERY_WORKFLOW, caller_path]
+        bundled = comments + [event_comment(138, [orphaned, released])]
+
+        direct = authenticate_event_history(
+            bundled, mission, policy, repository=REPOSITORY, actions_runs=[run],
+        )
+        self.assertTrue(direct.allowed, direct.code)
+
+        caller = dict(run, name="Mission recovery dispatch", path=caller_path)
+        configured = authenticate_event_history(
+            bundled, mission, policy, repository=REPOSITORY, actions_runs=[caller],
+        )
+        self.assertTrue(configured.allowed, configured.code)
+
+        unconfigured_policy = copy.deepcopy(policy)
+        unconfigured_policy["recovery_workflow_paths"] = [RECOVERY_WORKFLOW]
+        unconfigured = authenticate_event_history(
+            bundled, mission, unconfigured_policy, repository=REPOSITORY,
+            actions_runs=[caller],
+        )
+        self.assertEqual(unconfigured.code, "EVENT_SYSTEM_RUN_INVALID")
+
+        for forbidden_event in ("schedule", "workflow_call"):
+            with self.subTest(event=forbidden_event):
+                forbidden = authenticate_event_history(
+                    bundled, mission, policy, repository=REPOSITORY,
+                    actions_runs=[dict(caller, event=forbidden_event)],
+                )
+                self.assertEqual(forbidden.code, "EVENT_SYSTEM_RUN_INVALID")
 
     def test_system_recovery_must_be_atomic_consecutive_matching_pair(self):
         mission, policy, comments, orphaned, released, run = recovery_fixture()
@@ -407,6 +500,75 @@ class CommandTests(unittest.TestCase):
         )
         self.assertTrue(parked.allowed, parked.code)
 
+    def test_repository_history_authentication_fails_closed_on_malformed_candidate(self):
+        mission, policy = valid_context()
+        candidate = claimed_mission_candidate()
+        authenticated = command_kernel.authenticate_repository_lease_events(
+            [candidate], policy, repository=REPOSITORY,
+        )
+        self.assertTrue(authenticated.allowed, authenticated.code)
+        self.assertEqual(authenticated.events[-1]["type"], "mission.claimed")
+
+        malformed = copy.deepcopy(candidate)
+        malformed["comments"][-1]["user"]["login"] = "agent-b"
+        denied = command_kernel.authenticate_repository_lease_events(
+            [malformed], policy, repository=REPOSITORY,
+        )
+        self.assertFalse(denied.allowed)
+        self.assertEqual(denied.code, "REPOSITORY_MISSION_HISTORY_INVALID")
+
+        invalid_policy = copy.deepcopy(policy)
+        invalid_policy["unversioned_escape"] = True
+        invalid = command_kernel.authenticate_repository_lease_events(
+            [], invalid_policy, repository=REPOSITORY,
+        )
+        self.assertFalse(invalid.allowed)
+        self.assertEqual(invalid.code, "REPOSITORY_POLICY_INVALID")
+
+    def test_claim_considers_overlapping_active_leases_from_other_missions(self):
+        mission, policy = valid_context()
+        ready_source = source_comment(170, "agent-a", "/eos ready", "2026-07-15T10:00:00Z")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-170"),
+        )
+        claim_source = source_comment(171, "agent-a", "/eos claim", "2026-07-15T10:01:00Z")
+        comments = [ready_source, event_comment(172, [ready]), claim_source]
+
+        for expires_at in ("2026-07-15T10:15:00Z", "2026-07-15T09:15:00Z"):
+            with self.subTest(expires_at=expires_at):
+                repository_history = command_kernel.authenticate_repository_lease_events(
+                    [claimed_mission_candidate(expires_at=expires_at)],
+                    policy, repository=REPOSITORY,
+                )
+                decision = authorize_command_proposal(
+                    comments, mission, policy, repository=REPOSITORY,
+                    command_comment_url=claim_source["html_url"],
+                    repository_lease_events=repository_history.events,
+                )
+                self.assertFalse(decision.allowed)
+                self.assertEqual(decision.code, "LEASE_PATH_CONFLICT")
+
+    def test_claim_allows_authenticated_non_overlapping_repository_lease(self):
+        mission, policy = valid_context()
+        ready_source = source_comment(180, "agent-a", "/eos ready", "2026-07-15T10:00:00Z")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-180"),
+        )
+        claim_source = source_comment(181, "agent-a", "/eos claim", "2026-07-15T10:01:00Z")
+        repository_history = command_kernel.authenticate_repository_lease_events(
+            [claimed_mission_candidate(paths=["unrelated/**"])],
+            policy, repository=REPOSITORY,
+        )
+        decision = authorize_command_proposal(
+            [ready_source, event_comment(182, [ready]), claim_source],
+            mission, policy, repository=REPOSITORY,
+            command_comment_url=claim_source["html_url"],
+            repository_lease_events=repository_history.events,
+        )
+        self.assertTrue(decision.allowed, decision.code)
+
     def test_pagination_and_recovery_policy_are_pure_and_fail_closed(self):
         self.assertEqual(flatten_paginated([[{"id": 1}], [{"id": 2}]]), [{"id": 1}, {"id": 2}])
         policy = load_fixture("policy-control-plane.json")
@@ -414,6 +576,7 @@ class CommandTests(unittest.TestCase):
         self.assertFalse(recovery_mutation_allowed("workflow_dispatch", False, policy))
         policy["orphan_recovery_enabled"] = True
         self.assertTrue(recovery_mutation_allowed("workflow_dispatch", False, policy))
+        self.assertFalse(recovery_mutation_allowed("workflow_call", False, policy))
         self.assertFalse(recovery_mutation_allowed("workflow_dispatch", True, policy))
 
     def test_transition_wrapper_emits_proposal_without_mutation(self):
@@ -438,6 +601,16 @@ class CommandTests(unittest.TestCase):
         self.assertIn("default_branch", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertNotIn("pull-requests: write", workflow)
+
+    def test_claim_adapter_refetches_paginated_repository_histories_under_claim_lock(self):
+        workflow = (ROOT / ".github/workflows/mission-command.yml").read_text(encoding="utf-8")
+        self.assertIn("group: eos-claim-${{ github.repository }}", workflow)
+        self.assertIn("issues?state=open&per_page=100", workflow)
+        self.assertIn("--paginate --slurp", workflow)
+        self.assertIn("authenticate-repository-leases", workflow)
+        self.assertIn("--repository-leases", workflow)
+        self.assertIn("EOS:MISSION:BEGIN", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
 
     def test_orphan_recovery_is_explicit_policy_gated_and_per_mission(self):
         workflow = (ROOT / ".github/workflows/reusable-orphan-recovery.yml").read_text(encoding="utf-8")

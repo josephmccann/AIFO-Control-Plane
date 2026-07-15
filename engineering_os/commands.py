@@ -58,9 +58,7 @@ _EVENT_MARKER = re.compile(
     re.S,
 )
 _BOT = "github-actions[bot]"
-_RECOVERY_WORKFLOW_NAME = "Reusable orphan recovery"
-_RECOVERY_WORKFLOW_PATH = ".github/workflows/reusable-orphan-recovery.yml"
-_RECOVERY_EVENTS = frozenset(("workflow_call", "workflow_dispatch"))
+_RECOVERY_EVENTS = frozenset(("workflow_dispatch",))
 
 
 @dataclass(frozen=True)
@@ -74,6 +72,14 @@ class HistoryDecision:
 
 @dataclass(frozen=True)
 class ProposalDecision:
+    allowed: bool
+    code: str
+    events: Tuple[Dict[str, Any], ...] = ()
+    details: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RepositoryLeaseDecision:
     allowed: bool
     code: str
     events: Tuple[Dict[str, Any], ...] = ()
@@ -112,7 +118,7 @@ def recovery_mutation_allowed(event_name: str, dry_run: bool, policy: Mapping[st
     """Permit mutation only for an explicit invocation and versioned opt-in."""
 
     return (
-        event_name in {"workflow_call", "workflow_dispatch"}
+        event_name == "workflow_dispatch"
         and dry_run is False
         and isinstance(policy, Mapping)
         and policy.get("orphan_recovery_enabled") is True
@@ -223,7 +229,10 @@ def _extract_event_comments(
     return None, events, groups
 
 
-def validate_recovery_run(run: Mapping[str, Any], repository: str, source_url: str) -> bool:
+def validate_recovery_run(
+    run: Mapping[str, Any], repository: str, source_url: str,
+    policy: Mapping[str, Any],
+) -> bool:
     """Authenticate one recovery source against independently fetched run metadata."""
 
     if not isinstance(run, Mapping) or not isinstance(repository, str):
@@ -235,11 +244,14 @@ def validate_recovery_run(run: Mapping[str, Any], repository: str, source_url: s
         else None
     )
     run_repository = run.get("repository")
+    allowed_paths = policy.get("recovery_workflow_paths", ())
     return (
         source_url == expected_url
         and run.get("html_url") == expected_url
-        and run.get("name") == _RECOVERY_WORKFLOW_NAME
-        and run.get("path") == _RECOVERY_WORKFLOW_PATH
+        and isinstance(run.get("name"), str)
+        and bool(run["name"].strip())
+        and isinstance(allowed_paths, list)
+        and run.get("path") in allowed_paths
         and run.get("event") in _RECOVERY_EVENTS
         and isinstance(run_repository, Mapping)
         and run_repository.get("full_name") == repository
@@ -393,7 +405,7 @@ def authenticate_event_history(
             if not matching_runs:
                 return _deny_history("EVENT_SYSTEM_RUN_NOT_FOUND", accepted, projection)
             if len(matching_runs) != 1 or not validate_recovery_run(
-                matching_runs[0], repository, source_url
+                matching_runs[0], repository, source_url, policy
             ):
                 return _deny_history("EVENT_SYSTEM_RUN_INVALID", accepted, projection)
         else:
@@ -487,6 +499,65 @@ def authenticate_event_history(
     return HistoryDecision(True, "EVENT_HISTORY_AUTHENTICATED", tuple(accepted), projection)
 
 
+def authenticate_repository_lease_events(
+    candidates: Sequence[Mapping[str, Any]],
+    policy: Mapping[str, Any],
+    *,
+    repository: str,
+) -> RepositoryLeaseDecision:
+    """Authenticate every parsed open-mission history before exposing leases."""
+
+    if not isinstance(candidates, list):
+        return RepositoryLeaseDecision(False, "REPOSITORY_MISSION_INPUT_INVALID")
+    if not isinstance(policy, Mapping) or validate_document("repository-policy", dict(policy)):
+        return RepositoryLeaseDecision(False, "REPOSITORY_POLICY_INVALID")
+    lease_events: List[Dict[str, Any]] = []
+    seen_issues = set()
+    seen_missions = set()
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            return RepositoryLeaseDecision(False, "REPOSITORY_MISSION_INPUT_INVALID")
+        issue_number = candidate.get("issue_number")
+        mission = candidate.get("mission")
+        comments = candidate.get("comments")
+        actions_runs = candidate.get("actions_runs")
+        mission_id = mission.get("mission_id") if isinstance(mission, Mapping) else None
+        if (
+            not isinstance(issue_number, int)
+            or isinstance(issue_number, bool)
+            or issue_number < 1
+            or issue_number in seen_issues
+            or not isinstance(mission_id, str)
+            or not mission_id
+            or mission_id in seen_missions
+            or not isinstance(comments, list)
+            or not isinstance(actions_runs, list)
+        ):
+            return RepositoryLeaseDecision(
+                False, "REPOSITORY_MISSION_INPUT_INVALID",
+                details={"issue_number": issue_number},
+            )
+        seen_issues.add(issue_number)
+        seen_missions.add(mission_id)
+        history = authenticate_event_history(
+            comments, mission, policy, repository=repository,
+            actions_runs=actions_runs,
+        )
+        if not history.allowed:
+            return RepositoryLeaseDecision(
+                False, "REPOSITORY_MISSION_HISTORY_INVALID",
+                details={"issue_number": issue_number, "cause": history.code},
+            )
+        lease_events.extend(
+            event for event in history.events if event.get("type") in {
+                "mission.claimed", "lease.heartbeat", "mission.orphaned", "mission.released",
+            }
+        )
+    return RepositoryLeaseDecision(
+        True, "REPOSITORY_LEASE_EVENTS_AUTHENTICATED", tuple(lease_events)
+    )
+
+
 def _utc_text(value: datetime) -> str:
     normalized = value.astimezone(timezone.utc)
     timespec = "microseconds" if normalized.microsecond else "seconds"
@@ -501,6 +572,7 @@ def authorize_command_proposal(
     repository: str,
     command_comment_url: str,
     actions_runs: Sequence[Mapping[str, Any]] = (),
+    repository_lease_events: Sequence[Mapping[str, Any]] = (),
 ) -> ProposalDecision:
     """Authorize one authenticated command and return append-only audit events."""
 
@@ -528,6 +600,8 @@ def authorize_command_proposal(
         _rfc3339(occurred_at)
     except (TypeError, ValueError):
         return ProposalDecision(False, "EVENT_TIMESTAMP_INVALID")
+    if validate_ready(dict(mission)):
+        return ProposalDecision(False, "MISSION_NOT_READY")
     caps = effective_limits(mission, policy)
     measured = derive_measurements(history.events, occurred_at)
     limit_decision = evaluate_limits(
@@ -568,6 +642,17 @@ def authorize_command_proposal(
     lease_events = [event for event in history.events if event.get("type") in {
         "mission.claimed", "lease.heartbeat", "mission.orphaned", "mission.released",
     }]
+    if not isinstance(repository_lease_events, (list, tuple)) or any(
+        not isinstance(event, Mapping) for event in repository_lease_events
+    ):
+        return ProposalDecision(False, "REPOSITORY_LEASE_EVENTS_INVALID")
+    lease_events.extend(
+        dict(event) for event in repository_lease_events
+        if event.get("mission_id") != mission.get("mission_id")
+        and event.get("type") in {
+            "mission.claimed", "lease.heartbeat", "mission.orphaned", "mission.released",
+        }
+    )
     lifecycle = None
     if command == "claim":
         wall_clock_cap = caps["wall_clock_minutes"]
@@ -754,6 +839,37 @@ def _authenticate_history(argv: Optional[Sequence[str]] = None) -> int:
     return 0 if decision.allowed else 1
 
 
+def _authenticate_repository_leases(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Authenticate parsed open-mission histories and emit repository leases"
+    )
+    parser.add_argument("--candidates", required=True)
+    parser.add_argument("--policy", required=True)
+    parser.add_argument("--repository", required=True)
+    parser.add_argument("--events-output", required=True)
+    arguments = parser.parse_args(argv)
+    try:
+        with open(arguments.candidates, encoding="utf-8") as stream:
+            candidates = json.load(stream)
+        with open(arguments.policy, encoding="utf-8") as stream:
+            policy = json.load(stream)
+        decision = authenticate_repository_lease_events(
+            candidates, policy, repository=arguments.repository
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        parser.error(str(error))
+    if decision.allowed:
+        with open(arguments.events_output, "w", encoding="utf-8") as stream:
+            json.dump(list(decision.events), stream, sort_keys=True, separators=(",", ":"))
+            stream.write("\n")
+    json.dump({
+        "allowed": decision.allowed, "code": decision.code,
+        "details": decision.details,
+    }, sys.stdout, sort_keys=True, separators=(",", ":"))
+    sys.stdout.write("\n")
+    return 0 if decision.allowed else 1
+
+
 def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Authorize one GitHub /eos command proposal")
     parser.add_argument("--comments", required=True)
@@ -763,6 +879,7 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--command-comment-url", required=True)
     parser.add_argument("--body-output", required=True)
+    parser.add_argument("--repository-leases")
     arguments = parser.parse_args(argv)
     try:
         with open(arguments.comments, encoding="utf-8") as stream:
@@ -774,10 +891,16 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
             policy = json.load(stream)
         with open(arguments.runs, encoding="utf-8") as stream:
             actions_runs = json.load(stream)
+        if arguments.repository_leases:
+            with open(arguments.repository_leases, encoding="utf-8") as stream:
+                repository_lease_events = json.load(stream)
+        else:
+            repository_lease_events = []
         decision = authorize_command_proposal(
             comments, mission, policy, repository=arguments.repository,
             command_comment_url=arguments.command_comment_url,
             actions_runs=actions_runs,
+            repository_lease_events=repository_lease_events,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.error(str(error))
@@ -797,7 +920,7 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments:
-        raise SystemExit("expected transition, validate-lease, recover-orphans, authenticate-event-history, or propose-command")
+        raise SystemExit("expected transition, validate-lease, recover-orphans, authenticate-event-history, authenticate-repository-leases, or propose-command")
     command, rest = arguments[0], arguments[1:]
     if command == "transition":
         return _transition(rest)
@@ -807,6 +930,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _recover_orphans(rest)
     if command == "authenticate-event-history":
         return _authenticate_history(rest)
+    if command == "authenticate-repository-leases":
+        return _authenticate_repository_leases(rest)
     if command == "propose-command":
         return _propose_command(rest)
     raise SystemExit("unknown command: %s" % command)

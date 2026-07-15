@@ -96,6 +96,14 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("SCHEMA_ENUM", codes)
         self.assertIn("SCHEMA_ADDITIONAL_PROPERTY", codes)
 
+    def test_policy_schema_accepts_closed_recovery_workflow_path_allowlist(self):
+        policy = load_fixture("policy-control-plane.json")
+        policy["recovery_workflow_paths"] = [
+            ".github/workflows/reusable-orphan-recovery.yml",
+            ".github/workflows/mission-recovery-dispatch.yml",
+        ]
+        self.assertEqual(validate_document("repository-policy", policy), [])
+
     def test_unknown_document_kind_fails_closed(self):
         violations = validate_document("not-a-contract", {})
         self.assertEqual([item.code for item in violations], ["SCHEMA_KIND_UNKNOWN"])

@@ -27,7 +27,9 @@ transition authority, and full hash chain. A `mission.ready` event binds the
 canonical hash of the complete mission declaration, so later issue edits make
 the history invalid. System recovery records cannot authenticate themselves:
 the kernel requires independently fetched metadata for the exact same-repository
-Actions run, workflow name and path, and allowed invocation event. Recovery is
+Actions run, a manually dispatched caller path in the versioned
+`recovery_workflow_paths` allowlist, and a non-empty caller workflow name. A
+`workflow_call` label is not accepted as independent authority. Recovery is
 accepted only as a consecutive `mission.orphaned`/`mission.released` pair in one
 bot comment that exactly matches a fresh replay of the expired lease. Event JSON
 never grants its own actor identity or role.
@@ -41,7 +43,13 @@ adapters added in later packages may propose or append events only after the
 pure kernel validates complete authenticated input.
 
 Mission commands and explicit orphan recovery serialize on the same
-repository-and-issue concurrency key. Scheduled orphan discovery is always
+repository-and-issue concurrency key. Claims additionally serialize on a
+repository-wide claim lock. Inside that lock, the adapter re-fetches every open
+EOS mission issue and its complete paginated history, authenticates all of them,
+and exposes their lease events to conflict evaluation. An expired lease remains
+conflicting until its authenticated release. Malformed candidate mission
+declarations or histories fail the repository snapshot closed; only issue bodies
+with no EOS mission marker are skipped. Scheduled orphan discovery is always
 read-only. Recovery mutation additionally requires a non-dry manual or reusable
 workflow invocation and the versioned `orphan_recovery_enabled` policy flag,
 which is false by default. Recovery re-fetches the chain, referenced Actions run

@@ -11,6 +11,7 @@
   "required_status_checks": ["terraform-validate", "engineering-os"],
   "default_limits": {"model_cost_usd": 25.0, "model_tokens": 250000, "wall_clock_minutes": 240, "remediation_cycles": 2, "concurrent_agents": 4, "ci_reruns": 3},
   "transition_roles": {},
+  "recovery_workflow_paths": [".github/workflows/reusable-orphan-recovery.yml"],
   "auto_merge_enabled": false,
   "airtable_live_enabled": false,
   "deployment_enabled": false,

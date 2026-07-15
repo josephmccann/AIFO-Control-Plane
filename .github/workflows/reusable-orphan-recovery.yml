@@ -199,7 +199,7 @@ jobs:
           if not recovery_mutation_allowed(os.environ["EVENT_NAME"], dry_run, policy):
               raise SystemExit("live recovery mutation gate is closed")
           run = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "current-run.json"), encoding="utf-8"))
-          if not validate_recovery_run(run, os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_URL"]):
+          if not validate_recovery_run(run, os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_URL"], policy):
               raise SystemExit("current recovery workflow run metadata is invalid")
           PY
           python3 -m engineering_os.commands authenticate-event-history \

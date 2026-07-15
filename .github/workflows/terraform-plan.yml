@@ -62,11 +62,58 @@ jobs:
         id: plan
         working-directory: terraform/environments/control-plane
         run: |
+          plan_output="$(mktemp)"
           set +e
-          terraform plan -no-color -input=false -detailed-exitcode
-          exit_code=$?
+          terraform plan -no-color -input=false -detailed-exitcode 2>&1 | tee "$plan_output"
+          exit_code=${PIPESTATUS[0]}
+          set -e
+
+          add_count=0
+          change_count=0
+          destroy_count=0
+          plan_summary="$(grep -E '^Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy\.$' "$plan_output" | tail -n 1 || true)"
+
+          if [ -n "$plan_summary" ]; then
+            add_count="$(printf '%s\n' "$plan_summary" | sed -E 's/^Plan: ([0-9]+) to add, ([0-9]+) to change, ([0-9]+) to destroy\.$/\1/')"
+            change_count="$(printf '%s\n' "$plan_summary" | sed -E 's/^Plan: ([0-9]+) to add, ([0-9]+) to change, ([0-9]+) to destroy\.$/\2/')"
+            destroy_count="$(printf '%s\n' "$plan_summary" | sed -E 's/^Plan: ([0-9]+) to add, ([0-9]+) to change, ([0-9]+) to destroy\.$/\3/')"
+          fi
+
+          if [ "$exit_code" -eq 0 ]; then
+            result="clean"
+          elif [ "$exit_code" -eq 2 ]; then
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              result="proposed change"
+            else
+              result="unexpected drift"
+            fi
+          else
+            result="plan failed"
+          fi
+
           echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          echo "add_count=${add_count}" >> "$GITHUB_OUTPUT"
+          echo "change_count=${change_count}" >> "$GITHUB_OUTPUT"
+          echo "destroy_count=${destroy_count}" >> "$GITHUB_OUTPUT"
+          echo "result=${result}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Terraform Plan Summary"
+            echo
+            echo "- Terraform exit code: \`${exit_code}\`"
+            echo "- Adds: \`${add_count}\`"
+            echo "- Changes: \`${change_count}\`"
+            echo "- Destroys: \`${destroy_count}\`"
+            echo "- Result: \`${result}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$exit_code" -eq 1 ]; then
             exit 1
           fi
+
+          if [ "$exit_code" -eq 2 ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "::error::Terraform proposed changes during a main/manual verification run. Main must match deployed infrastructure."
+            exit 1
+          fi
+
           exit 0

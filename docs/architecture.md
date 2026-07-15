@@ -190,6 +190,7 @@ The repository-grounded recommendation for the first approximately 10 customer c
 - CloudWatch/CloudTrail/GuardDuty provide a minimal unified evidence plane.
 - A simple SQS worker is deferred until current synchronous jobs are idempotent and measured evidence requires it.
 - Merged product PR #186 adds Stripe egress, tenant-scoped external observations and account/calibration surfaces. It fits the same core topology but requires per-tenant connector authorization, per-company commercial account truth and explicit observation correction lineage before multi-company use.
+- The current Replit demo is validated at `3329c99` with connectors disabled. Its successful additive migration does not change the AWS topology, but the canceled destructive automatic schema proposal requires one reviewed migration ledger and a hard stop on destructive diffs. Observed transient startup 500s require distinct readiness stabilization before promotion.
 
 Kubernetes, microservices, Aurora, Redis and active-active multi-Region are deliberately deferred. Exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention and monthly budget remain Proposed pending workload, recovery and current-invoice evidence.
 

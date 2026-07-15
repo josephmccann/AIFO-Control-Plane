@@ -34,6 +34,7 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-041 | Complete product-runtime cost model | Current/hybrid/AWS assumptions, ranges, pricing anchors, thresholds and risks | Done; invoices/founder approval pending |
 | WQ-042 | Define product-runtime migration readiness | Objective gates name evidence, owner, approver, status and blocking effect | Done; gates not executed |
 | WQ-047 | Refresh architecture package for merged product PR #186 | Product baseline `3329c99`; connector/account delta, threat/gate changes and 10-item prerequisite plan | Done; documentation only |
+| WQ-048 | Resolve merged-baseline demo deployment dependency | Live `3329c99`, transactional `0011`, public/auth smoke, disabled connectors, zero connector data, rollback `30a8ed2` retained | Done; destructive schema proposal/startup health findings recorded |
 
 ## In Progress
 
@@ -52,4 +53,4 @@ None.
 
 ## Next Narrow Workstream
 
-Implement exactly the first dependency in the documented product plan in a dedicated `AI.FO-Demo` worktree: one controlled schema-migration ledger and removal of non-fatal startup DDL, with empty/upgrade/repeat/concurrency/schema-compatibility tests. Do not create AWS runtime infrastructure or use customer data.
+After a separately scoped product-code authorization, implement exactly prerequisite 1 in a dedicated `AI.FO-Demo` worktree: one controlled migration ledger, independent development/production baselines, explicit generated-SQL review, destructive-diff rejection and removal of non-fatal startup DDL. Do not deploy, create AWS runtime infrastructure, enable connectors or use customer data.

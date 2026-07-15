@@ -10,7 +10,7 @@ PostgreSQL holds users, sessions, QBO ciphertext, ingestion state, metrics, sign
 
 ## Decision
 
-Use private encrypted managed RDS PostgreSQL, deletion protection and restore tests. The current planning scenario is Multi-AZ with one standby, `db.t4g.medium`, 50 GiB gp3 and 35-day PITR; class, availability shape, storage, RPO/RTO and retention remain Proposed until workload/recovery evidence is approved. Use one migration ledger, include connector/account tables in tenant/restore manifests, and remove runtime DDL before staging.
+Use private encrypted managed RDS PostgreSQL, deletion protection and restore tests. The current planning scenario is Multi-AZ with one standby, `db.t4g.medium`, 50 GiB gp3 and 35-day PITR; class, availability shape, storage, RPO/RTO and retention remain Proposed until workload/recovery evidence is approved. Use one migration ledger, independently baseline source/target schemas, review generated SQL, stop on destructive/unexplained diffs, include connector/account tables in tenant/restore manifests, and remove runtime DDL before staging.
 
 ## Alternatives Considered
 

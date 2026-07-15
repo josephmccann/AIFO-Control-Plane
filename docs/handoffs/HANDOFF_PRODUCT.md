@@ -66,6 +66,8 @@ git diff --check
 
 PR #186 is current canonical baseline. Infrastructure implications are tracked in the runtime inventory, threat model, migration gates and prerequisite hardening plan.
 
+Deployment checkpoint: the current Replit demo is healthy at `3329c99`; migration `0011` applied transactionally; public/authenticated smoke passed; connectors are disabled; Stripe is unconfigured; QBO sync was not run; connector/observation tables are empty; rollback `30a8ed2` was retained but not exercised. A destructive automatic schema proposal was canceled before promotion, and transient startup HTTP 500 responses preceded stable health. Future publishes require reviewed generated SQL and readiness stabilization.
+
 ## Infrastructure Implications
 
 - Do not build product runtime infrastructure until the AWS migration scope is approved.

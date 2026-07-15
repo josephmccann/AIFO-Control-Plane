@@ -25,12 +25,14 @@ Do not launch the real cohort on the current runtime. The current evidence does 
 
 AWS does not solve product-layer risk. Tenant isolation, QBO key rotation, session/logout/CSRF controls, upload quarantine, deletion, schema discipline, provider minimization and fail-closed verification must be implemented before production. The detailed dependency/acceptance/rollback plan is [Product Runtime Prerequisite Hardening](../superpowers/plans/2026-07-15-product-runtime-prerequisite-hardening.md).
 
+The current demo deployment dependency is resolved: Replit is healthy at `3329c99`, migration `0011` applied transactionally, and public/authenticated smoke passed with connectors disabled and zero connector data. This unblocks prerequisite 1 when separately authorized. It also exposed two required controls: automatic schema diffs can propose destructive drops, and startup health can return transient HTTP 500 before stabilizing. See the [deployment checkpoint](../product-demo-deployment-checkpoint-3329c99.md).
+
 ## 3. What Must Happen Before The First Cohort
 
 1. Approve the requirements and ADR set.
 2. Prove ownership/recovery of the selected product domain and exact Intuit callbacks.
 3. Obtain acceptable Anthropic commercial data terms/ZDR and disable or replace the GMI verifier unless precise no-training/retention/subprocessor terms are approved.
-4. Implement one schema-migration path, readiness, tenant integration tests/RLS decision, QBO keyring rotation, session hardening, upload integrity/quarantine, deletion, structured redaction and durable audit events.
+4. Implement one schema-migration path with independently baselined environments, exact generated-SQL review and destructive-diff stop conditions; then implement liveness/readiness stabilization before the remaining tenant, QBO, session, upload, deletion, redaction and provider controls.
 5. Build the product as a pinned, immutable, scanned container and versioned static artifact.
 6. After separate resource/cost approval, validate staging using only synthetic/sanitized data.
 7. Restore the source and target database, reconcile object checksums, test QBO sandbox/OAuth refresh, load/failure/monitoring/rollback, and complete founder recovery.
@@ -96,13 +98,14 @@ No production data, token, DNS or callback moves during the architecture mission
 3. Current DB/object backup and restore are unproven.
 4. Tenant isolation depends on application predicates and a broad global admin.
 5. One unversioned QBO encryption key has no rotation path.
-6. Fragmented/startup migrations can create mixed schema/application state.
+6. Fragmented/startup migrations can create mixed schema/application state; Replit has already proposed destructive drops from environment schema divergence, though the publish was safely canceled.
 7. No complete customer deletion or backup-expiry workflow exists.
 8. Upload type/integrity/malware controls are incomplete.
 9. Logging can expose identifiers/provider content and is not centrally durable.
 10. The merged Stripe connector uses one deployment-wide restricted key assigned to one company; this is not a 10-company authorization model.
 11. Commercial plan/billing/support metadata is deployment-wide environment configuration, not authoritative per-company state.
 12. Current deployment and nightly validation depend on external platform/founder-workstation state outside Git.
+13. Startup health can return transient HTTP 500 before stabilizing, so promotion needs a separate readiness contract and consecutive-success window.
 
 ## 11. Alternatives Rejected Or Deferred
 
@@ -143,4 +146,4 @@ Stop for any Terraform apply/destroy; AWS/IAM/Scheduler/host/resource mutation; 
 
 ## 15. Recommended Next Execution Workstream
 
-Execute exactly one next workstream: **controlled schema migration implementation in a dedicated AI.FO-Demo worktree**, the first dependency in the approved [prerequisite hardening plan](../superpowers/plans/2026-07-15-product-runtime-prerequisite-hardening.md). It must establish one migration ledger and eliminate non-fatal startup DDL without deploying or handling customer data.
+Execute exactly one next workstream, only after a separately scoped product-code authorization: **controlled schema migration and publish-safety implementation in a dedicated AI.FO-Demo worktree**. Establish one ledger, independent development/production schema baselines, reviewed generated SQL, destructive-diff rejection and removal of non-fatal startup DDL. Do not deploy, enable connectors, configure Stripe, run QBO sync or handle customer data. Readiness stabilization follows as prerequisite 2.

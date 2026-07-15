@@ -4,6 +4,10 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Recorded successful Replit demo deployment of product `3329c99`, transactional migration `0011`, clean connector schema/data state, passed public/authenticated smoke and retained rollback SHA `30a8ed2`.
+- Documented the canceled destructive Replit schema-diff proposal and made exact generated-SQL review, independent environment baselines and destructive-diff rejection mandatory migration controls.
+- Moved startup readiness/health stabilization directly behind controlled migrations after observed transient startup HTTP 500 responses.
+- Marked the demo deployment dependency resolved and prerequisite 1 unblocked for a separately authorized product-code mission; no product or AWS changes were made here.
 - Refreshed the product baseline to merged `AI.FO-Demo` PR #186 at `3329c99beb0713269b54bc5fd6a7fb39bf44f398` and incorporated connector, Stripe, account, observation and calibration implementation evidence.
 - Added the ordered 10-item product prerequisite hardening plan with exact merged files, dependencies, acceptance tests, migration/rollback, stage/data blockers, PR #186 overlap and ADR requirements.
 - Recorded AWS-before-customer-data as the approved strategic direction while keeping exact RDS size, NAT topology, hostname, RPO/RTO, PITR retention, recurring budget and resource parameters Proposed.

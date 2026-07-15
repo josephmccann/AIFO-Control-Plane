@@ -133,6 +133,8 @@ The proposed product security model and structured threat register are in [secur
 - Add versioned QBO token-encryption keys and tested re-encryption/revocation.
 - Add customer deletion, upload quarantine/checksum/malware controls, structured log redaction and durable audit events.
 - Replace fragmented/startup schema mutation with one audited migration path.
+- Independently baseline development/production schemas, explicitly review generated SQL, and stop on destructive or unexplained automatic diffs.
+- Separate liveness from schema/dependency readiness and require bounded startup stabilization before promotion.
 - Restore database and objects and complete a founder recovery exercise before production.
 
 Proposed AWS controls include a dedicated production member account, private ECS/RDS/S3, KMS, Secrets Manager/task roles, WAF, CloudTrail/GuardDuty, immutable artifacts and an enforceable founder deployment boundary. The managed-AWS strategic direction is approved, but none of these product controls or resources is deployed or resource-approved.

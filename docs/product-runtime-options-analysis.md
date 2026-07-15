@@ -41,10 +41,10 @@ Continue the Replit application-router/autoscale deployment, current PostgreSQL 
 | Dimension | Finding |
 | --- | --- |
 | Security | Platform can keep TLS and secrets, but workload/storage credentials remain static, tenant isolation remains application-only, and provider/DPA gaps remain. Precise production controls are outside the repository. |
-| Reliability | Replit autoscale can absorb variable traffic, but the repository does not prove warm-up behavior for long QBO/AI calls, multi-instance startup safety, database HA, or dependency-aware readiness. |
-| Recoverability | No current database/object restore evidence. Replit and DB-provider backup capabilities could improve this, but founder-owned export, restore, and platform-exit evidence would still be required. |
+| Reliability | Replit autoscale can absorb variable traffic and `3329c99` stabilized successfully, but transient startup HTTP 500 responses prove that warm-up/readiness behavior is not controlled. Long QBO/AI calls, multi-instance startup safety and database HA remain unproven. |
+| Recoverability | Current rollback SHA is now identified and one additive migration deployed, but rollback was not exercised and database/object restore remains unproven. Founder-owned export, restore and platform-exit evidence are still required. |
 | Operational complexity | Lowest near-term infrastructure burden and fastest to leave unchanged. The hidden burden is manual evidence collection across Replit, database, R2, registrar, Intuit, and two AI providers. |
-| Reproducibility/rollback | Build is reproducible; deployment configuration, revision promotion, schema ordering, and rollback are not fully in Git. |
+| Reproducibility/rollback | Build is reproducible and exact live/rollback SHAs are known; deployment configuration, revision promotion, schema ordering and rollback execution are not fully in Git. Replit proposed destructive drops from schema divergence before the operator canceled promotion. |
 | Auditability | Application/admin actions and platform changes do not have a repository-grounded, centralized audit design. |
 | Vendor lock-in | Replit-specific deployment metadata and external platform configuration. R2 API is S3-compatible, but current credentials and bucket controls are provider-specific. |
 | Customer-data exposure | Same Anthropic/GMI disclosure as other options; GMI is currently unacceptable for customer data without contract changes. |
@@ -60,7 +60,7 @@ Continue the Replit application-router/autoscale deployment, current PostgreSQL 
 
 ### Why Not Recommended
 
-The work needed to make this safe does not create founder-controlled infrastructure recovery and leaves critical operational facts outside Git. It is appropriate as a time-bounded synthetic demo, not as the first real-customer system of record.
+The work needed to make this safe does not create founder-controlled infrastructure recovery and leaves critical operational facts outside Git. The successful `3329c99` deployment narrows short-term deployment uncertainty and unblocks prerequisite design, but schema automation and startup readiness exposed additional platform-owned controls. It remains appropriate as a time-bounded synthetic demo, not as the first real-customer system of record.
 
 ## Option B: Hybrid Architecture
 
@@ -147,7 +147,7 @@ Hybrid reduces commitment but maximizes day-two cognitive load. Its only justifi
 
 1. Strategic AWS timing is approved. Approve remaining requirements/ADRs; resolve domain ownership, retention, provider terms, production-account boundary, per-tenant connector authorization, commercial account truth and observation-history semantics.
 2. Make product runtime independently buildable as an immutable container and convert schema changes to a single reviewed migration path.
-3. Implement the ordered product prerequisites: controlled migrations, QBO keyring rotation, tenant/account/connector integration tests and enforcement, session hardening, upload integrity/quarantine, logging redaction, deletion, AI/verifier fail-closed behavior, readiness and reproducible container artifact.
+3. Implement the ordered product prerequisites: controlled migrations/publish safety, readiness stabilization, QBO keyring rotation, tenant/account/connector integration tests and enforcement, session hardening, upload integrity/quarantine, logging redaction, deletion, AI/verifier fail-closed behavior and reproducible container artifact.
 4. Design and review Terraform for nonproduction only. This package does not create it.
 5. After explicit approval, build staging with synthetic data; validate restore, OAuth sandbox, uploads, AI minimization, rollback, and founder access.
 6. Build production only after staging gates pass and recurring cost is approved.

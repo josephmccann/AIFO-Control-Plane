@@ -14,6 +14,7 @@ Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 - Product checkout remained on `master`, clean and unmodified.
 - Control open PRs at reconstruction: none.
 - Product PR #186 merged as `3329c99beb0713269b54bc5fd6a7fb39bf44f398` and is included in the baseline. Current open-PR state was re-reviewed during the refresh.
+- Current Replit demo successfully deployed exact SHA `3329c99`; prior rollback SHA is `30a8ed24b7a30c74846c7bb322be24ef5ff6ec2c`.
 
 ## Verified AWS Control Plane
 
@@ -28,7 +29,7 @@ Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 - Scheduler start/stop rules are enabled at 08:00/16:00 Monday-Friday, `America/Los_Angeles`, targeting only `i-0254a9e2fcbcdebd7`.
 - EC2 instance `i-0254a9e2fcbcdebd7` is stopped and has no public IP while stopped.
 - No apply workflow exists. Apply role remains state-access-only. `terraform-apply` remains unused.
-- Product runtime infrastructure is not deployed.
+- AWS product-runtime infrastructure is not deployed; the current product remains on the validated Replit demo.
 
 Control repository validation and a fresh remote-backend Terraform plan passed after the architecture documentation changes; the plan remained `0 to add, 0 to change, 0 to destroy`.
 
@@ -48,6 +49,14 @@ Critical current gaps:
 - The Stripe adapter uses one deployment-wide restricted key bound to one company; account plan/billing/support values are deployment-wide environment configuration. Neither is a multi-tenant production source of truth.
 - New connector tables are application-tenant-scoped and idempotent but lack database FK/RLS/check enforcement and append-only correction history.
 
+Validated demo deployment evidence:
+
+- Migration `0011_external_connectors.sql` applied transactionally; final connector schema is 2 tables, 4 constraints and 7 indexes with 0 connector and 0 observation rows.
+- Public and authenticated smoke passed; QBO sync was not run; connectors remain disabled; Stripe remains unconfigured; rollback was not required.
+- Replit automatic schema diff proposed destructive table drops when development/production schemas diverged. The publish was canceled before promotion and no destructive SQL ran.
+- Startup health returned transient HTTP 500 responses until successful startup completed, then stabilized.
+- The deployment hold is resolved. Prerequisite 1 is unblocked for a separately authorized implementation mission and now includes generated-SQL review, environment-separated migration control and destructive-diff stop conditions. Readiness stabilization is prerequisite 2.
+
 ## Architecture Package
 
 Completed analysis/drafts and approved strategic direction:
@@ -62,6 +71,7 @@ Completed analysis/drafts and approved strategic direction:
 - ADR-0011 accepted in principle for AWS-before-customer-data timing; ADR-0012 through ADR-0022 remain Proposed.
 - Founder decision packet.
 - Product prerequisite hardening plan updated against merged PR #186.
+- Demo deployment checkpoint and migration/readiness controls updated against live `3329c99` evidence.
 
 Recommended path: migrate to a small AWS-managed runtime before onboarding real customer financial data. Use the current runtime only for synthetic demo/rehearsal. Expected product-runtime beta cost is `$400-$550/month`, with an `$800/month` review ceiling, separate from the current control-plane cost.
 

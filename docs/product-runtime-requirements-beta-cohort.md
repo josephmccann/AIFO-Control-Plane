@@ -122,6 +122,8 @@ Every deletion request must produce an immutable, content-free evidence record l
 - Pull request checks must include lockfile policy, type checks, build, API/frontend tests, migration checks, secret scanning, dependency review, and container vulnerability scan.
 - Staging deploy is automatic only after checks; production deploy requires an explicit human approval boundary that the current `terraform-apply` environment does not provide.
 - Schema changes are backward-compatible expand/migrate/contract steps. Startup DDL is removed before staging.
+- Generated migration SQL is captured and explicitly reviewed against version-controlled migrations and the independently baselined target schema. Automatic development-to-production schema diff is never authoritative; destructive or unexplained SQL is a deployment stop condition.
+- Liveness and readiness are separate. Promotion requires schema/dependency readiness plus a defined consecutive-success stabilization window; transient startup HTTP failures cannot be treated as either successful readiness or an immediate permanent failure without the bounded warm-up policy.
 - Rollback to the prior image must be possible in under 30 minutes. Database changes need a tested forward-fix or restore strategy; “roll back code” alone is insufficient.
 - A release is rolled back on failed health/readiness, migration failure, material 5xx/latency regression, auth/QBO failure, cross-tenant result, or data-integrity alarm.
 

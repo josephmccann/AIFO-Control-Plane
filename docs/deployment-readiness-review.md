@@ -20,7 +20,7 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - Apply role: unchanged and state-access-only
 - OIDC trust: unchanged
 - Scheduler: unchanged
-- Product runtime: not deployed
+- AWS product runtime: not deployed; current Replit demo validated separately at `3329c99`
 
 ## Completed Preparation
 
@@ -40,6 +40,8 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - [x] GitHub plan drift gate completed.
 - [x] Comprehensive product runtime inventory/data flows/classification completed and refreshed to merged product PR #186 at `3329c99`.
 - [x] Beta requirements, options analysis, reference architecture, threat model, migration gate definitions, cost model and Proposed ADRs completed.
+- [x] Current Replit demo deployment validated at product SHA `3329c99`; migration `0011` transactional; connectors disabled; public/auth smoke passed; rollback SHA retained.
+- [x] Automatic destructive schema proposal and transient startup-health evidence incorporated into migration/readiness gates.
 
 ## Completed Bootstrap
 
@@ -72,7 +74,7 @@ This review is not approval to deploy product runtime infrastructure or to creat
 
 ## Not Deployed
 
-- [ ] Product runtime infrastructure.
+- [ ] AWS product runtime infrastructure.
 - [ ] Apply workflow.
 - [ ] Product database.
 - [ ] Product secrets.
@@ -104,5 +106,7 @@ This review is not approval to deploy product runtime infrastructure or to creat
 - Current GMI verifier data handling is not acceptable for customer data without negotiated evidence or replacement.
 - Database/object backup and restore, customer deletion, QBO key rotation, tenant integration testing, upload integrity and controlled rollback gates have not passed.
 - Merged Stripe/account surfaces still need per-tenant connector authorization, per-company commercial account truth and observation-history semantics before multi-company staging.
+- Successful additive migration does not satisfy migration control: generated SQL review, development/production separation, destructive-diff rejection and removal of startup DDL remain required.
+- Startup health stabilization/readiness is not yet implemented; transient HTTP 500 responses were observed before the demo became healthy.
 
 The authoritative product migration gate table is [product-runtime-migration-readiness.md](product-runtime-migration-readiness.md). Staging creation requires architecture, cost, account/IAM, product-prerequisite and exact Terraform-plan approval. Production cutover requires all MR-01 through MR-33 gates to pass plus explicit customer-data, DNS/TLS and QBO callback approval.

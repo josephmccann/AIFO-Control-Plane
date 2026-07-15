@@ -6,6 +6,12 @@ Status: Strategic AWS migration direction approved; implementation and migration
 
 Statuses: `PASS`, `PARTIAL`, `FAIL`, `NOT STARTED`, `PENDING APPROVAL`. A blocking gate must be `PASS` with linked evidence before its dependent stage begins. Proposed documents count as evidence drafts, not approvals.
 
+## Current Demo Deployment Evidence
+
+The pre-prerequisite deployment hold is resolved: Replit successfully deployed product SHA `3329c99`, applied `0011_external_connectors.sql` transactionally, and passed public/authenticated smoke with connectors disabled, Stripe unconfigured, and zero connector/observation rows. Rollback SHA `30a8ed2` was retained but not exercised.
+
+This is useful current-platform evidence, not a PASS for target staging or production. A canceled publish also showed that Replit's automatic schema diff can propose destructive table drops, and startup health returned transient HTTP 500 responses before stabilizing. The detailed checkpoint is [product-demo-deployment-checkpoint-3329c99.md](product-demo-deployment-checkpoint-3329c99.md).
+
 ## Gate Table
 
 | ID | Gate | Pass/fail criteria and required evidence | Owner | Approver | Status | Blocking effect |
@@ -20,10 +26,10 @@ Statuses: `PASS`, `PARTIAL`, `FAIL`, `NOT STARTED`, `PENDING APPROVAL`. A blocki
 | MR-08 | Secrets model approved | Secret inventory, task-role access, QBO keyring/versioning, session rotation, per-tenant Stripe/connector authorization and rotation/revocation, provider credentials and break-glass approved | Security + Product | Founder | PENDING APPROVAL | Blocks staging secrets/connectors |
 | MR-09 | Domain/provider custody approved | Registrar/DNS ownership proven; production domain selected; Anthropic DPA/ZDR and verifier processor path accepted; Intuit production readiness documented | Founder + Security | Founder | FAIL | Blocks any real customer data and production |
 | MR-10 | Cost estimate approved | Current invoices attached; AWS estimate assumptions reviewed; expected/upper thresholds and recurring-cost approval recorded | Infrastructure + Finance | Founder | PENDING APPROVAL | Blocks resource creation |
-| MR-11 | Product prerequisites implemented | All 10 items in the prerequisite plan pass: migrations, QBO rotation, DB tenant tests, session/CSRF, upload quarantine, redaction, deletion, AI/verifier fail-closed, readiness and reproducible container; PR #186 connector/account scope included | Product | Security + Founder | PARTIAL: PR #186 supplies connector transaction/idempotency/tenant-route tests only | Blocks staging validation |
+| MR-11 | Product prerequisites implemented | All 10 ordered items pass: reviewed migration ledger/publish SQL, readiness stabilization, QBO rotation, DB tenant tests, session/CSRF, upload quarantine, redaction, deletion, AI/verifier fail-closed and reproducible container; PR #186 connector/account scope included | Product | Security + Founder | PARTIAL: additive `0011` deployed successfully, but automatic destructive diff risk and startup readiness remain uncontrolled | Blocks staging validation |
 | MR-12 | Staging environment validated | Approved Terraform applied only after separate authorization; isolated nonprod resources healthy with synthetic data and evidence index | Infrastructure | Founder | NOT STARTED | Blocks migration rehearsal/production design |
 | MR-13 | Reproducible build | Clean clone, pinned Node/pnpm/base image, frozen lockfile, deterministic frontend/API/container build; artifact hashes/provenance recorded | Product + Platform | Infrastructure | PARTIAL: build/tests pass; runtime/tool versions unpinned and telemetry preflight fails | Blocks staging deploy |
-| MR-14 | Reproducible deployment | Exact image/frontend digest deploys through documented OIDC pipeline into staging twice without console-only configuration | Platform | Founder | NOT STARTED | Blocks production deploy |
+| MR-14 | Reproducible deployment | Exact image/frontend digest deploys through documented OIDC pipeline into staging twice without console-only configuration; generated migration SQL reviewed; readiness passes a defined consecutive-success window | Platform | Founder | NOT STARTED: current Replit SHA deployed once successfully, but target artifact/pipeline/repeatability are absent | Blocks production deploy |
 | MR-15 | Infrastructure plan reviewed | Product Terraform plan, security/cost review, no secrets/state in PR, expected resources and destroys explicitly classified | Infrastructure | Founder | NOT STARTED | Blocks every product-runtime apply |
 | MR-16 | Database source backup completed | Source-provider backup/export created immediately before rehearsal/cutover, encrypted, inventoried, access-restricted, and expiry recorded | Data | Founder | NOT STARTED | Blocks rehearsal/cutover |
 | MR-17 | Database restore tested | Source and RDS restore tests validate schema, row/table manifests, engine smoke, users/sessions policy and measured RTO/RPO | Data + Product | Founder | NOT STARTED | Blocks production |
@@ -35,10 +41,10 @@ Statuses: `PASS`, `PARTIAL`, `FAIL`, `NOT STARTED`, `PENDING APPROVAL`. A blocki
 | MR-23 | Security review completed | IAM/network/KMS/S3/RDS/ECS/WAF/container/dependency/provider/auth findings closed; Critical/High zero | Security | Founder | NOT STARTED: dependency audit unavailable and Dependabot disabled | Blocks production |
 | MR-24 | Sensitive-data logging review completed | Automated fixtures and manual sampling show no secrets, names, financial rows, prompts/responses or cookies in logs; retention/access tested | Security + Product | Founder | NOT STARTED | Blocks production |
 | MR-25 | Load test passed | Staging supports assumed 25 rps burst, concurrent sessions, uploads and bounded provider jobs without unsafe DB connections/memory/latency | Product + Platform | Infrastructure | NOT STARTED | Blocks production sizing approval |
-| MR-26 | Failure-mode testing completed | DB failover, task loss, QBO/Stripe/AI/verifier timeout, connector pagination/rate/error replay, R2/S3 error, queue replay, malformed upload, migration failure and AZ path tested | Platform + Product | Founder | NOT STARTED | Blocks production |
-| MR-27 | Monitoring and alerts tested | Every required alert is triggered in staging, reaches two founder-controlled channels, links a runbook and clears correctly | Platform | Founder | NOT STARTED | Blocks production |
+| MR-26 | Failure-mode testing completed | DB failover, task loss, QBO/Stripe/AI/verifier timeout, connector pagination/rate/error replay, R2/S3 error, queue replay, malformed upload, rejected destructive schema diff, migration failure, startup warm-up/readiness timeout and AZ path tested | Platform + Product | Founder | PARTIAL: destructive proposal was safely canceled and startup transient observed; automated rejection/readiness tests absent | Blocks production |
+| MR-27 | Monitoring and alerts tested | Every required alert, including startup readiness timeout and schema/migration failure, is triggered in staging, reaches two founder-controlled channels, links a runbook and clears correctly | Platform | Founder | NOT STARTED | Blocks production |
 | MR-28 | Incident runbook approved | Account takeover, cross-tenant, token/provider, upload, DB, domain, deletion, outage and communication procedures tabletop-tested | Security + Founder | Founder | NOT STARTED | Blocks production |
-| MR-29 | Rollback tested | Prior image/frontend rollback under 30 minutes; compatible migration rollback/forward-fix and write-freeze/PITR decision exercised | Platform + Data | Founder | NOT STARTED | Blocks production |
+| MR-29 | Rollback tested | Prior image/frontend rollback under 30 minutes; compatible migration rollback/forward-fix and write-freeze/PITR decision exercised | Platform + Data | Founder | PARTIAL: rollback SHA `30a8ed2` identified, but rollback was not required or exercised | Blocks production |
 | MR-30 | Founder recovery exercise completed | Founder on clean workstation recovers AWS/GitHub/registrar access, deploys known-good artifact, restores DB/object and revokes simulated compromise | Founder + Infrastructure | Founder with observer | NOT STARTED | Blocks production |
 | MR-31 | Customer-data deletion tested | Test tenant removed from DB, sessions, QBO/connector credentials, external connections/observations, commercial account records, objects/versions, provider records and indexes; backup expiry/evidence record accurate | Product + Privacy | Founder + counsel where required | NOT STARTED | Blocks production |
 | MR-32 | Migration rehearsal completed | Full timed synthetic/sanitized rehearsal includes backup, copy, schema, deploy, callback, validation, rollback and evidence; no unresolved P1/P2 | Program lead | Founder | NOT STARTED | Blocks cutover approval |
@@ -52,7 +58,7 @@ Strategic direction is complete through accepted-in-principle ADR-0011. Implemen
 
 ### Staging creation
 
-Requires MR-04 through MR-11 and MR-15 to be PASS, plus explicit founder authorization for resource creation and recurring cost. Documentation completion is not authorization to apply.
+Requires MR-04 through MR-11 and MR-15 to be PASS, including explicit generated-SQL review/destructive-diff rejection and readiness stabilization, plus founder authorization for resource creation and recurring cost. Documentation completion is not authorization to apply.
 
 ### Staging sign-off
 

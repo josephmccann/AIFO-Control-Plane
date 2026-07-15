@@ -36,3 +36,4 @@ Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 | OD-015 | Host patching | Manual approval-gated monthly approach accepted in ADR-0010 |
 | OD-016 | Local actionlint/shellcheck | Resolved with pinned checksum-verified installer |
 | OD-005 | Whether and when product runtime moves to AWS | Accepted in principle: gated AWS migration before real-customer data; no deployment approval |
+| OD-028 | Merged-baseline demo deployment decision | Deployed and validated `3329c99` with connectors disabled; rollback `30a8ed2` retained; prerequisite 1 may begin only under separate product-code authorization |

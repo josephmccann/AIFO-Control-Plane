@@ -13,5 +13,7 @@ High-priority assumptions:
 - A first copy of CloudTrail management events plus low-volume CloudWatch Session Manager logs should add only a small recurring cost relative to the $250 budget.
 - Cloudflare R2 remains the product upload storage target until a storage ADR changes that.
 - Product PR #186 is merged at `3329c99`; its connector/account implementation is current product baseline.
+- The current Replit demo is validated at `3329c99` with connectors disabled; rollback reference is `30a8ed2`.
+- Replit automatic schema diffs are not safe production migration authority and require exact SQL review.
 
 Review assumptions before any first apply or product runtime design.

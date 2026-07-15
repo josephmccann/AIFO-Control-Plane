@@ -14,7 +14,7 @@ Primary evidence reviewed includes `AGENTS.md`, `README.md`, `.replit`, `.env.ex
 
 Current deployment ownership remains partly outside Git:
 
-- Replit resource sizing, active environment variables, database backup behavior, deployment revision history, and rollback evidence are not committed.
+- Replit resource sizing, active environment variables, database backup behavior, full deployment revision history, and platform configuration are not committed. The current live and rollback SHAs are now known.
 - Current production database vendor, version, size, backup policy, and restore history are unresolved.
 - Current R2 bucket configuration, object count, encryption policy, versioning, access logs, and lifecycle are unresolved.
 
@@ -26,7 +26,7 @@ Current deployment ownership remains partly outside Git:
 | Frontend hosting | Replit deployment routing is implied by `.replit`; no standalone static-host deployment manifest exists | Build is reproducible locally, but production publish, cache invalidation, and rollback are not repository-controlled. |
 | API | Express 5 on Node, one `app.listen(PORT)` process; API bundles to one CommonJS artifact with esbuild | Stateless request handling is mostly scalable, but process-local rate limits and operational counters are not consistent across replicas. |
 | Database | PostgreSQL through `node-postgres` and Drizzle ORM | Shared durable state. Connection pool size/TLS behavior depends on `DATABASE_URL`; no explicit production pool or certificate policy. |
-| Schema changes | Drizzle schema, manual SQL migrations, `drizzle-kit push`, and startup DDL coexist | No single migration ledger, ordering rule, backward-compatible deployment contract, or rollback procedure. Startup migration errors are non-fatal. |
+| Schema changes | Drizzle schema, manual SQL migrations, `drizzle-kit push`, startup DDL, and Replit-generated schema diffs coexist | Migration `0011` applied transactionally and additively, but no single ledger/ordering/rollback contract exists. Replit proposed destructive drops when development/production schemas diverged; the publish was safely canceled. |
 | Authentication | Passport Local, bcrypt cost 12, invite-only registration | Credentials are database records. No MFA, email verification, password reset, lockout, or breach-password control. |
 | Sessions | `express-session`; `connect-pg-simple` when `DATABASE_URL` exists; seven-day cookie | PostgreSQL sessions are durable and replica-safe. Production cookie is `secure`, `httpOnly`, `sameSite=lax`; rotation and explicit logout-destruction evidence are incomplete. |
 | Background work | No application queue or worker. QBO sync, Stripe sync and upload processing execute synchronously in API requests | Stripe observations are idempotent by company/provider/metric/period and written transactionally, but provider pagination has no durable job, timeout or retry budget. A QBO refresh helper exists, but no runtime scheduler invokes it. |
@@ -40,7 +40,7 @@ Current deployment ownership remains partly outside Git:
 | Commercial account surface | Authenticated read-only endpoint derives workspace/user/company/QBO/uploads/sealed snapshot/connectors from the session; plan, billing, support, seat limit and renewal/trial fields come from `AIFO_ACCOUNT_*` environment values | Tenant identity is session-derived, but commercial metadata is global per deployment rather than authoritative per-company state. Connector read failures are presented as an empty list. |
 | Calibration suggestions | Stripe MRR and active-customer observations can populate editable calibration suggestions | Suggestions are explicit and editable rather than silently authoritative. Persisted observation lineage and user override behavior need production regression evidence. |
 | Email/notifications | No repository-grounded customer email or transactional notification provider | Password recovery, security notifications, and customer incident messaging are not implemented. |
-| Health | `/api/healthz` returns application liveness | It does not test database, R2, QBO, AI, migration state, or readiness. |
+| Health | `/api/healthz` returns application liveness | During the validated `3329c99` publish it returned transient HTTP 500 responses until startup completed, then stabilized. It does not distinguish startup/liveness from database, schema, session, storage or dependency readiness. |
 | Logs | Console logs plus in-memory operational events and counters | No durable app-log sink, exception tracker, alert routing, trace context, or comprehensive redaction enforcement is evidenced. |
 
 ## Replit And Single-Instance Assumptions
@@ -118,6 +118,7 @@ The data classes below use `Public`, `Internal`, `Confidential`, and `Highly sen
 | High | QBO key rotation is not implementable safely today | One unversioned environment key encrypts all tokens; no keyring/re-encryption workflow. Key loss or compromise has high blast radius. |
 | High | Customer deletion is not implemented | No orchestrated company/data/object/session/token/backup deletion or evidence record. |
 | High | Deployment and schema rollback are not controlled | Replit settings sit outside Git; migrations are fragmented and startup DDL is non-fatal. A bad release can leave mixed schema/application states. |
+| High | Automatic Replit schema diff can propose destructive SQL | A canceled `3329c99` publish attempt proposed table drops when development and production schemas diverged. No destructive SQL ran, but future publishes require generated-SQL review and a hard stop on destructive/unexplained statements. |
 | High | Upload integrity controls are incomplete | Extension can bypass MIME, no signature/malware/quarantine/checksum, and raw object persists before validation. |
 | High | Sensitive-data logging is not comprehensively controlled | General logs include identifiers/filenames/keys; verifier logs a raw response preview; centralized retention/redaction is absent. |
 | High | Third-party AI disclosure is broader than “no raw rows” | Computed singleton values and customer/vendor names can reach Anthropic and GMI. Data minimization and processor approval are required. |
@@ -130,13 +131,14 @@ The data classes below use `Public`, `Internal`, `Confidential`, and `Highly sen
 | Medium | Account connector failures can appear as absence | The account route catches connector-read errors and returns an empty connection list, obscuring degraded readiness. |
 | Medium | Production authentication controls are beta-incomplete | No MFA, password reset, email verification, durable account lockout, or explicit session-revocation evidence. |
 | Medium | No durable production observability | Liveness only, process-local counters, no central error alerting, dependency SLOs, or durable admin-action trail. |
+| Medium | Startup health is transiently unsafe for promotion decisions | The live demo returned HTTP 500 during startup and later stabilized. Without separate readiness and a consecutive-success window, automation can fail prematurely or route traffic before dependencies/schema are ready. |
 | Medium | Reproducibility depends on external platform configuration | No container definition, package-manager version, or Git-controlled production deployment settings. |
 | Medium | Current scheduled validation depends on a founder Mac | Nightly launchd execution is a founder-availability and workstation-availability dependency. |
 | Medium | Public demo tenant boundary relies on convention | Public routes hardcode `integra-demo`; a process must ensure customer data can never bind to that tenant. |
 
 ## Unresolved Questions Requiring Evidence
 
-1. What Replit plan, database product/version, compute limits, network controls, backups, restore procedure, deployment revision retention, and contractual security terms are active?
+1. What Replit plan, database product/version, compute limits, network controls, backups, restore procedure, full deployment revision retention, and contractual security terms are active? Current live SHA `3329c99` and rollback SHA `30a8ed2` are known.
 2. What are the live PostgreSQL size, connection count, extension set, collation, timezone, table cardinalities, and longest transaction/query profiles?
 3. Are R2 encryption, versioning, lifecycle, access logging, event notifications, and bucket-level public-access controls enabled, and how many objects/bytes exist?
 4. Is the Anthropic key attached to a commercial organization with an executed DPA and zero-data-retention arrangement?
@@ -162,6 +164,9 @@ The data classes below use `Public`, `Internal`, `Confidential`, and `Highly sen
 - Connector routes derive company identity from the session, require admin for sync, enforce the configured company binding, return safe error codes, and are off by default.
 - Connector persistence uses a transaction and unique-key upserts, making repeat sync deterministic at company/provider/metric/period scope.
 - Stripe persistence is aggregate-only, and calibration suggestions are editable/opt-in rather than silently applied.
+- The live Replit demo runs exact SHA `3329c99`; public and authenticated smoke passed with connectors disabled and Stripe unconfigured.
+- Migration `0011_external_connectors.sql` applied transactionally, yielding 2 tables, 4 constraints, 7 indexes and zero connector/observation rows.
+- The operator canceled a destructive automatic schema proposal before promotion; no destructive SQL ran.
 
 These are valuable correctness controls. They do not replace real database integration tests, restore drills, deployment rehearsals, processor due diligence, or production security evidence.
 
@@ -181,6 +186,12 @@ Run against clean product `master` at `3329c99` on 2026-07-15:
 - The latest product GitHub workflows remain successful but predate `3329c99`; there is no GitHub Actions validation run on the merged head, so the local results above are the post-merge evidence.
 
 The red lock preflight and missing dependency-security result are current product-baseline discrepancies. They are not changed by this documentation mission and must be resolved before a reproducible staging gate can pass.
+
+## Current Demo Deployment Snapshot
+
+The deployment dependency that temporarily held prerequisite work is resolved. The live demo is healthy at `3329c99beb0713269b54bc5fd6a7fb39bf44f398`; prior rollback reference is `30a8ed24b7a30c74846c7bb322be24ef5ff6ec2c`. Public and authenticated smoke passed. QBO sync was not run. Connectors remain disabled, Stripe is unconfigured, and no connector or observation rows exist. Rollback was not required.
+
+This evidence permits controlled-migration design to begin when separately authorized. It does not prove rollback execution, production migration safety, readiness stabilization, customer-data handling, or connector authorization. See [deployment checkpoint](product-demo-deployment-checkpoint-3329c99.md).
 
 ## Source Notes
 

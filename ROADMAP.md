@@ -44,20 +44,22 @@ Status: Analysis complete; AWS-before-customer-data strategic direction approved
 - Reference architecture, threat model, readiness gates and cost model complete.
 - ADR-0011 accepted in principle; ADR-0012 through ADR-0022 and resource-level parameters Proposed.
 - Product baseline refreshed to merged PR #186 (`3329c99`) with connector/account/calibration implications incorporated.
+- Current Replit demo deployment validated at `3329c99`; connectors disabled; rollback `30a8ed2` retained; deployment hold resolved.
 - Recommended path: AWS-managed runtime before real-customer data; current runtime remains synthetic demo/rehearsal only.
 
 Decision gates: domain/provider custody, architecture, retention, account, budget, recovery objectives and deployment approval boundary.
 
 ## Phase 5: Product Prerequisite Hardening
 
-Status: Implementation not started; ordered documentation plan complete; recommended next workstream is item 1 only.
+Status: Implementation not started; deployment dependency resolved; item 1 is unblocked only for a separately authorized product-code mission.
 
-- One controlled database migration ledger; remove startup DDL.
+- One controlled database migration ledger; separate development/production baselines; review generated SQL; reject destructive diffs; remove startup DDL.
+- Separate startup liveness/readiness and require health stabilization before promotion.
 - QBO versioned token-encryption keyring and rotation.
 - Real-PostgreSQL tenant-isolation/RLS decision and tests.
 - Session/logout/CSRF/rate/auth hardening.
 - Upload quarantine, checksum, type/limit and malware controls.
-- Structured redaction/audit events, readiness, deletion and verifier fail-closed/provider abstraction.
+- Structured redaction/audit events, deletion and verifier fail-closed/provider abstraction.
 - Pinned container build and product CI design.
 
 Decision gate: product-code changes require a separately scoped implementation mission and review.

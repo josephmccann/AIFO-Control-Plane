@@ -12,6 +12,7 @@ Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 - Product checkout was clean and unmodified.
 - Control open PRs at reconstruction: none.
 - Product PR #186 is merged and included in the inspected baseline; open PRs were re-reviewed during refresh.
+- Current Replit demo is healthy at `3329c99`; rollback reference `30a8ed2`; connectors disabled; Stripe unconfigured; no connector/observation rows.
 
 ## Verified Control Plane
 
@@ -25,7 +26,7 @@ Session state: ACTIVE - PRODUCT RUNTIME IMPLEMENTATION PARAMETERS PENDING
 - Session Manager encrypted CloudWatch logging active, 30-day retention.
 - Scheduler enabled at 08:00/16:00 weekdays, `America/Los_Angeles`, targeting only `i-0254a9e2fcbcdebd7`.
 - Instance `i-0254a9e2fcbcdebd7` stopped with no public IP while stopped.
-- Product runtime not deployed.
+- AWS product runtime not deployed; current Replit demo remains live at `3329c99`.
 
 ## Product Architecture Decision
 
@@ -49,11 +50,13 @@ Approved direction: complete a gated AWS-managed migration before accepting firs
 - `ai.fo` currently redirects to a domain marketplace while product canonicals claim it.
 - Current GMI verifier terms are not approved for highly sensitive financial facts.
 - Product prerequisites, staging, restore, tenant isolation, QBO rotation, upload integrity, deletion, monitoring, rollback, founder recovery and rehearsal gates have not passed.
+- Replit proposed destructive schema drops during an environment-divergence publish; it was canceled before promotion. Generated SQL review and destructive-diff rejection are mandatory.
+- Startup health returned transient HTTP 500 responses before stabilizing; separate readiness and stabilization evidence is required.
 - Expected product-runtime beta cost `$400-$550/month` and `$800` review ceiling are not approved.
 
 ## Next Narrow Workstream
 
-Execute the first prerequisite only in a dedicated `AI.FO-Demo` worktree: one migration ledger/removal of startup DDL with compatibility and rollback evidence. The full ordered plan is `docs/superpowers/plans/2026-07-15-product-runtime-prerequisite-hardening.md`. Do not create runtime infrastructure.
+The deployment hold is resolved. After separate product-code authorization, execute prerequisite 1 only in a dedicated `AI.FO-Demo` worktree: one migration ledger, independent environment baselines, generated-SQL review, destructive-diff rejection and removal of startup DDL. Readiness stabilization is prerequisite 2. Do not create runtime infrastructure.
 
 ## Guardrails
 

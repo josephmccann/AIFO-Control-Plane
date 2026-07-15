@@ -6,11 +6,11 @@ Proposed
 
 ## Context
 
-The product build is testable, but production deployment configuration and rollback are platform-owned and schema mutation is fragmented.
+The product build is testable, but production deployment configuration and rollback are platform-owned and schema mutation is fragmented. The `3329c99` Replit publish succeeded, while another automatic schema-diff attempt proposed destructive drops and was canceled. Startup health also returned transient HTTP 500 responses before stabilizing.
 
 ## Decision
 
-Build one immutable OCI image and versioned frontend artifact with commit/lockfile/provenance evidence. Promote by digest through staging, run one-off audited migrations, require founder production approval, use ECS health/alarm rollback and retain the prior frontend prefix/image. Test application and migration recovery before launch.
+Build one immutable OCI image and versioned frontend artifact with commit/lockfile/provenance evidence. Promote by digest through staging, run one-off audited migrations, require explicit generated-SQL review and stop on destructive/unexplained proposals. Separate liveness from dependency/schema readiness and require a consecutive-success stabilization window. Require founder production approval, use ECS health/alarm rollback, retain the prior frontend prefix/image, and test application/migration recovery before launch.
 
 ## Alternatives Considered
 

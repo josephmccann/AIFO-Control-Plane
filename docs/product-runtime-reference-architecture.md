@@ -130,12 +130,17 @@ The first cohort has low, predictable relational load. Aurora's additional abstr
 Before staging:
 
 1. Select one migration tool and immutable migration ledger.
-2. Remove startup DDL and non-fatal schema mutation.
-3. Run migrations as a one-off, audited ECS task using a distinct migration role before application rollout.
-4. Use expand/migrate/contract changes compatible with both old and new application versions.
-5. Back up and verify restore point before destructive/large migrations.
-6. Block deployment if migration, readiness, or schema-version checks fail.
-7. Define forward-fix and PITR restore decision criteria; do not pretend every DB change can be rolled back in place.
+2. Baseline development and production schemas separately; development schema state is not migration authority.
+3. Generate and retain the exact SQL for review before promotion. Reconcile it to the version-controlled migration set and intended target schema.
+4. Treat any destructive or unexplained `DROP`, truncation, destructive `ALTER`, implicit data rewrite or object removal as a stop condition. Never trust an automatic schema diff blindly.
+5. Remove startup DDL and non-fatal schema mutation.
+6. Run migrations as a one-off, audited ECS task using a distinct migration role before application rollout.
+7. Use expand/migrate/contract changes compatible with both old and new application versions.
+8. Back up and verify restore point before destructive/large migrations.
+9. Block deployment if migration, readiness, schema-version or stabilization checks fail.
+10. Define forward-fix and PITR restore decision criteria; do not pretend every DB change can be rolled back in place.
+
+These controls are directly supported by the current demo evidence: migration `0011` applied additively, but a separate Replit automatic diff proposed destructive table drops when environment schemas diverged and was canceled before promotion.
 
 ## Object Storage
 
@@ -222,10 +227,10 @@ A Region-level event restores database and objects into the approved recovery Re
 
 1. GitHub OIDC checks out an exact commit and runs pinned lockfile preflight, type checks, builds, tests, migration checks, secret/dependency scanning, SBOM and container scan.
 2. Build one OCI image and frontend artifact; record commit, lockfile hash, builder identity, image digest and test evidence. Sign/attest artifacts where the selected tooling is supportable.
-3. Deploy digest to staging. Run migration dry run, readiness, auth/session, tenant isolation, QBO sandbox, upload, AI minimization, restore and smoke checks.
+3. Generate and review migration SQL, stopping on destructive/unexplained changes; deploy the digest to staging only after approval. Run migration dry run, readiness stabilization, auth/session, tenant isolation, QBO sandbox, upload, AI minimization, restore and smoke checks.
 4. Founder approves production through an enforceable boundary that is not the current unprotected `terraform-apply` environment.
 5. Create/verify pre-migration restore point. Run migration task. Roll ECS service with minimum healthy 100%, circuit breaker and alarms.
-6. Run post-deploy smoke and business-flow checks. Observe a defined bake window.
+6. Keep liveness separate from readiness. Require readiness to pass a defined consecutive-success stabilization window before routing/promoting traffic; then run post-deploy smoke and business-flow checks and observe a defined bake window.
 7. Roll back immediately to the prior digest on application regression. For incompatible schema/data changes, stop writes and execute the pre-approved forward-fix or PITR recovery plan.
 
 Feature flags may decouple high-risk QBO/AI/new-surface activation from deployment, but flags need owner, expiry, audit, and safe default. They do not replace tested rollback.

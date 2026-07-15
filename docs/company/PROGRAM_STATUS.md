@@ -1,13 +1,17 @@
 # AI.FO Program Status
 
-Status: CURRENT — snapshot as of 2026-07-14
-Sources: repository evidence only (commits, PRs, and each repo's own docs); see [README.md](README.md) for the exact commits audited.
+> **Digest metadata**
+> - Audit snapshot: 2026-07-14 · pinned commits: see [README.md](README.md) evidence table
+> - Statement classes: **[FACT]** verified current fact · **[PR]** open-PR proposal · **[RUN]** active runtime state · **[REC]** recommendation · **[JOE]** founder decision
+> - PR and active-run state is volatile — refresh from the [canonical dynamic sources](README.md#canonical-dynamic-sources-always-fresher-than-this-digest) before acting.
+
+Sources: repository evidence only (commits, PRs, and each repo's own docs), plus explicitly-marked runtime state reported at the 2026-07-14 PT checkpoint.
 
 ---
 
 ## 1. Product (AI.FO-Demo)
 
-### What works (merged on `master`)
+### What works (merged on `master`) — all [FACT]
 - Deterministic financial engine with a registry-backed catalog of **40 signals** across **13 industry tracks**; signal methodology centralized in `docs/SIGNAL_METHODOLOGY.md`.
 - Seven report parsers (P&L, Balance Sheet, AR, AP, Sales, Bank, Transaction Detail) and CSV upload ingestion.
 - QuickBooks Online **sandbox** OAuth sync with field-level provenance.
@@ -16,95 +20,105 @@ Sources: repository evidence only (commits, PRs, and each repo's own docs); see 
 - Public telemetry pipeline: `generate-telemetry.js` (refuses on dirty tree or red suite) → `telemetry.json` → mirrored to the public `aifo-telemetry` repo → served at `/api/telemetry` → consumed by getaifo.com.
 - Quality signal as of 2026-07-14 telemetry: 13,477 engine tests + 987 API tests, 0 failures; 21,851 classified assertions (note the mix: 19,648 snapshot vs 1,780 property vs 30 sourcing); 45 nightly pressure-test runs over 900 synthetic companies since 2026-04-28.
 
-### What is deployed
+### What is deployed — [FACT]
 - `https://demo.getaifo.com` on Replit autoscale. Production storage on Cloudflare R2. Nightly pressure test runs via launchd on Joe's Mac (02:00 PT) with a GitHub Actions dead-man monitor.
-- Open question recorded in the repo: the deployed frontend bundle may lag current `master` (redeploy decision open; telemetry/deadman do not require it).
+- Open question recorded in the repo [JOE]: the deployed frontend bundle may lag current `master` (redeploy decision open; telemetry/deadman do not require it).
 
-### What remains in open PRs (not on master)
-- **PR #186** — commercial account surface, feature-flagged external-connectors framework with a Stripe billing adapter, DB migration `0011_external_connectors.sql`. The only open *code* PR; self-reports green suites; awaiting review/merge decision.
-- **PR #180** — constitution, founder-context, and operating-system docs plus machine-readable `.aifo/*.yaml` context. Explicitly working drafts; awaiting founder review.
-- **PR #195** — session-checkpoint docs (`memory/`, `workqueue/`, session handoff, CHANGELOG). Intentionally held ("do not merge during shutdown unless explicitly requested").
+### Customer-data position — [FACT]
+The product has functioning QBO **sandbox** and CSV ingestion. It does **not currently host or process production customer financial data**: demo companies are fictional, QBO runs against the Intuit sandbox, and nightly runs use synthetic companies. Existing protections: QBO tokens AES-256-encrypted at rest; telemetry denylist-scrubbed of tokens, IDs, names, and accounting values.
+
+### What remains in open PRs (not on master) — all [PR]; refresh state before deciding
+- **PR #186** — commercial account surface, feature-flagged external-connectors framework with a Stripe billing adapter, DB migration `0011_external_connectors.sql`. The only open *code* PR. **Pending final technical review and founder merge decision** [JOE]. The PR body self-reports 13,487 aifo tests, 1,003 api-server tests, and 6 Chromium E2E green — recorded as reported; **not independently re-verified, and merge readiness must not be assumed from self-reported tests**.
+- **PR #180** — constitution, founder-context, and operating-system docs plus machine-readable `.aifo/*.yaml` context. **Valuable working-draft source material**, explicitly non-behavioral. [REC] Reconcile into one canonical Founder Operating Manual before or as part of its final disposition (see SOURCE_OF_TRUTH_HIERARCHY.md). Disposition is [JOE].
+- **PR #195** — session-checkpoint docs (`memory/`, `workqueue/`, session handoff, CHANGELOG). **A July 14 shutdown checkpoint that may now require refresh, supersession, or closure**: activity since it was written (Control-Plane PR #13, the live EDGAR collection) has changed the state it froze. Not recommended for automatic merge. Disposition is [JOE].
 
 ### Beta-ready vs not production-ready
-- **Beta-ready today:** the demo/sandbox validation path — engine, QBO sandbox sync, AI memo generation, trust surfaces — is green and demoable end to end.
-- **Not production-ready.** `docs/PRODUCTION_READINESS_PLAN.md` defines seven phases, all unstarted: (1) production QBO OAuth, (2) deployment parity, (3) operational monitoring, (4) real-company datasets (recruit 3–5 consenting companies), (5) browser E2E, (6) security/privacy review, (7) commercial account surface (PR #186 is a down payment on this). **No real customer financial data is handled anywhere yet.**
-- Known product-data gap: QBO sandbox fires 11 of 40 signals (28 evaluated); full 40-signal sandbox coverage needs companion seed data — an open workstream.
+- **[FACT] Beta-ready today:** the demo/sandbox validation path — engine, QBO sandbox sync, AI memo generation, trust surfaces — is green and demoable end to end.
+- **[FACT] Not production-ready.** `docs/PRODUCTION_READINESS_PLAN.md` defines seven phases, all unstarted: (1) production QBO OAuth, (2) deployment parity, (3) operational monitoring, (4) real-company datasets (recruit 3–5 consenting companies), (5) browser E2E, (6) security/privacy review, (7) commercial account surface (PR #186 is a proposed down payment on this).
+- **[FACT]** Known product-data gap: QBO sandbox fires 11 of 40 signals (28 evaluated); full 40-signal sandbox coverage needs companion seed data — an open workstream.
 
 ## 2. Infrastructure (AIFO-Control-Plane)
 
-### Deployed (verified in AWS account `350480401760`, us-west-2)
+### Deployed (verified in AWS account `350480401760`, us-west-2) — all [FACT]
 - Terraform remote state (encrypted, versioned, locked), GitHub OIDC provider with separate plan/apply roles — the apply role is deliberately state-access-only (no mutation policy), and there is **no apply workflow**; applies are manual and human-approved.
 - Multi-region CloudTrail management events; encrypted Session Manager logging (customer-managed KMS, 30-day retention).
 - One SSM-only, zero-ingress EC2 operator host (`i-0254a9e2fcbcdebd7`, m7i-flex.2xlarge, currently **stopped**) with EventBridge Scheduler start/stop automation.
 - State verified clean: local and CI `terraform plan` report 0 to add/change/destroy.
 
-### Planned only (not deployed)
-- Product runtime hosting, product database, product secrets management, R2→S3 storage migration, domain/TLS/QBO callback migration, apply-workflow automation. All explicitly deferred pending founder decisions OD-005…OD-008 and OD-012.
+### Proposed (open PR #13 — not canonical until reviewed and merged) — [PR]
+**PR #13 "docs: propose product runtime architecture decision package"** (draft) delivers: current runtime inventory with 17 principal data flows, beta-cohort requirements, weighted three-option analysis, proposed reference architecture (dedicated production AWS member account; CloudFront/WAF + private S3 frontend; two ECS Fargate API tasks behind an ALB; RDS PostgreSQL Multi-AZ; S3 product objects; PostgreSQL sessions; Secrets Manager/task roles; minimal CloudWatch/CloudTrail/GuardDuty), STRIDE threat model, migration gates MR-01…MR-33, current/hybrid/AWS cost model, proposed ADR-0011…ADR-0022, and a founder decision packet. Its recommendation — complete a gated AWS-managed migration **before** accepting real first-cohort customer data, with the Replit runtime remaining synthetic demo/rehearsal only — is **a proposal awaiting review** [JOE].
+
+### Planned only (not deployed) — [FACT]
+- Product runtime hosting, product database, product secrets management, R2→S3 storage migration, domain/TLS/QBO callback migration, apply-workflow automation. All explicitly deferred pending founder decisions OD-005…OD-008 and OD-012 [JOE] — now with PR #13's packet as the proposed decision input.
 - A manual $250/month AWS budget exists outside Terraform (module present but disabled).
 
-### What hosts the product today
+### What hosts the product today — [FACT]
 - **Replit**, not AWS: `demo.getaifo.com` (product demo) and `getaifo.com` (marketing site) are both Replit autoscale deployments. The control plane's own docs are explicit: "Treat AWS product hosting as a future migration, not current fact."
 - Nightly operations run from Joe's Mac (launchd) — a single-machine dependency worth knowing about.
 
-### What remains undecided
-- OD-005: whether/when the product runtime moves to AWS. An active session (branch `codex/product-runtime-architecture-decision-package`, docs-only, local) is preparing the founder decision package; its working recommendation is a gated migration to an AWS-managed runtime *before* accepting real customer financial data, keeping Replit as demo/rehearsal.
-- OD-006 product database architecture; OD-007 Cloudflare R2 vs S3; OD-008 product secrets manager/rotation; OD-012 GitHub plan upgrade vs alternative apply-approval boundary. All marked blocking.
+### What remains undecided — [JOE]
+- OD-005 whether/when the product runtime moves to AWS; OD-006 product database architecture; OD-007 Cloudflare R2 vs S3; OD-008 product secrets manager/rotation; OD-012 GitHub plan upgrade vs alternative apply-approval boundary. All marked blocking. PR #13 proposes answers to most of these; none is decided until Joe rules and the PR merges.
 
 ## 3. Research and validation (aifo-signal-validation-study)
 
-### Built
+### Built — [FACT]
 - Full EDGAR validation pipeline (Study A): universe construction, matching, fire rules, stats, event study, negative controls, threshold-attack robustness arm; ~23 test files; threshold-provenance audit of all 236 firing thresholds (zero calibrated on study-window companies; 180 remain unattributed inline — flagged, not hidden).
-- Preregistration **frozen and tagged `prereg-v1` on 2026-07-09, before any scored run**. Primary endpoint: 12-month matched case-vs-control fire-rate gap, success = bootstrap 95% CI lower bound ≥ 0.10, on a three-leg ex-going-concern union (Chapter 11 + strict distress delisting + Item 2.04 actual default), cadence-safe base-signals-only headline.
+- Preregistration **frozen and tagged `prereg-v1` on 2026-07-09, before any scored run, and unchanged since**. Primary endpoint: 12-month matched case-vs-control fire-rate gap, success = bootstrap 95% CI lower bound ≥ 0.10, on a three-leg ex-going-concern union (Chapter 11 + strict distress delisting + Item 2.04 actual default), cadence-safe base-signals-only headline.
 
-### Run (pre-score only)
-- Real EDGAR universe constructed (~833-company population; burned-pilot exclusion verified); fire-capability coverage runs over ~166–169 companies; 48-filing iXBRL parsing sweep. All artifacts banner-marked `PROVISIONAL-PENDING-CC-RE-VERIFICATION`.
-- Governance worth noting for diligence: an entire outcome leg (distressed take-privates) was built, then **pulled** after an 8-seat adversarial cold re-verification refuted 51.9% of its companies — with a deliberately-red QA test left as the record of the removal.
+### Run so far
+- **[FACT] Pre-score analyses on real EDGAR data:** universe construction (burned-pilot exclusion verified); fire-capability coverage runs; 48-filing iXBRL parsing sweep. All artifacts banner-marked `PROVISIONAL-PENDING-CC-RE-VERIFICATION`.
+- **[RUN] Active now** (reported at the 2026-07-14 PT checkpoint; runtime state, not in the repo — re-verify before acting): the **authorized full live collection over 8,215 registered companies is running, approximately 36% complete** at the latest checkpoint.
+- **[FACT] Governance note for diligence:** an entire outcome leg (distressed take-privates) was built, then **pulled** after an 8-seat adversarial cold re-verification refuted 51.9% of its companies — with a deliberately-red QA test left as the record of the removal.
 
-### Not run
-- **The primary scored discrimination run.** `docs/METHODS_AND_RESULTS.md` is a locked shell with every result cell TBD. Post-freeze commits through 2026-07-14 are SEC-fetch/collection-path repairs preparing for it. Blockers: matched-set re-emission under the 07-09 match-input rulings, then Joe's single-shot live-run trigger.
+### Not yet occurred — [FACT]
+- **Real-company scoring has not occurred.** `docs/METHODS_AND_RESULTS.md` is a locked shell with every result cell TBD.
+
+### Authorization state — [JOE, standing]
+- Joe has **conditionally authorized** the run to proceed automatically through scoring and measurement **only if all documented technical and methodological gates pass**. Joe is required again **only if a defined stop condition occurs**. The preregistration remains frozen; any method change would require a logged amendment.
 
 ### Claims currently supported
-- **None empirical.** What exists is methodology, preregistration discipline, provenance, and feasibility analysis. Feasibility itself has a flagged sensitivity: under the strictest cadence-safe reading without the OCF-YTD admission, fire-capable N = 0 — the headline's feasibility depends on that contested ruling.
-- Anything public that implies "validated against real bankruptcies" would be an overclaim today. Nothing on getaifo.com currently makes that claim — keep it that way until the primary run executes.
+- **[FACT] None empirical.** What exists is methodology, preregistration discipline, provenance, feasibility analysis, and an in-flight collection. Feasibility has a flagged sensitivity: under the strictest cadence-safe reading without the OCF-YTD admission, fire-capable N = 0 — the headline's feasibility depends on that contested ruling.
+- [REC] Anything public that implies "validated against real bankruptcies" would be an overclaim today. Nothing on getaifo.com currently makes that claim — keep it that way until scoring and measurement complete under the preregistered gates.
 
 ## 4. Marketing and public trust
 
-### Canonical surfaces
+### Canonical surfaces — [FACT]
 - **Site:** GetAIFO-site → `getaifo.com` (Replit). Dormant since 2026-06-22 but functioning.
 - **Public telemetry:** `aifo-telemetry` (public GitHub) → served through `demo.getaifo.com/api/telemetry` → rendered on `/how-we-test` and the System·Proof panel. Fresh as of 2026-07-14. Numbers are fetched at runtime, never hand-typed (a June refactor exists specifically because hand-typed numbers had drifted); on fetch failure the site renders "—" rather than stale values.
 - **Status page:** `/status` reads the Airtable nightly ledger through an anonymizing public-projection boundary (hardened 2026-06-22 against internal-data leakage).
 
-### Claims requiring reconciliation
+### Claims requiring reconciliation — [FACT] findings, [REC] dispositions
 1. "The product works" / "The product is built" (site) sits next to "We're onboarding our first cohort of real organizations now" — accurate only with the demo/synthetic caveat the site itself provides; keep the pairing intact in any copy edits.
 2. "Regenerated after every green nightly run" — true as worded, but the public commit history shows multi-day gaps; a red or skipped night silently pauses the record. The 2026-07-13 double-commit (counts went *down* without the run ledger advancing) is a small integrity wobble worth explaining or fixing in the mirror job.
 3. One hardcoded fallback remains on the site (`SIGNALS_FALLBACK = 40`, last verified 2026-06-11) — the exact pattern the live-telemetry refactor was built to eliminate.
-4. No validation-study claims exist publicly yet — correct, and must remain so until Study A's primary run produces results.
+4. No validation-study claims exist publicly yet — correct, and must remain so until Study A's scoring and measurement complete under the preregistered gates.
 
-### Visual and messaging work
+### Visual and messaging work — [FACT]
 - None active. The April "light lavender" redesign was explored on three branches and abandoned (main keeps the dark theme; `privacy.tsx` still carries orphaned hardcoded palette colors). Inline "coming next" roadmap on the site: cohort onboarding, board-packet Excel export, Plaid, multi-company portfolio view.
 
 ## 5. Company operations
 
 ### Active workstreams (detail in [ACTIVE_WORKSTREAMS.md](ACTIVE_WORKSTREAMS.md))
-1. Product feature delivery — PR #186 (AI.FO-Demo), awaiting review.
-2. Founder/constitution governance docs — PR #180 (AI.FO-Demo), awaiting founder review.
-3. Product runtime architecture decision package — Codex session, Control-Plane worktree `codex/product-runtime-architecture-decision-package` (docs-only, local).
-4. Study A live-run readiness — validation-study `master`; blocked on matched-set re-emission and Joe's trigger.
-5. Nightly telemetry operations — launchd + deadman; steady state, recent integrity fixes (#187–#189).
-6. Control-plane operational refinement — workqueue empty ("In Progress: None"); blocked items WQ-023 (product runtime hosting) and WQ-035 (apply automation) await founder decisions.
+1. [PR] Product feature delivery — PR #186 (AI.FO-Demo), pending final technical review + founder decision.
+2. [PR] Founder/constitution working drafts — PR #180 (AI.FO-Demo), pending reconciliation into a Founder Operating Manual.
+3. [PR] Product runtime architecture decision package — PR #13 (AIFO-Control-Plane, draft), pending founder review.
+4. [RUN] Study A live collection — running (~36% at checkpoint), conditionally authorized through scoring/measurement gates.
+5. [FACT] Nightly telemetry operations — launchd + deadman; steady state, recent integrity fixes (#187–#189).
+6. [FACT] Control-plane operational refinement — workqueue empty ("In Progress: None"); blocked items WQ-023 (product runtime hosting) and WQ-035 (apply automation) await founder decisions.
 7. This consolidation — Control-Plane worktree `claude/company-program-state-consolidation-2026-07`, new files under `docs/company/` only.
 
-### Ownership
+### Ownership — [FACT]
 - All gates route to **Joe** (sole founder; first engineering hire not yet made). Executing agents: Claude Code and Codex sessions, plus independent adversarial "fresh reader" agents in the study. Airtable is the operational ledger (nightly runs) and the study's decision log.
 
-### Branch and worktree isolation
-- Control-Plane: worktrees under `.worktrees/` per session; branch prefixes `agent/*`, `docs/*`, `codex/*`, `claude/*`. Two active worktrees: the runtime-architecture session and this consolidation — their file sets do not overlap.
+### Branch and worktree isolation — [FACT]
+- Control-Plane: worktrees under `.worktrees/` per session; branch prefixes `agent/*`, `docs/*`, `codex/*`, `claude/*`. Two active worktrees: the runtime-architecture session (now PR #13) and this consolidation — their file sets do not overlap.
 - AI.FO-Demo: branch-per-workstream convention (~70 remote branches, most stale); prescribed physical checkout for concurrency is `Desktop/aifo-demo-app`.
-- Study: real work on `master`; default branch abandoned (needs re-pointing).
+- Study: real work on `master`; default branch abandoned (needs re-pointing [JOE]).
 
-### Decision dependencies and merge sequencing (current queue)
-1. AI.FO-Demo PR #195 (checkpoint docs) — mergeable whenever the hold lifts; disjoint paths from the others.
-2. AI.FO-Demo PR #180 (constitution drafts) — founder review; establishes doctrine home.
-3. AI.FO-Demo PR #186 (connectors/Stripe) — code review; watch small textual overlap with #195 (README/docs edits).
-4. Control-Plane runtime decision package — session completes → founder decision packet → resolves OD-005…OD-008 → unblocks WQ-023 and any product-runtime Terraform.
-5. Study A — matched-set re-emission → sealed-set manifest → Joe's single-shot scored run → METHODS_AND_RESULTS filled → only then any public validation claim.
+### Decision sequence — [REC]; each step is [JOE]
+This is a sequence of decisions, not a predetermined merge order:
+1. **PR #195:** decide refresh vs supersession vs closure — its July-14 checkpoint no longer matches current state (PR #13 open, EDGAR collection running).
+2. **PR #180:** reconcile the working drafts into one canonical Founder Operating Manual (home and format are Joe's call), then disposition the PR accordingly.
+3. **PR #186:** complete an independent technical review (do not rely on self-reported tests), then make the founder merge decision.
+4. **PR #13:** review the runtime decision packet and make the architecture decisions (OD-005…OD-008, OD-012); merging the PR records them.
+5. **This digest:** update against the resolved state of 1–4 (and the study run's outcome if it has moved), then merge.

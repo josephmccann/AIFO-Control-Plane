@@ -27,14 +27,14 @@ AI.FO currently needs:
 
 | Need | Current control-plane support | Gap |
 | --- | --- | --- |
-| Infrastructure as code | Terraform scaffold, ADRs, runbooks, remote state, narrowed plan policy, and partial hardened control-plane resources exist | Needs AWS account validation cleared before host completion |
+| Infrastructure as code | Terraform scaffold, ADRs, runbooks, remote state, narrowed plan policy, and hardened control-plane resources exist | None for the approved current-scope control plane |
 | Remote state | Bootstrap complete | None for planning |
-| CI plan | Workflow exists and successfully assumes the plan role through OIDC | None for planning |
+| CI plan | Workflow exists, assumes the plan role through OIDC, and reports a clean main drift gate | None for planning |
 | Product database | Not provisioned | Decide RDS or alternative only when product hosting scope is approved |
 | Product object storage | Not provisioned | R2 currently documented; do not replace silently |
 | Product secrets | Not provisioned | Need AWS Secrets Manager or approved equivalent design |
 | Product runtime | Not provisioned | Future phase after deployment-readiness review |
-| Observability | CloudTrail and Session Manager log resources partially provisioned | Need EC2 host, SSM test, metrics, and alerting plan |
+| Observability | CloudTrail and Session Manager logging are deployed and verified for control-plane administration | Metrics and alerting remain future improvements |
 
 ## Current Integration Needs
 
@@ -64,12 +64,11 @@ The control plane must preserve the ability to run:
 ## Immediate Infrastructure Gaps
 
 1. No product runtime architecture ADR.
-2. No deployed start/stop automation.
-3. No product secrets architecture.
-4. No monitoring architecture or Session Manager log retention.
-5. CloudTrail status has not been remediated; read-only inspection returned no trails in `us-west-2`.
-6. GitHub required reviewers are unavailable on the current repository plan, so apply automation is blocked.
-7. No apply workflow exists by design.
+2. No product secrets architecture.
+3. No product database architecture.
+4. No product object-storage migration decision.
+5. GitHub required reviewers are unavailable on the current repository plan, so apply automation is blocked.
+6. No apply workflow exists by design.
 
 ## Infrastructure Not To Build Yet
 
@@ -85,4 +84,4 @@ Do not build these until product migration requirements and approval gates are m
 
 ## Fit Conclusion
 
-The current scaffold is a suitable first control-plane baseline, but it must remain scoped. Bootstrap and planning are complete. The next gate is a reviewed, cost-aligned control-plane host plan, an operating schedule decision, and explicit human approval before any apply.
+The current control-plane baseline is complete for the approved scope and must remain scoped. The next infrastructure work should be limited to either control-plane operational polish or a product-runtime architecture ADR; no product runtime deployment is approved.

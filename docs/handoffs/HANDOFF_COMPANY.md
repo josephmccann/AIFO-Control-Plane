@@ -36,9 +36,10 @@ AI.FO is led by a solo founder. The company needs leverage, not unnecessary oper
 - Manual monthly AWS budget exists at $250.
 - Private GitHub repository exists.
 - Terraform bootstrap infrastructure has been deployed for remote state and GitHub OIDC after explicit approval.
-- A partial hardened control-plane apply created CloudTrail, Session Manager logging, VPC/network, IAM prerequisites, Scheduler group, Scheduler role, and Scheduler DLQ.
-- The control-plane host and product runtime have not been deployed.
-- EC2 launch is currently blocked by AWS `PendingVerification` in `us-west-2`.
+- The approved current-scope AWS control-plane baseline is operationally complete.
+- The control-plane EC2 host exists as `i-0254a9e2fcbcdebd7` and is currently stopped.
+- CloudTrail, Session Manager logging, VPC/network, IAM prerequisites, no-ingress EC2, and EventBridge Scheduler start/stop automation are deployed.
+- Product runtime infrastructure has not been deployed.
 
 ## Decision Discipline
 
@@ -58,4 +59,4 @@ Every material infrastructure decision must record:
 
 ## Current Company-Level Risk
 
-The largest immediate infrastructure risk is partial infrastructure drift while AWS account validation blocks EC2 launch. The second-largest risk is accidental ongoing cost from an 8 vCPU / 32 GiB control-plane host running continuously after the blocker clears. Product runtime infrastructure remains deferred until the product deployment scope is explicitly approved.
+The largest immediate infrastructure risk is accidental ongoing cost if the 8 vCPU / 32 GiB control-plane host is left running outside the approved schedule. Product runtime infrastructure remains deferred until the product deployment scope is explicitly approved.

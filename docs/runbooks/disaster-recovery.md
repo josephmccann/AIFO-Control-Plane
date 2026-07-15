@@ -2,7 +2,7 @@
 
 ## Current Scope
 
-Bootstrap infrastructure has been deployed. Disaster recovery currently covers Git repository history, Terraform configuration, the S3 Terraform state bucket, and GitHub OIDC bootstrap resources. The control-plane host and product runtime have not been deployed.
+The approved current-scope control plane has been deployed. Disaster recovery currently covers Git repository history, Terraform configuration, the S3 Terraform state bucket, GitHub OIDC bootstrap resources, CloudTrail, Session Manager logging, EventBridge Scheduler, and the stopped EC2 control-plane host. Product runtime infrastructure has not been deployed.
 
 ## Recovery Priorities
 
@@ -35,7 +35,7 @@ If GitHub Actions cannot assume the plan role:
 
 ## EC2 Host Failure
 
-If the host is unreachable through SSM after deployment:
+If the host is unreachable through SSM:
 
 1. Confirm instance is running.
 2. Confirm SSM agent status if visible.

@@ -27,6 +27,7 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-033 | Complete GitHub Terraform plan gate | Main/manual drift fails; PR proposed changes pass | Done |
 | WQ-034 | Checkpoint control-plane before Codex CLI update | PR #10 merged | Done |
 | WQ-036 | Add durable local `actionlint` and `shellcheck` tooling | Pinned installer, platform tests, full repository validation | Done |
+| WQ-037 | Define control-plane host patching and maintenance | ADR-0010, approval-gated runbook, repository-state reconciliation | Done |
 
 ## In Progress
 
@@ -41,6 +42,5 @@ None.
 
 ## Next
 
-- Define the host patching and maintenance procedure.
 - Add periodic deployment-status documentation checks.
 - Add lightweight monthly cost evidence.

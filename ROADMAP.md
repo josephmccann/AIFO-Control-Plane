@@ -52,8 +52,8 @@ Decision gate: no further AWS mutation without explicit human approval.
 Status: Next.
 
 - Reproducible local `actionlint` and `shellcheck` tooling: complete.
+- Approval-gated manual host patching runbook and ADR: complete.
 - Add periodic documentation checks for stale deployment status.
-- Add patch-management runbook for the stopped control-plane host.
 - Add cost-review cadence and lightweight monthly cost evidence.
 - Run a Terraform state recovery drill from S3 versioning.
 

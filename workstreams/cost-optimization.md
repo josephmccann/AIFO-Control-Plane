@@ -12,16 +12,15 @@ Keep the control plane within the $250 monthly AWS budget unless a human explici
 - NAT Gateway is intentionally avoided.
 - Interface VPC endpoints are deferred.
 - Example root volume is 100 GiB gp3.
-- Current deployed cost baseline includes one Session Manager KMS key, CloudWatch Logs retention, CloudTrail S3 log storage, and an SQS DLQ. No EC2 instance or public IPv4 cost is currently active.
+- Current deployed cost baseline includes the scheduled EC2 host, 100 GiB gp3 root volume, public IPv4 while running, one Session Manager KMS key, CloudWatch Logs retention, CloudTrail S3 log storage, Scheduler, and an SQS DLQ.
 - Current model: `docs/cost-model.md`.
 
 ## Gaps
 
-- Stop/start schedules are not deployed because the EC2 instance was not created.
 - No cost dashboard or cost report in repo.
 - Manual budget is not imported into Terraform.
 
 ## Next Work
 
-- Keep EC2 launch blocked until AWS validation clears and renewed approval is granted.
+- Keep the host on the approved weekday schedule and review monthly cost evidence.
 - Document budget import only if requested.

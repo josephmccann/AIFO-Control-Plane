@@ -13,16 +13,19 @@ Keep the control plane aligned with no-static-keys, least privilege, no public i
 - SSM-only administration.
 - IMDSv2 required.
 - Terraform state excluded from Git.
-- CloudTrail management events, encrypted CloudTrail S3 storage, encrypted Session Manager logging, and Scheduler prerequisite controls are partially deployed.
+- CloudTrail management events and encrypted CloudTrail S3 storage.
+- Encrypted Session Manager logging with 30-day retention.
+- EventBridge Scheduler start/stop automation targeting only the control-plane host.
+- Approval-gated monthly manual host patching under ADR-0010.
 
 ## Gaps
 
-- EC2 host and Scheduler start/stop schedules are not deployed because AWS account validation blocked EC2 launch.
 - Product secrets architecture not designed.
 - Apply role final permissions not designed.
+- Automated patch compliance reporting is deferred for the current single-host scope.
 
 ## Next Work
 
-- Re-plan after AWS validation clears and verify residual resources before any renewed apply.
+- Run approved monthly patch windows and record evidence.
 - Add least-privilege apply role design after apply boundary is approved.
 - Add credential and secret scanning to CI.

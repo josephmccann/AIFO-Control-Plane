@@ -9,6 +9,7 @@ locals {
   state_object_arn      = "arn:${local.arn_partition}:s3:::${var.state_bucket_name}/${var.state_key}"
   state_lockfile_arn    = "arn:${local.arn_partition}:s3:::${var.state_bucket_name}/${var.state_key}.tflock"
   state_bucket_arn      = "arn:${local.arn_partition}:s3:::${var.state_bucket_name}"
+  cloudtrail_bucket_arn = "arn:${local.arn_partition}:s3:::aifo-control-plane-cloudtrail-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
   plan_role_name        = "${var.role_name_prefix}-Plan"
   apply_role_name       = "${var.role_name_prefix}-Apply"
   plan_environment_sub  = "repo:${local.github_repo}:environment:${var.github_plan_environment}"
@@ -205,6 +206,21 @@ data "aws_iam_policy_document" "plan_read_access" {
       "tag:GetTagValues",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ReadCloudTrailLogBucketMetadata"
+    actions = [
+      "s3:GetAccelerateConfiguration",
+      "s3:GetBucketCORS",
+      "s3:GetBucketLogging",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketWebsite",
+      "s3:GetReplicationConfiguration",
+      "s3:ListBucket",
+    ]
+    resources = [local.cloudtrail_bucket_arn]
   }
 
   statement {

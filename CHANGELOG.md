@@ -4,13 +4,17 @@ All notable changes to this repository are recorded here.
 
 ## Unreleased
 
+- Checkpointed the operationally complete current-scope AWS control-plane baseline before Codex CLI update.
+- Added dated session handoff at `docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md`.
+- Updated canonical state, readiness, roadmap, security, and workqueue documents to record `PARKED — SAFE FOR CODEX CLI UPDATE`.
+- Completed GitHub plan-role read-policy updates through default version `v4`; apply role remains state-access-only.
+- Completed the GitHub Terraform Plan drift gate; main/manual runs now fail on detailed exit code `2`, while pull requests may report proposed changes.
+- Verified latest GitHub Terraform Plan run `29378532712` as exit code `0`, `0` add / `0` change / `0` destroy, result `clean`.
+- Recorded deployed control-plane host `i-0254a9e2fcbcdebd7` as stopped.
 - Ignored stopped-state Terraform drift for the EC2 host auto-assigned public IPv4 address to avoid replacing the scheduled SSM-only host after approved stop/start cycles.
-- Applied the GitHub OIDC plan-role read-policy update after approval; the apply role remains state-access-only.
-- Recorded the partial hardened control-plane apply attempt blocked by AWS `PendingVerification` during EC2 launch.
-- Documented the created CloudTrail, Session Manager logging, network, IAM, Scheduler group, and Scheduler DLQ resources, plus remaining unapplied EC2 and Scheduler schedule resources.
+- Completed the hardened control-plane baseline with CloudTrail, Session Manager logging, no-ingress EC2, and EventBridge Scheduler.
 - Added Terraform modules for a multi-Region CloudTrail management-events baseline, encrypted Session Manager logging, and EventBridge Scheduler EC2 start/stop automation.
 - Added ADR-0008 for the CloudTrail management-events baseline and ADR-0009 for automated EC2 operating schedules.
-- Updated runbooks, deployment readiness, memory, roadmap, and handoffs for the hardened first-deployment plan.
 - Changed the control-plane default root EBS volume from 200 GiB to 100 GiB.
 - Documented 8-hours-per-weekday, 12-hours-per-day, and always-on operating schedules with revised cost estimates.
 - Documented that `m7i-flex.2xlarge` is approved only for scheduled operation under the current $250 monthly budget.
@@ -18,7 +22,6 @@ All notable changes to this repository are recorded here.
 - Added EC2 start/stop runbook and proposed EventBridge Scheduler start/stop design.
 - Added ADR-0007 for the manual apply boundary while GitHub reviewer protection is unavailable.
 - Recorded the approved remote-state and GitHub OIDC bootstrap execution results.
-- Documented created bootstrap resources, Terraform outputs, verification results, warnings, and next GitHub setup actions.
 - Added product runtime inventory for the existing AI.FO-Demo product.
 - Added control-plane fit assessment, principle traceability matrix, assumption register, and execution plan.
 - Added repository operating model docs for contribution, security, roadmap, runbooks, memory, workstreams, and workqueue.
@@ -28,7 +31,6 @@ All notable changes to this repository are recorded here.
 - Added initial cost model with always-on, scheduled, and smaller-instance scenarios.
 - Narrowed the GitHub Terraform plan role from AWS managed `ReadOnlyAccess` to a custom read policy with explicit extension hook.
 - Made EC2 detailed monitoring explicit and disabled by default.
-- Reduced example root volume size from 200 GiB to 100 GiB for the initial host.
 - Made shell scripts compatible with GitHub `shellcheck`.
 - Made the Terraform plan workflow skip until OIDC/backend repository variables are configured.
 

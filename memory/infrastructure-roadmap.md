@@ -1,17 +1,22 @@
 # Infrastructure Roadmap Memory
 
+Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+
 ## Now
 
-- Record the partial hardened control-plane apply.
-- Keep control-plane apply blocked while AWS account regional validation prevents EC2 launch.
-- Do not run destroy.
+- AWS control-plane baseline is operationally complete for the approved current scope.
+- EC2 instance `i-0254a9e2fcbcdebd7` is stopped.
+- Local Terraform plan and GitHub Terraform Plan are clean.
+- No new AWS implementation work should begin before the Codex CLI update.
 
 ## Next
 
-- Wait for AWS account validation to clear or open AWS Support if it persists.
-- Re-run a read-only control-plane plan.
-- Expected residual plan is the EC2 instance, Scheduler inline policy, and Scheduler start/stop schedules only.
-- Resume apply only after renewed explicit approval.
+- Resume with Codex 5.6 using `docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md`.
+- Confirm clean repository state, AWS identity, stopped instance state, and clean Terraform plans.
+- Then choose one narrow next task:
+  - add `actionlint`/`shellcheck` availability to the developer toolchain or CI;
+  - create a product-runtime architecture ADR without deploying anything;
+  - define host patching and maintenance procedure.
 
 ## Later
 
@@ -24,6 +29,7 @@
 
 ## Explicitly Deferred
 
+- Product runtime deployment.
 - EKS.
 - Service mesh.
 - NAT Gateway.

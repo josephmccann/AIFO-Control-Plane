@@ -1,5 +1,7 @@
 # Roadmap
 
+Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+
 This roadmap is intentionally conservative. The control plane must support the actual AI.FO product while avoiding infrastructure for hypothetical future systems.
 
 ## Phase 0: Repository Operating Model
@@ -23,42 +25,37 @@ Status: Complete and applied.
 - Separate Terraform plan and apply roles created.
 - GitHub environments created.
 - Repository variables configured for Terraform plan.
-- First GitHub Actions plan succeeded through OIDC.
-- Exact human execution steps prepared.
-- EC2 instance recommendation documented against current AWS pricing.
-- Cost model documented against the $250 monthly budget.
+- GitHub Actions plan succeeds through OIDC.
+- Apply role remains state-access-only.
+- Exact human execution steps documented.
 
-Completed resources:
+## Phase 2: Hardened Control-Plane Baseline
 
-- State bucket: `aifo-terraform-state-350480401760-us-west-2`
-- OIDC provider: `arn:aws:iam::350480401760:oidc-provider/token.actions.githubusercontent.com`
-- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
-- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
-- State access policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-StateAccess`
-- Plan read policy: `arn:aws:iam::350480401760:policy/AIFO-GitHubActions-Terraform-PlanReadAccess`
+Status: Complete for approved current scope.
 
-## Phase 2: Hardened Control-Plane Host
+- CloudTrail management-events baseline deployed.
+- Session Manager logging deployed.
+- VPC/network baseline deployed.
+- No-ingress EC2 host deployed.
+- EC2 instance `i-0254a9e2fcbcdebd7` is stopped.
+- 100 GiB encrypted gp3 root volume deployed.
+- EventBridge Scheduler start and stop schedules deployed.
+- Scheduler inline policy and DLQ deployed.
+- Local Terraform plan is clean.
+- GitHub Terraform Plan is clean on `main`: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712.
+- GitHub plan-role read policy default version is `v4`.
 
-Status: Partially applied; blocked by AWS account regional validation for EC2 launch.
+Decision gate: no further AWS mutation without explicit human approval.
 
-- Keep `terraform-apply` unused because required reviewers are unavailable on the current GitHub plan.
-- Keep apply workflow absent.
-- CloudTrail, Session Manager logging, VPC/network, IAM prerequisites, Scheduler group, Scheduler role, and Scheduler DLQ are created.
-- EC2 host, 100 GiB root volume, Scheduler inline policy, and Scheduler start/stop schedules are not created.
-- Post-failure Terraform plan shows `4 to add, 0 to change, 0 to destroy`.
-- Wait for AWS account validation to clear, then re-plan and require renewed approval before any resumed apply.
+## Phase 3: Operational Refinement
 
-Decision gate: renewed human approval before any local IAM Identity Center apply.
+Status: Next.
 
-## Phase 3: Hardening
-
-Status: Planned after host deployment completes.
-
-- Patch management.
-- Cost alerts and recurring cost model.
-- Backup and restore drills for Terraform state.
-- Least-privilege policy refinement based on observed plan requirements.
-- Static analysis additions such as `actionlint`, `shellcheck`, and Terraform security linting.
+- Install or add CI support for `actionlint` and `shellcheck`.
+- Add periodic documentation checks for stale deployment status.
+- Add patch-management runbook for the stopped control-plane host.
+- Add cost-review cadence and lightweight monthly cost evidence.
+- Run a Terraform state recovery drill from S3 versioning.
 
 ## Phase 4: Product Runtime Design
 

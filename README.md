@@ -1,25 +1,44 @@
 # AI.FO Control Plane
 
-Initial AWS infrastructure repository for the AI.FO control plane.
+AWS infrastructure control-plane repository for AI.FO.
 
-This repository has completed the approved bootstrap for Terraform remote state and GitHub Actions OIDC. It does not include an apply workflow. A supervised 2026-07-14 control-plane apply partially created audit, logging, network, IAM, and scheduler prerequisite resources, then stopped when AWS returned `PendingVerification` during EC2 launch. The control-plane host and product runtime have not been deployed.
+Session state: PARKED — SAFE FOR CODEX CLI UPDATE
 
-The control plane exists to support the current AI.FO product. Start with [docs/product-runtime-inventory.md](docs/product-runtime-inventory.md) before changing infrastructure design.
+The approved current-scope AWS control-plane baseline is operationally complete. It does not host the AI.FO product runtime and it does not include an apply workflow.
+
+Start with [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md) before changing infrastructure design or resuming work.
 
 ## Baseline
 
+- AWS account: `350480401760`
 - AWS region: `us-west-2`
-- Budget target: `$250` per month
+- Terraform state bucket: `aifo-terraform-state-350480401760-us-west-2`
+- Terraform state key: `control-plane/terraform.tfstate`
 - Human admin access: IAM Identity Center permission set `AIFO-Platform-Admin`
 - CI/CD access: GitHub Actions OIDC, no static AWS keys
-- Host access: AWS Systems Manager Session Manager, no public SSH
-- Network default: one public subnet in one Availability Zone
-- Host default: public IPv4 address, zero inbound security-group rules
-- Egress default: HTTPS to the internet, DNS to the VPC resolver
-- Intended host: Ubuntu EC2, 8 vCPU, 32 GB RAM
-- Current default host candidate: `m7i-flex.2xlarge`
-- Current default root volume: 100 GiB encrypted gp3
-- Current deployment status: bootstrap deployed; audit/logging/network prerequisites partially deployed; control-plane host and product runtime not deployed
+- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
+- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`
+- Apply role status: state-access-only; no infrastructure mutation policy
+- EC2 instance: `i-0254a9e2fcbcdebd7`
+- EC2 state: `stopped`
+- Instance type: `m7i-flex.2xlarge`
+- Root volume: 100 GiB encrypted gp3
+- Administrative access: AWS Systems Manager Session Manager only
+- Public SSH: not allowed
+- Inbound security-group rules: zero
+- Operating schedule: start 08:00 and stop 16:00 Monday-Friday
+- Timezone: `America/Los_Angeles`
+- Current monthly posture: scheduled operation under the $250 budget target; always-on operation is not approved
+- Product runtime infrastructure: not deployed
+
+## Current Verification
+
+- Local Terraform control-plane plan: `0 to add, 0 to change, 0 to destroy`
+- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712
+- GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`
+- GitHub plan-role policy default version: `v4`
+- OIDC trust: unchanged and restricted to exact repository/environment subjects
+- Scheduler: unchanged and targets only `i-0254a9e2fcbcdebd7`
 
 ## Repository Layout
 
@@ -29,178 +48,95 @@ The control plane exists to support the current AI.FO product. Start with [docs/
 │   ├── terraform-plan.yml
 │   └── terraform-validate.yml
 ├── docs/
-│   ├── architecture.md
 │   ├── adr/
-│   ├── control-plane-fit-assessment.md
-│   ├── deployment-readiness-review.md
-│   ├── ec2-instance-recommendation.md
-│   ├── implementation-plan.md
-│   ├── product-runtime-inventory.md
+│   ├── handoffs/
 │   ├── runbooks/
+│   ├── session-handoffs/
+│   ├── architecture.md
+│   ├── deployment-readiness-review.md
+│   ├── product-runtime-inventory.md
 │   └── security-model.md
 ├── memory/
 ├── scripts/
-│   ├── bootstrap-github-oidc.sh
-│   ├── bootstrap-local.sh
-│   └── validate.sh
 ├── terraform/
 │   ├── bootstrap/
-│   │   ├── github-oidc/
-│   │   └── remote-state/
 │   ├── environments/control-plane/
 │   └── modules/
-│       ├── budget/
-│       ├── compute/
-│       └── network/
 ├── workqueue/
 └── workstreams/
 ```
 
 ## What Terraform Defines
 
-The deployable `control-plane` environment defines:
+The deployed `control-plane` environment includes:
 
 - VPC with DNS support
-- One public subnet by default
-- Internet Gateway and default route for outbound internet access
-- S3 gateway endpoint for private S3 routing where applicable
-- Ubuntu EC2 control-plane host with a public IPv4 address
-- EC2 IAM role with `AmazonSSMManagedInstanceCore`
+- One public subnet in one Availability Zone
+- Internet Gateway and outbound default route
+- S3 gateway endpoint
+- Ubuntu EC2 control-plane host with public IPv4 for outbound egress
+- No SSH key
 - Security group with no ingress rules
 - Security group egress for HTTPS and DNS only
-- Optional AWS Budget management, disabled by default
-- EC2 detailed monitoring disabled by default for cost discipline
-- Multi-Region CloudTrail management-events baseline with S3 log delivery
+- EC2 IAM role with `AmazonSSMManagedInstanceCore`
+- IMDSv2 required
+- Termination protection enabled
+- Multi-Region CloudTrail management-events baseline
+- Dedicated encrypted CloudTrail S3 log bucket with lifecycle expiration
 - Session Manager logging to encrypted CloudWatch Logs with 30-day retention
-- EventBridge Scheduler start/stop automation for weekday operating hours. Scheduler group, role, and DLQ exist; start/stop schedules wait for the EC2 instance ID.
+- EventBridge Scheduler start/stop automation for weekday operating hours
+- Scheduler dead-letter queue
+- Optional AWS Budget management, disabled by default
 
-The host uses a public IPv4 address because the initial workload needs outbound internet access for package installation, GitHub clones, container pulls, and external API calls to services such as OpenAI, Anthropic, and Google. With zero inbound security-group rules and no SSH key, public addressing gives required egress without the recurring cost of a NAT Gateway. A later phase can migrate the host into private subnets once the extra cost and operational complexity are justified.
-
-Current AWS pricing review shows an always-on `m7i-flex.2xlarge` exceeds the $250 monthly budget after compute, 100 GiB EBS, and public IPv4 are counted. See [docs/ec2-instance-recommendation.md](docs/ec2-instance-recommendation.md). Under the current budget, `m7i-flex.2xlarge` is approved only for scheduled operation after an apply approval packet is reviewed; it is not approved for continuous operation.
-
-The current cost model is documented in [docs/cost-model.md](docs/cost-model.md).
-
-## Local Validation
-
-Install Terraform `>= 1.10.0`, then run:
-
-```bash
-./scripts/bootstrap-local.sh
-./scripts/validate.sh
-```
-
-The validation path initializes each Terraform root with:
-
-```bash
-terraform init -backend=false -input=false
-```
-
-`-backend=false` avoids any dependency on remote state infrastructure during local checks.
+The host uses public IPv4 because the initial workload needs outbound internet access for package installation, GitHub clones, container pulls, and external API calls. Public addressing plus zero inbound security-group rules avoids NAT Gateway cost for the solo-founder stage. A private subnet migration remains deferred.
 
 ## GitHub Actions
 
-Two workflows are included:
+Workflows:
 
 - `terraform-validate.yml`: formatting and Terraform validation without AWS credentials.
-- `terraform-plan.yml`: Terraform plan using GitHub Actions OIDC role assumption.
+- `terraform-plan.yml`: Terraform plan using GitHub Actions OIDC.
 
 There is no apply workflow.
 
-The plan workflow runs in the GitHub environment `terraform-plan` and expects repository variables:
-
-| Variable | Purpose |
-| --- | --- |
-| `AWS_TERRAFORM_PLAN_ROLE_ARN` | IAM role ARN assumed by GitHub Actions through OIDC |
-| `TF_BACKEND_BUCKET` | S3 bucket for Terraform state |
-| `TF_BACKEND_KEY` | State key, for example `control-plane/terraform.tfstate` |
-
-Do not add AWS access keys as GitHub secrets.
-
-The repository variables are configured for planning:
+Repository variables configured for planning:
 
 - `AWS_TERRAFORM_PLAN_ROLE_ARN=arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`
 - `TF_BACKEND_BUCKET=aifo-terraform-state-350480401760-us-west-2`
 - `TF_BACKEND_KEY=control-plane/terraform.tfstate`
 
-GitHub required environment reviewers are unavailable on the current repository plan. The `terraform-apply` environment exists but has no required reviewer protection and must remain unused. Do not create an apply workflow. Until GitHub reviewer protection is available or a replacement approval boundary is accepted, control-plane applies must be performed only from an authenticated IAM Identity Center session after a reviewed approval packet.
+Plan gate behavior:
 
-## Terraform State
+- Pull request exit code `2`: allowed as proposed change.
+- Main/manual exit code `2`: failed as unexpected drift.
+- Exit code `0`: clean.
+- Exit code `1`: failed plan.
 
-Terraform remote state bootstrap is complete:
+GitHub required environment reviewers are unavailable on the current repository plan. The `terraform-apply` environment exists but must remain unused. Do not create an apply workflow until an enforceable approval boundary exists.
 
-- State bucket: `aifo-terraform-state-350480401760-us-west-2`
-- State key: `control-plane/terraform.tfstate`
-- Region: `us-west-2`
-- Encryption: enabled
-- Locking: native S3 lockfiles
-
-The S3 backend uses native S3 lockfiles:
-
-```hcl
-use_lockfile = true
-```
-
-DynamoDB locking is intentionally not part of the initial backend. Native S3 lockfiles require Terraform `>= 1.10.0`; the workflows pin Terraform `1.10.5`.
-
-## Terraform Inputs
-
-Start from the example file:
+## Local Validation
 
 ```bash
-cp terraform/environments/control-plane/terraform.tfvars.example \
-  terraform/environments/control-plane/terraform.tfvars
+PATH="$PWD/build/bin:$PATH" AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 ./scripts/validate.sh
 ```
 
-Review the values before any future plan or apply. Do not commit `terraform.tfvars` if it contains environment-specific or sensitive values.
-
-The default root volume is 100 GiB encrypted gp3. This is intended for the operating system, Terraform/AWS/Git tooling, product checkout, and bounded Docker or build cache. It is not intended for persistent product databases, uploaded accounting files, large local model weights, or unbounded container/image caches.
-
-The default operating schedule is 08:00-16:00 Monday-Friday in `America/Los_Angeles`. The schedules are configurable, target only the Terraform-managed control-plane host, and send failed invocations to a dead-letter queue.
-
-## Budget Management
-
-`manage_budget` defaults to `false` because an AWS Budget already exists manually.
-
-To import the existing budget later:
-
-1. Set `manage_budget = true`.
-2. Set `monthly_budget_usd` and `budget_notification_emails` to match the existing budget.
-3. Run an approved import, not an apply:
+Read-only control-plane plan:
 
 ```bash
-terraform -chdir=terraform/environments/control-plane import \
-  'module.budget[0].aws_budgets_budget.monthly' \
-  ACCOUNT_ID:BUDGET_NAME
+PATH="$PWD/build/bin:$PATH" AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 \
+terraform -chdir=terraform/environments/control-plane plan \
+  -no-color -input=false -lock=false -detailed-exitcode
 ```
-
-Review the resulting plan before any future apply.
-
-## Instance Type Candidates
-
-The default instance type is `m7i-flex.2xlarge` because it targets 8 vCPU and 32 GiB RAM. Under the current $250 monthly budget it is approved only for scheduled operation, not continuous operation. Before first deployment, verify pricing and availability for:
-
-- `m7i-flex.2xlarge`
-- `m7i.2xlarge`
-- `m7a.2xlarge`
-
-## Deployment Status
-
-Bootstrap infrastructure has been deployed from this repository:
-
-- S3 remote-state bucket and supporting controls.
-- GitHub OIDC provider.
-- Terraform plan and apply roles.
-- Terraform state access and plan read policies.
-
-The control-plane EC2 host has not been deployed. Product runtime infrastructure has not been deployed. The control-plane environment is partially applied and currently blocked by AWS account regional validation for EC2 `RunInstances` in `us-west-2`.
-
-Before resuming control-plane deployment, wait for AWS validation to clear, run a reviewed plan, confirm it proposes only the EC2 instance and dependent Scheduler resources, and obtain renewed explicit approval.
 
 ## Operating Model
 
-- ADRs: [docs/adr/](docs/adr/)
-- Runbooks: [docs/runbooks/](docs/runbooks/)
 - Current state: [memory/current-state.md](memory/current-state.md)
+- Open decisions: [memory/open-decisions.md](memory/open-decisions.md)
 - Work queue: [workqueue/README.md](workqueue/README.md)
-- Contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Security posture: [SECURITY.md](SECURITY.md)
+- Deployment readiness: [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md)
+- Control-plane handoff: [docs/handoffs/HANDOFF_CONTROL_PLANE.md](docs/handoffs/HANDOFF_CONTROL_PLANE.md)
+- Session handoff: [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md)
+
+## Product Runtime Boundary
+
+The control plane does not run the AI.FO product. Product runtime infrastructure remains out of scope until a separate architecture, security, data, cost, and deployment decision is approved.

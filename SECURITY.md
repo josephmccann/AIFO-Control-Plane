@@ -1,8 +1,10 @@
 # Security
 
+Session state: PARKED — SAFE FOR CODEX CLI UPDATE
+
 ## Scope
 
-This repository controls AWS infrastructure design for AI.FO. Terraform remote-state and GitHub OIDC bootstrap infrastructure has been deployed. A partial hardened control-plane apply created audit, logging, network, IAM, and scheduler prerequisite resources. The control-plane host and product runtime have not been deployed.
+This repository controls AWS infrastructure for the AI.FO control plane in AWS account `350480401760`, region `us-west-2`. The approved current-scope baseline is deployed and operationally complete. Product runtime infrastructure is not deployed.
 
 ## Reporting Security Issues
 
@@ -24,6 +26,26 @@ Do not open a public issue for suspected vulnerabilities, leaked credentials, cu
 - GitHub Actions AWS access through OIDC and short-lived credentials.
 - Separate human, plan, apply, and EC2 runtime permissions.
 - Default deny for inbound network access.
+- No product runtime deployment without a separate approval gate.
+
+## Current Security Status
+
+- Terraform remote state is stored in `aifo-terraform-state-350480401760-us-west-2`.
+- GitHub OIDC provider is deployed.
+- Plan role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Plan`.
+- Apply role: `arn:aws:iam::350480401760:role/AIFO-GitHubActions-Terraform-Apply`.
+- Plan-role policy default version is `v4` and remains read-only.
+- Apply role is unchanged and has only Terraform state access.
+- OIDC trust is unchanged and restricted to exact repository/environment subjects.
+- No apply workflow exists.
+- `terraform-apply` environment exists but must remain unused because required reviewer protection is unavailable.
+- EC2 instance `i-0254a9e2fcbcdebd7` exists and is stopped.
+- EC2 administration is SSM-only; no SSH key is configured.
+- Host security group has zero inbound rules.
+- IMDSv2 is required.
+- CloudTrail management-event logging is enabled.
+- Session Manager logging is configured to encrypted CloudWatch Logs with 30-day retention.
+- EventBridge Scheduler is configured for weekday start/stop and targets only the Terraform-managed instance.
 
 ## Credential Handling
 
@@ -38,7 +60,7 @@ Not allowed:
 - AWS access keys in GitHub secrets.
 - AWS access keys in local files committed to Git.
 - Secrets in Terraform variables committed to Git.
-- Copying secrets into issue, PR, or chat history.
+- Copying secrets into issues, PRs, documentation, or chat history.
 
 ## Product Data Sensitivity
 
@@ -50,33 +72,13 @@ AI.FO works with accounting data, QBO connections, AI prompts, verification, tel
 - customer data minimization;
 - auditability without surveillance.
 
-## Current Security Status
+## Required Review Before Any Future Infrastructure Mutation
 
-- Bootstrap Terraform has been applied for remote state and GitHub OIDC.
-- Control-plane Terraform is partially applied; EC2 launch is blocked by AWS `PendingVerification`.
-- The EC2 host design has no inbound security-group rules and no SSH key.
-- The initial host uses public IPv4 only for outbound egress and cost avoidance.
-- The GitHub OIDC bootstrap root has created separate plan and apply roles.
-- The plan role is used by the GitHub plan workflow through OIDC and has the approved read-only refresh policy for the hardened resource graph.
-- The `terraform-apply` GitHub environment exists, but required reviewers are unavailable on the current repository plan and the environment must remain unused.
-- The apply role has only Terraform state access and no infrastructure mutation permissions.
-- No apply workflow exists or may be created under the current GitHub approval limitation.
-- Product runtime secrets, database, and storage are not yet provisioned in AWS.
-- CloudTrail management-event logging, Session Manager CloudWatch logging with KMS encryption, and Scheduler prerequisite resources are partially deployed.
-- No EC2 instance exists; no Scheduler start or stop schedule exists yet.
-
-## Required Pre-Deployment Review
-
-Before any resumed control-plane apply:
-
-- verify AWS account regional validation has cleared for EC2 launch;
-- verify the existing CloudTrail trail, log bucket, lifecycle, and log-file validation settings;
-- verify the AWS account ID and region;
-- review Terraform plan output;
-- confirm remote-state bucket name and lockfile behavior;
-- confirm EC2 schedule and cost against the $250 budget;
-- confirm Session Manager logging retention and sensitive-output limitations;
-- confirm the residual plan contains only the EC2 host, Scheduler inline policy, and Scheduler start/stop schedules;
-- confirm no public ingress rules are introduced;
-- confirm rollback and emergency access runbooks are current.
-- apply only with an authenticated IAM Identity Center session after an explicit approval packet.
+- Confirm AWS account and region.
+- Confirm Terraform plan output.
+- Confirm GitHub plan gate is clean on `main`.
+- Confirm the EC2 instance operating schedule and budget posture.
+- Confirm no public ingress rules are introduced.
+- Confirm Session Manager logging retention and sensitive-output limitations.
+- Confirm rollback and emergency access runbooks are current.
+- Apply only with authenticated IAM Identity Center access after explicit human approval.

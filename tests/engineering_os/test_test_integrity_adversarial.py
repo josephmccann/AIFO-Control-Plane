@@ -722,6 +722,107 @@ class DetectorEvasionTests(unittest.TestCase):
             )
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_python_class_body_import_execution_fails_closed(self):
+        imports = (
+            "    import support\n",
+            "    import support as helper\n",
+            "    from support import VALUE\n",
+            "    from support import VALUE as setting\n",
+        )
+        for imported in imports:
+            source = (
+                "class TestThing:\n" + imported
+                + "    def test_x(self):\n        assert True\n"
+            )
+            with self.subTest(imported=imported):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                (self.base / "support.py").write_text("VALUE = 1\n", encoding="utf-8")
+                (self.head / "support.py").write_text(
+                    "raise RuntimeError('collection abort')\n", encoding="utf-8",
+                )
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_definition_literal_operators_fail_closed(self):
+        defaults = (
+            "1 / 0",
+            "1 << 1000",
+            "2 ** 1000",
+            "1 @ 2",
+            "~1",
+        )
+        for default in defaults:
+            source = "def test_x(value=%s):\n    assert value\n" % default
+            with self.subTest(default=default):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        class_source = (
+            "class TestThing:\n    VALUE = 1 / 0\n"
+            "    def test_x(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(class_source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_definition_literals_are_bounded(self):
+        values = (
+            "[0] * 300",
+            "[" + ",".join("0" for _ in range(300)) + "]",
+            repr("x" * 20_000),
+            "[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]",
+            "{[]}",
+        )
+        for value in values:
+            source = "def test_x(item=%s):\n    assert item is not None\n" % value
+            with self.subTest(value=value[:40]):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_init_subclass_restricts_receiver_attributes(self):
+        attributes = ("__bases__", "collection_mode", "__dict__")
+        for attribute in attributes:
+            source = (
+                "class Base:\n"
+                "    def __init_subclass__(cls):\n"
+                "        cls.%s = ()\n" % attribute
+                + "class TestThing(Base):\n"
+                "    def test_x(self):\n        assert True\n"
+            )
+            with self.subTest(attribute=attribute):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_parametrize_rejects_unknown_or_ambiguous_options(self):
+        decorators = (
+            "@pytest.mark.parametrize('value', [1], unknown=True)\n",
+            "@pytest.mark.parametrize('value', [1], ['id'])\n",
+            "@pytest.mark.parametrize('value', [1], **{'ids': ['id']})\n",
+            "@pytest.mark.parametrize('value', [1], scope='worker')\n",
+        )
+        for decorator in decorators:
+            source = "import pytest\n" + decorator + "def test_x(value):\n    assert value\n"
+            with self.subTest(decorator=decorator):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_bounded_literals_and_parametrize_options_remain_parseable(self):
+        source = (
+            "import pytest\n"
+            "@pytest.mark.parametrize(\n"
+            "    'value', [(1, {'label': 'one'}), (2, {'label': 'two'})],\n"
+            "    indirect=False, ids=['one', 'two'], scope='function',\n"
+            ")\n"
+            "def test_x(value='safe', metadata={'items': [1, -2, +3, None]}):\n"
+            "    assert value is not None\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_python_known_safe_definition_metadata_remains_parseable(self):
         sources = (
             (

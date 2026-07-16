@@ -9,6 +9,7 @@ import ast
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 from collections import Counter
@@ -577,6 +578,76 @@ def _descendant_binding_names(node: ast.AST) -> Tuple[str, ...]:
     return tuple(sorted(names))
 
 
+def _bounded_definition_literal(value: Optional[ast.AST]) -> bool:
+    """Recognize inert, bounded literal ASTs without evaluating operators."""
+
+    max_depth = 16
+    max_items = 256
+    max_bytes = 16_384
+    max_number = 1_000_000_000
+    items = 0
+    payload_bytes = 0
+
+    def visit(node: Optional[ast.AST], depth: int, *, hashable: bool = False) -> bool:
+        nonlocal items, payload_bytes
+        if node is None:
+            return True
+        items += 1
+        if items > max_items or depth > max_depth:
+            return False
+        if isinstance(node, ast.Constant):
+            constant = node.value
+            if constant is None or isinstance(constant, bool):
+                size = 1
+            elif isinstance(constant, int):
+                if abs(constant) > max_number:
+                    return False
+                size = len(str(constant))
+            elif isinstance(constant, float):
+                if not math.isfinite(constant) or abs(constant) > max_number:
+                    return False
+                size = len(repr(constant))
+            elif isinstance(constant, str):
+                size = len(constant.encode("utf-8"))
+            elif isinstance(constant, bytes):
+                size = len(constant)
+            else:
+                return False
+            payload_bytes += size
+            return payload_bytes <= max_bytes
+        if isinstance(node, ast.UnaryOp):
+            return (
+                isinstance(node.op, (ast.UAdd, ast.USub))
+                and isinstance(node.operand, ast.Constant)
+                and isinstance(node.operand.value, (int, float))
+                and not isinstance(node.operand.value, bool)
+                and visit(node.operand, depth + 1, hashable=True)
+            )
+        if isinstance(node, ast.Tuple):
+            return all(
+                visit(item, depth + 1, hashable=hashable) for item in node.elts
+            )
+        if isinstance(node, ast.List):
+            return not hashable and all(
+                visit(item, depth + 1) for item in node.elts
+            )
+        if isinstance(node, ast.Set):
+            return not hashable and all(
+                visit(item, depth + 1, hashable=True) for item in node.elts
+            )
+        if isinstance(node, ast.Dict):
+            if hashable or any(key is None for key in node.keys):
+                return False
+            return all(
+                visit(key, depth + 1, hashable=True)
+                and visit(item, depth + 1)
+                for key, item in zip(node.keys, node.values)
+            )
+        return False
+
+    return visit(value, 0)
+
+
 def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
     """Reject dynamic module/class namespace behavior without resolving aliases."""
 
@@ -605,17 +676,7 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
         return False
 
     def static_value(value: Optional[ast.AST]) -> bool:
-        if value is None or isinstance(value, ast.Constant):
-            return True
-        if isinstance(value, (ast.Tuple, ast.List, ast.Set)):
-            return all(static_value(item) for item in value.elts)
-        if isinstance(value, ast.Dict):
-            return all(static_value(item) for item in value.keys + value.values)
-        if isinstance(value, ast.UnaryOp):
-            return static_value(value.operand)
-        if isinstance(value, ast.BinOp):
-            return static_value(value.left) and static_value(value.right)
-        return False
+        return _bounded_definition_literal(value)
 
     def simple_target(target: ast.AST) -> bool:
         if isinstance(target, ast.Name):
@@ -659,6 +720,8 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
     ) -> bool:
         for statement in body:
             if class_scope and direct_binding_names(statement) & {"pytest", "unittest"}:
+                return False
+            if class_scope and isinstance(statement, (ast.Import, ast.ImportFrom)):
                 return False
             if references_dynamic_primitive(statement):
                 return False
@@ -776,27 +839,13 @@ def _python_stats(
         )
 
     def static_definition_value(value: Optional[ast.AST]) -> bool:
-        if value is None or isinstance(value, ast.Constant):
-            return True
-        if isinstance(value, (ast.Tuple, ast.List, ast.Set)):
-            return all(static_definition_value(item) for item in value.elts)
-        if isinstance(value, ast.Dict):
-            return all(
-                static_definition_value(item) for item in value.keys + value.values
-            )
-        if isinstance(value, ast.UnaryOp):
-            return static_definition_value(value.operand)
-        if isinstance(value, ast.BinOp):
-            return (
-                static_definition_value(value.left)
-                and static_definition_value(value.right)
-            )
-        return False
+        return _bounded_definition_literal(value)
 
     def safe_annotation(value: Optional[ast.AST]) -> bool:
         return value is None or (
             isinstance(value, ast.Constant)
             and (value.value is None or isinstance(value.value, str))
+            and _bounded_definition_literal(value)
         )
 
     def dotted_name(value: ast.AST) -> Tuple[str, ...]:
@@ -829,6 +878,7 @@ def _python_stats(
                     len(decorator.args) == 1
                     and isinstance(decorator.args[0], ast.Constant)
                     and isinstance(decorator.args[0].value, str)
+                    and _bounded_definition_literal(decorator.args[0])
                 )
             return (
                 len(decorator.args) == 2
@@ -836,20 +886,50 @@ def _python_stats(
                 and isinstance(decorator.args[0].value, bool)
                 and isinstance(decorator.args[1], ast.Constant)
                 and isinstance(decorator.args[1].value, str)
+                and _bounded_definition_literal(decorator.args[1])
             )
         if name == ("pytest", "mark", "parametrize"):
+            keyword_names = [item.arg for item in decorator.keywords]
+            keyword_values = {item.arg: item.value for item in decorator.keywords}
+            indirect = keyword_values.get("indirect")
+            ids = keyword_values.get("ids")
+            scope = keyword_values.get("scope")
+
+            def string_sequence(value: ast.AST) -> bool:
+                return (
+                    isinstance(value, (ast.List, ast.Tuple))
+                    and all(
+                        isinstance(item, ast.Constant)
+                        and isinstance(item.value, str)
+                        for item in value.elts
+                    )
+                    and _bounded_definition_literal(value)
+                )
+
+            indirect_safe = indirect is None or (
+                isinstance(indirect, ast.Constant)
+                and isinstance(indirect.value, bool)
+            ) or string_sequence(indirect)
+            ids_safe = ids is None or (
+                isinstance(ids, ast.Constant) and ids.value is None
+            ) or string_sequence(ids)
+            scope_safe = scope is None or (
+                isinstance(scope, ast.Constant)
+                and scope.value in {"class", "function", "module", "package", "session"}
+            )
             return (
                 allow_pytest_parametrize
                 and exact_module_import_before("pytest", position)
-                and len(decorator.args) >= 2
+                and len(decorator.args) == 2
                 and isinstance(decorator.args[0], ast.Constant)
                 and isinstance(decorator.args[0].value, str)
                 and bool(decorator.args[0].value)
-                and all(static_definition_value(item) for item in decorator.args[1:])
-                and all(
-                    item.arg is not None and static_definition_value(item.value)
-                    for item in decorator.keywords
-                )
+                and _bounded_definition_literal(decorator.args[0])
+                and static_definition_value(decorator.args[1])
+                and all(name in {"ids", "indirect", "scope"} for name in keyword_names)
+                and None not in keyword_names
+                and len(keyword_names) == len(set(keyword_names))
+                and indirect_safe and ids_safe and scope_safe
             )
         return False
 
@@ -874,9 +954,24 @@ def _python_stats(
                         isinstance(target, ast.Attribute)
                         and isinstance(target.value, ast.Name)
                         and target.value.id == receiver
+                        and target.attr in {
+                            "__test__", "__unittest_skip__", "__unittest_skip_why__",
+                        }
                         for target in targets
                     )
-                    or not static_definition_value(statement.value)
+                    or not all(
+                        (
+                            target.attr in {"__test__", "__unittest_skip__"}
+                            and isinstance(statement.value, ast.Constant)
+                            and isinstance(statement.value.value, bool)
+                        ) or (
+                            target.attr == "__unittest_skip_why__"
+                            and isinstance(statement.value, ast.Constant)
+                            and isinstance(statement.value.value, str)
+                            and _bounded_definition_literal(statement.value)
+                        )
+                        for target in targets
+                    )
                 ):
                     return False
                 continue

@@ -302,6 +302,60 @@ class CommandTests(unittest.TestCase):
         )
         self.assertEqual(history.code, "EVENT_COMMENT_ACTOR_INVALID")
 
+    def test_incomplete_or_unmatched_event_markers_fail_closed(self):
+        mission, policy = valid_context()
+        malformed_bodies = {
+            "begin-only": "<!-- EOS:EVENT:BEGIN -->",
+            "end-only": "<!-- EOS:EVENT:END -->",
+            "duplicate-begin": "<!-- EOS:EVENT:BEGIN --><!-- EOS:EVENT:BEGIN -->{}<!-- EOS:EVENT:END -->",
+        }
+        for name, body in malformed_bodies.items():
+            with self.subTest(name=name):
+                malformed = {
+                    "id": 70,
+                    "body": body,
+                    "created_at": "2026-07-15T10:00:00Z",
+                    "html_url": "https://github.com/%s/issues/101#issuecomment-70" % REPOSITORY,
+                    "user": {"login": BOT},
+                }
+                history = authenticate_event_history(
+                    [malformed], mission, policy, repository=REPOSITORY,
+                )
+                self.assertFalse(history.allowed)
+                self.assertEqual(history.code, "EVENT_COMMENT_FORMAT_INVALID")
+
+    def test_partialized_last_claim_cannot_truncate_prior_authenticated_chain(self):
+        mission, policy = valid_context()
+        ready_source = source_comment(71, "agent-a", "/eos ready", "2026-07-15T09:59:00Z")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-71"),
+        )
+        claim_source = source_comment(72, "agent-a", "/eos claim", "2026-07-15T10:00:00Z")
+        claim = audit_event(
+            "mission.claimed", "agent-a", "producer", claim_source["html_url"],
+            claim_source["created_at"], 2, ready["event_hash"],
+            {
+                "lease_owner": "agent-a", "lease_nonce": "github-comment-72",
+                "lease_start": claim_source["created_at"],
+                "lease_expires_at": "2026-07-15T10:15:00Z",
+                "wall_clock_cap_minutes": 240, "paths": mission["allowed_paths"],
+            },
+        )
+        partial_claim = {
+            "id": 74,
+            "body": "<!-- EOS:EVENT:BEGIN -->\n%s" % json.dumps(claim, sort_keys=True),
+            "created_at": "2026-07-15T10:00:01Z",
+            "html_url": "https://github.com/%s/issues/101#issuecomment-74" % REPOSITORY,
+            "user": {"login": BOT},
+        }
+        history = authenticate_event_history(
+            [ready_source, event_comment(73, [ready]), claim_source, partial_claim],
+            mission, policy, repository=REPOSITORY,
+        )
+        self.assertFalse(history.allowed)
+        self.assertEqual(history.code, "EVENT_COMMENT_FORMAT_INVALID")
+
     def test_forged_system_event_source_is_rejected(self):
         mission, policy = valid_context()
         forged = audit_event(
@@ -643,6 +697,38 @@ class CommandTests(unittest.TestCase):
         self.assertTrue(skipped.allowed, skipped.code)
         self.assertEqual(skipped.candidates, ())
 
+    def test_pull_request_records_follow_the_same_mission_candidate_rules(self):
+        candidate = claimed_mission_candidate(issue=404)
+        plain_pr = {
+            "number": 403, "state": "closed", "body": "ordinary pull request",
+            "pull_request": {"url": "https://api.github.test/pulls/403"},
+        }
+        mission_pr = issue_record(candidate, state="closed")
+        mission_pr["pull_request"] = {"url": "https://api.github.test/pulls/404"}
+        discovery = command_kernel.discover_repository_mission_candidates(
+            [plain_pr, mission_pr],
+            {"403": [], "404": candidate["comments"]},
+        )
+        self.assertTrue(discovery.allowed, discovery.code)
+        self.assertEqual(
+            [item["issue_number"] for item in discovery.candidates], [404],
+        )
+        mission, policy = valid_context()
+        authenticated = command_kernel.authenticate_repository_lease_events(
+            [dict(discovery.candidates[0], actions_runs=[])],
+            policy, repository=REPOSITORY,
+        )
+        self.assertTrue(authenticated.allowed, authenticated.code)
+        self.assertEqual(authenticated.events[-1]["type"], "mission.claimed")
+
+        missing_declaration_pr = copy.deepcopy(mission_pr)
+        missing_declaration_pr["body"] = "declaration removed from pull request"
+        denied = command_kernel.discover_repository_mission_candidates(
+            [missing_declaration_pr], {"404": candidate["comments"]},
+        )
+        self.assertFalse(denied.allowed)
+        self.assertEqual(denied.code, "REPOSITORY_MISSION_DECLARATION_INVALID")
+
     def test_authenticated_release_park_or_cancellation_clears_repository_lease(self):
         mission, policy = valid_context()
         ready_source = source_comment(200, "agent-a", "/eos ready", "2026-07-15T10:00:00Z")
@@ -727,6 +813,7 @@ class CommandTests(unittest.TestCase):
         self.assertIn("--repository-leases", workflow)
         self.assertIn("EOS:MISSION:BEGIN", workflow)
         self.assertIn("EOS:EVENT:BEGIN", workflow)
+        self.assertNotIn('select(has("pull_request") | not)', workflow)
         self.assertIn("cancel-in-progress: false", workflow)
 
     def test_orphan_recovery_is_explicit_policy_gated_and_per_mission(self):

@@ -45,9 +45,11 @@ pure kernel validates complete authenticated input.
 Mission commands and explicit orphan recovery serialize on the same
 repository-and-issue concurrency key. Claims additionally serialize on a
 repository-wide claim lock. Inside that lock, the adapter re-fetches open and
-closed issues plus their complete paginated histories. An issue with declaration
-markers or EOS event comments is a mission candidate; every candidate must retain
-a complete valid current declaration and authenticated history. Active leases are
+closed issue and pull-request records plus their complete paginated histories.
+Any record with declaration markers or EOS event comments is a mission candidate;
+every candidate must retain a complete valid current declaration and authenticated
+history. Partial, unmatched, or malformed event markers invalidate the history
+instead of truncating it. Active leases are
 exposed to conflict evaluation regardless of issue state and remain conflicting
 until an authenticated release, park, or cancellation. Malformed candidate
 declarations or histories fail the repository snapshot closed; only issues with

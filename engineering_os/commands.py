@@ -57,8 +57,8 @@ _EVENT_MARKER = re.compile(
     r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->",
     re.S,
 )
-_EVENT_BEGIN = "<!-- EOS:EVENT:BEGIN -->"
-_EVENT_END = "<!-- EOS:EVENT:END -->"
+_EVENT_BEGIN = "EOS:EVENT:BEGIN"
+_EVENT_END = "EOS:EVENT:END"
 _BOT = "github-actions[bot]"
 _RECOVERY_EVENTS = frozenset(("workflow_dispatch",))
 
@@ -137,8 +137,6 @@ def discover_repository_mission_candidates(
     for issue in issues:
         if not isinstance(issue, Mapping):
             return RepositoryDiscoveryDecision(False, "REPOSITORY_DISCOVERY_INPUT_INVALID")
-        if "pull_request" in issue:
-            continue
         issue_number = issue.get("number")
         comments = comments_by_issue.get(str(issue_number))
         body = issue.get("body") or ""
@@ -277,9 +275,13 @@ def _extract_event_comments(
         body = comment.get("body")
         if not isinstance(body, str):
             continue
+        begins = body.count(_EVENT_BEGIN)
+        ends = body.count(_EVENT_END)
         matches = list(_EVENT_MARKER.finditer(body))
-        if not matches:
+        if begins == 0 and ends == 0:
             continue
+        if not matches or begins != len(matches) or ends != len(matches):
+            return "EVENT_COMMENT_FORMAT_INVALID", events, groups
         if comment.get("user", {}).get("login") != _BOT:
             return "EVENT_COMMENT_ACTOR_INVALID", events, groups
         if _EVENT_MARKER.sub("", body).strip():

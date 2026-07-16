@@ -149,7 +149,7 @@ jobs:
           [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/all-issues.json"
           : > "$RUNNER_TEMP/comments-index.ndjson"
-          jq -r '.[] | select(has("pull_request") | not) | .number' "$RUNNER_TEMP/all-issues.json" | while read -r issue; do
+          jq -r '.[].number' "$RUNNER_TEMP/all-issues.json" | while read -r issue; do
             gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments-${issue}.json"
             jq -n --arg issue "$issue" --slurpfile comments "$RUNNER_TEMP/comments-${issue}.json" \
               '{($issue):$comments[0]}' >> "$RUNNER_TEMP/comments-index.ndjson"

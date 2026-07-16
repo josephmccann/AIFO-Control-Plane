@@ -578,86 +578,100 @@ def _descendant_binding_names(node: ast.AST) -> Tuple[str, ...]:
 
 
 def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
-    """Detect static forms that can mutate module bindings outside AST Store nodes."""
+    """Reject dynamic module/class namespace behavior without resolving aliases."""
 
-    namespace_factories = {"globals", "locals", "vars"}
-    mutating_methods = {
-        "update", "setdefault", "__setitem__", "__delitem__", "__ior__",
-        "pop", "popitem", "clear",
+    primitives = {
+        "globals", "locals", "vars", "exec", "eval", "getattr", "setattr",
+        "delattr", "__import__",
+    }
+    reflection_attributes = primitives | {
+        "__builtins__", "__dict__", "__globals__", "__getattribute__",
+        "f_globals", "f_locals", "modules",
     }
 
-    def direct_namespace(value: ast.AST) -> bool:
+    def references_dynamic_primitive(statement: ast.stmt) -> bool:
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            for item in statement.names:
+                components = item.name.split(".")
+                if any(part in reflection_attributes for part in components):
+                    return True
+                if item.asname in reflection_attributes:
+                    return True
+        for node in ast.walk(statement):
+            if isinstance(node, ast.Name) and node.id in reflection_attributes:
+                return True
+            if isinstance(node, ast.Attribute) and node.attr in reflection_attributes:
+                return True
+        return False
+
+    def static_value(value: Optional[ast.AST]) -> bool:
+        if value is None or isinstance(value, ast.Constant):
+            return True
+        if isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+            return all(static_value(item) for item in value.elts)
+        if isinstance(value, ast.Dict):
+            return all(static_value(item) for item in value.keys + value.values)
+        if isinstance(value, ast.UnaryOp):
+            return static_value(value.operand)
+        if isinstance(value, ast.BinOp):
+            return static_value(value.left) and static_value(value.right)
+        return False
+
+    def simple_target(target: ast.AST) -> bool:
+        if isinstance(target, ast.Name):
+            return target.id not in reflection_attributes
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return all(simple_target(item) for item in target.elts)
+        if isinstance(target, ast.Starred):
+            return simple_target(target.value)
+        return False
+
+    def explicit_test_flag(statement: ast.Assign) -> bool:
         return (
-            isinstance(value, ast.Call)
-            and isinstance(value.func, ast.Name)
-            and value.func.id in namespace_factories
-            and (value.func.id != "vars" or not value.args and not value.keywords)
+            len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Attribute)
+            and statement.targets[0].attr == "__test__"
+            and isinstance(statement.targets[0].value, ast.Name)
+            and statement.targets[0].value.id.startswith("test")
+            and isinstance(statement.value, ast.Constant)
+            and statement.value.value is False
         )
 
-    namespace_aliases = set()
-    changed = True
-    while changed:
-        changed = False
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+    def safe_runtime_body(body: Sequence[ast.stmt]) -> bool:
+        for statement in body:
+            if references_dynamic_primitive(statement):
+                return False
+            if isinstance(statement, ast.ClassDef):
+                if not safe_runtime_body(statement.body):
+                    return False
                 continue
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if len(targets) != 1 or not isinstance(targets[0], ast.Name):
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            value = node.value
-            if value is None:
+            if isinstance(statement, (ast.Import, ast.ImportFrom, ast.Pass)):
                 continue
-            aliases_namespace = direct_namespace(value) or (
-                isinstance(value, ast.Name) and value.id in namespace_aliases
-            )
-            if aliases_namespace and targets[0].id not in namespace_aliases:
-                namespace_aliases.add(targets[0].id)
-                changed = True
+            if isinstance(statement, ast.Assign):
+                if explicit_test_flag(statement):
+                    continue
+                if not all(simple_target(target) for target in statement.targets):
+                    return False
+                simple_alias = (
+                    len(statement.targets) == 1
+                    and isinstance(statement.targets[0], ast.Name)
+                    and isinstance(statement.value, ast.Name)
+                )
+                if not simple_alias and not static_value(statement.value):
+                    return False
+                continue
+            if isinstance(statement, ast.AnnAssign):
+                if not simple_target(statement.target) or not static_value(statement.value):
+                    return False
+                continue
+            if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
+                continue
+            return False
+        return True
 
-    def namespace(value: ast.AST) -> bool:
-        return direct_namespace(value) or (
-            isinstance(value, ast.Name) and value.id in namespace_aliases
-        )
-
-    def namespace_subscript(value: ast.AST) -> bool:
-        return isinstance(value, ast.Subscript) and namespace(value.value)
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            if (
-                isinstance(node.func, ast.Name) and node.func.id in {"exec", "eval"}
-            ) or (
-                isinstance(node.func, ast.Attribute) and node.func.attr in {"exec", "eval"}
-            ):
-                return True
-            if (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr in mutating_methods
-                and namespace(node.func.value)
-            ):
-                return True
-            if (
-                isinstance(node.func, ast.Name)
-                and node.func.id in {"setattr", "delattr", "setitem", "delitem"}
-                and node.args and namespace(node.args[0])
-            ):
-                return True
-            if (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"setitem", "delitem"}
-                and node.args and namespace(node.args[0])
-            ):
-                return True
-        if isinstance(node, ast.Assign):
-            if any(namespace_subscript(target) for target in node.targets):
-                return True
-        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
-            if namespace_subscript(node.target):
-                return True
-        elif isinstance(node, ast.Delete):
-            if any(namespace_subscript(target) for target in node.targets):
-                return True
-    return False
+    return not isinstance(tree, ast.Module) or not safe_runtime_body(tree.body)
 
 
 class _SafeConstantFolder(ast.NodeTransformer):
@@ -699,10 +713,43 @@ class _SafeConstantFolder(ast.NodeTransformer):
         return node
 
 
-def _python_stats(text: str, module: str) -> _FileStats:
+def _python_stats(
+    text: str, module: str, *, allow_unittest_testcase: bool,
+) -> _FileStats:
     tree = ast.parse(text)
     if _has_dynamic_namespace_mutation(tree):
         raise SyntaxError("dynamic Python namespace mutation")
+    statement_positions = {id(statement): index for index, statement in enumerate(tree.body)}
+
+    def exact_unittest_testcase(base: ast.AST, owner: ast.ClassDef) -> bool:
+        if not (
+            allow_unittest_testcase and isinstance(base, ast.Attribute)
+            and base.attr == "TestCase"
+            and isinstance(base.value, ast.Name)
+            and base.value.id == "unittest"
+        ):
+            return False
+        bindings = []
+        for statement in tree.body[:statement_positions[id(owner)]]:
+            if isinstance(statement, ast.Import):
+                for item in statement.names:
+                    bound = item.asname or item.name.split(".")[0]
+                    if bound == "unittest":
+                        bindings.append(item.name == "unittest" and item.asname is None)
+                continue
+            if isinstance(statement, ast.ImportFrom):
+                for item in statement.names:
+                    if (item.asname or item.name) == "unittest":
+                        bindings.append(False)
+                continue
+            if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                if statement.name == "unittest":
+                    bindings.append(False)
+                continue
+            if "unittest" in _descendant_binding_names(statement):
+                bindings.append(False)
+        return bindings == [True]
+
     top_level_classes = {
         id(statement) for statement in tree.body if isinstance(statement, ast.ClassDef)
     }
@@ -713,6 +760,11 @@ def _python_stats(text: str, module: str) -> _FileStats:
             raise SyntaxError("nested Python test collection class")
         if any(not isinstance(base, (ast.Name, ast.Attribute)) for base in candidate.bases):
             raise SyntaxError("unsupported Python test base expression")
+        if any(
+            isinstance(base, ast.Attribute) and not exact_unittest_testcase(base, candidate)
+            for base in candidate.bases
+        ):
+            raise SyntaxError("unsupported qualified Python test base class")
     aliases = {"skip", "skipIf", "skipUnless"}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -1442,15 +1494,22 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
 
 
 def _test_stats(
-    root: Path, paths: Iterable[str], findings: list, config: Mapping[str, Any],
-    budget: Optional[ResourceBudget] = None,
+    root: Path, paths: Iterable[str], repository_paths: Iterable[str], findings: list,
+    config: Mapping[str, Any], budget: Optional[ResourceBudget] = None,
 ) -> Dict[str, _FileStats]:
+    unittest_shadowed = any(
+        path == "unittest.py" or path.endswith("/unittest.py")
+        or path == "unittest/__init__.py" or path.endswith("/unittest/__init__.py")
+        for path in repository_paths
+    )
     result = {}
     for relative in sorted(paths):
         try:
             text = _source(root / relative, budget, phase="test-parsing")
             result[relative] = (
-                _python_stats(text, relative) if relative.endswith(".py")
+                _python_stats(
+                    text, relative, allow_unittest_testcase=not unittest_shadowed,
+                ) if relative.endswith(".py")
                 else _javascript_stats(text, relative)
             )
         except _DuplicateCaseError:
@@ -1654,8 +1713,12 @@ def _analyze_test_integrity(
     findings = []
     base_tests = {path for path in actual_base if _matches(path, config["test_globs"])}
     head_tests = {path for path in actual_head if _matches(path, config["test_globs"])}
-    base_stats = _test_stats(base, base_tests, findings, config, budget)
-    head_stats = _test_stats(head, head_tests, findings, config, budget)
+    base_stats = _test_stats(
+        base, base_tests, actual_base, findings, config, budget,
+    )
+    head_stats = _test_stats(
+        head, head_tests, actual_head, findings, config, budget,
+    )
 
     deleted = sorted(base_tests - head_tests)
     added = set(head_tests - base_tests)

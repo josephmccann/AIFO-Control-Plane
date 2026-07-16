@@ -205,8 +205,10 @@ class DetectorEvasionTests(unittest.TestCase):
                 "def test_value():\n    assert True\ntest_value.__test__ = False\n",
             ),
             (
-                "class TestValues(external.Base):\n    def test_value(self):\n        assert True\n",
-                "class TestValues(external.AlternateBase):\n    def test_value(self):\n        assert True\n",
+                "class Base:\n    pass\nclass AlternateBase:\n    pass\n"
+                "class TestValues(Base):\n    def test_value(self):\n        assert True\n",
+                "class Base:\n    pass\nclass AlternateBase:\n    pass\n"
+                "class TestValues(AlternateBase):\n    def test_value(self):\n        assert True\n",
             ),
         )
         for base, head in cases:
@@ -522,6 +524,110 @@ class DetectorEvasionTests(unittest.TestCase):
                 for root in (self.base, self.head):
                     (root / "tests/test_service.py").write_text(source, encoding="utf-8")
                 self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_arbitrary_qualified_base_fails_closed(self):
+        source = (
+            "import support\n"
+            "class TestThing(support.Base):\n"
+            "    def test_x(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.base / "tests/support.py").write_text(
+            "class Base:\n    pass\n", encoding="utf-8",
+        )
+        (self.head / "tests/support.py").write_text(
+            "class Base:\n    __test__ = False\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_only_exact_unittest_testcase_qualified_base_is_allowlisted(self):
+        sources = (
+            (
+                "import unittest\n"
+                "class TestThing(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+            ),
+            (
+                "import unittest\n"
+                "class TestThing(unittest.IsolatedAsyncioTestCase):\n"
+                "    async def test_x(self):\n        self.assertTrue(True)\n"
+            ),
+        )
+        expected = (False, True)
+        for source, denied in zip(sources, expected):
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertEqual(
+                    "TEST_FILE_UNPARSABLE" in codes(self.analyze()), denied,
+                )
+
+    def test_python_unittest_allowlist_rejects_repository_shadow(self):
+        source = (
+            "import unittest\n"
+            "class TestThing(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+            (root / "unittest.py").write_text(
+                "class TestCase:\n    __test__ = False\n", encoding="utf-8",
+            )
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_namespace_factory_alias_shapes_fail_closed(self):
+        mutations = (
+            'factory = globals\nfactory()["Base"] = RuntimeBase\n',
+            '(namespace,) = (globals(),)\nnamespace["Base"] = RuntimeBase\n',
+            'dict.update(globals(), {"Base": RuntimeBase})\n',
+        )
+        for mutation in mutations:
+            source = (
+                "class Base:\n    pass\nclass RuntimeBase:\n    pass\n"
+                + mutation
+                + "class TestThing(Base):\n    def test_x(self):\n        assert True\n"
+            )
+            with self.subTest(mutation=mutation):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_imported_and_builtins_namespace_aliases_fail_closed(self):
+        mutations = (
+            "from builtins import globals as factory\n"
+            'factory()["Base"] = RuntimeBase\n',
+            "import builtins as runtime\n"
+            'runtime.globals()["Base"] = RuntimeBase\n',
+            "from builtins import exec as run\n"
+            'run("Base = RuntimeBase")\n',
+            "import builtins\n"
+            'getattr(builtins, "globals")()["Base"] = RuntimeBase\n',
+        )
+        for mutation in mutations:
+            source = (
+                "class Base:\n    pass\nclass RuntimeBase:\n    pass\n"
+                + mutation
+                + "class TestThing(Base):\n    def test_x(self):\n        assert True\n"
+            )
+            with self.subTest(mutation=mutation):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_safe_top_level_constructs_remain_parseable(self):
+        source = (
+            "import unittest\nimport json as json_module\n"
+            "LABEL = 'collection metadata'\nENABLED = True\n"
+            "def helper(value=LABEL):\n    return value\n"
+            "class Base(unittest.TestCase):\n    pass\n"
+            "Alias = Base\n"
+            "class TestThing(Alias):\n"
+            "    def test_x(self):\n        self.assertEqual(helper(), LABEL)\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"

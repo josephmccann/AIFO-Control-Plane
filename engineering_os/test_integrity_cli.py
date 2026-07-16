@@ -17,7 +17,7 @@ from .commands import authenticate_event_history
 from .mission import parse_issue_body
 from .schema import validate_document
 from .test_integrity import (
-    CoverageAttestation, _file_digests, analyze_test_integrity,
+    CoverageAttestation, ResourceBudget, _file_digests, analyze_test_integrity,
     authenticate_integrity_context,
 )
 from .canonical import content_sha256
@@ -34,7 +34,10 @@ _DEFAULT_LIMITS = {
 }
 
 
-def _command_bytes(command: Sequence[str], max_bytes: int, *, env=None) -> bytes:
+def _command_bytes(
+    command: Sequence[str], max_bytes: int, *, env=None,
+    resource_budget: ResourceBudget = None, phase: str = "command",
+) -> bytes:
     process = subprocess.Popen(
         list(command), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
     )
@@ -50,7 +53,10 @@ def _command_bytes(command: Sequence[str], max_bytes: int, *, env=None) -> bytes
                 raise OverflowError("TEST_RESOURCE_LIMIT")
         if process.wait() != 0:
             raise subprocess.CalledProcessError(process.returncode, command)
-        return bytes(output)
+        result = bytes(output)
+        if resource_budget is not None:
+            resource_budget.consume_bytes(len(result), phase=phase)
+        return result
     finally:
         if process.poll() is None:
             process.kill()
@@ -59,12 +65,19 @@ def _command_bytes(command: Sequence[str], max_bytes: int, *, env=None) -> bytes
             process.stdout.close()
 
 
-def _git(root: Path, *args: str, max_bytes: int = 65536) -> bytes:
-    return _command_bytes(["git", "-C", str(root), *args], max_bytes)
+def _git(
+    root: Path, *args: str, max_bytes: int = 65536,
+    resource_budget: ResourceBudget = None,
+) -> bytes:
+    return _command_bytes(
+        ["git", "-C", str(root), *args], max_bytes,
+        resource_budget=resource_budget, phase="git-command",
+    )
 
 
 def _git_zero_records(
     root: Path, args: Sequence[str], *, max_record_bytes: int, max_total_bytes: int,
+    resource_budget: ResourceBudget = None,
 ):
     process = subprocess.Popen(
         ["git", "-C", str(root), *args], stdout=subprocess.PIPE,
@@ -87,6 +100,8 @@ def _git_zero_records(
                 if len(record) > max_record_bytes:
                     raise OverflowError("TEST_RESOURCE_LIMIT")
                 if record:
+                    if resource_budget is not None:
+                        resource_budget.consume_git_record(len(record))
                     yield bytes(record)
             if len(pending) > max_record_bytes:
                 raise OverflowError("TEST_RESOURCE_LIMIT")
@@ -104,11 +119,11 @@ def _git_zero_records(
 
 def _tree_manifest(
     root: Path, commit_sha: str, max_file_bytes: int, limits: Mapping[str, int],
-    usage: Dict[str, int],
+    usage: Dict[str, int], resource_budget: ResourceBudget = None,
 ) -> Dict[str, Dict[str, str]]:
     if _git(
         root, "status", "--porcelain=v1", "-z", "--untracked-files=all",
-        max_bytes=limits["max_total_bytes"],
+        max_bytes=limits["max_total_bytes"], resource_budget=resource_budget,
     ):
         raise ValueError("TEST_CHECKOUT_DIRTY")
     manifest = {}
@@ -116,6 +131,7 @@ def _tree_manifest(
         root, ["ls-tree", "-rz", commit_sha],
         max_record_bytes=limits["max_git_record_bytes"],
         max_total_bytes=limits["max_total_bytes"],
+        resource_budget=resource_budget,
     ):
         try:
             metadata, raw_path = record.split(b"\t", 1)
@@ -128,6 +144,8 @@ def _tree_manifest(
         usage["files"] += 1
         if usage["files"] > limits["max_files"]:
             raise OverflowError("TEST_RESOURCE_LIMIT")
+        if resource_budget is not None:
+            resource_budget.consume_file(name, phase="git-tree")
         if object_type != "blob" or mode == "120000" or _SHA40.fullmatch(object_sha) is None:
             raise ValueError("TEST_GIT_OBJECT_UNSUPPORTED")
         path = root / name
@@ -136,20 +154,37 @@ def _tree_manifest(
         usage["bytes"] += path.stat().st_size
         if usage["bytes"] > limits["max_total_bytes"]:
             raise OverflowError("TEST_RESOURCE_LIMIT")
-        evidence = _file_digests(path, max_file_bytes)
+        evidence = _file_digests(
+            path, max_file_bytes, resource_budget, phase="git-blob-verification",
+        )
         if evidence["git_blob_sha"] != object_sha:
             raise ValueError("TEST_CHECKOUT_MISMATCH")
         manifest[name] = evidence
     disk = set()
-    for path in root.rglob("*"):
-        relative = path.relative_to(root)
-        if path.is_file() and ".git" not in relative.parts:
-            if len(disk) >= limits["max_files"]:
-                raise OverflowError("TEST_RESOURCE_LIMIT")
-            name = relative.as_posix()
-            if len(name.encode("utf-8")) > limits["max_path_bytes"]:
-                raise OverflowError("TEST_RESOURCE_LIMIT")
-            disk.add(name)
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(str(directory)) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                relative = path.relative_to(root)
+                if relative.parts and relative.parts[0] == ".git":
+                    continue
+                if entry.is_symlink():
+                    raise ValueError("TEST_CHECKOUT_DIRTY")
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(path)
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    raise ValueError("TEST_CHECKOUT_DIRTY")
+                if len(disk) >= limits["max_files"]:
+                    raise OverflowError("TEST_RESOURCE_LIMIT")
+                name = relative.as_posix()
+                if resource_budget is not None:
+                    resource_budget.consume_file(name, phase="filesystem-reconciliation")
+                elif len(name.encode("utf-8")) > limits["max_path_bytes"]:
+                    raise OverflowError("TEST_RESOURCE_LIMIT")
+                disk.add(name)
     if disk != set(manifest):
         raise ValueError("TEST_CHECKOUT_DIRTY")
     return manifest
@@ -158,18 +193,24 @@ def _tree_manifest(
 def derive_git_manifests(
     base_root: Any, head_root: Any, base_sha: str, head_sha: str,
     max_file_bytes: int, limits: Mapping[str, int] = None,
+    *, resource_budget: ResourceBudget = None,
 ) -> Tuple[Dict[str, Dict[str, str]], Dict[str, Dict[str, str]]]:
     """Verify exact clean commits, direction, ancestry, and blob bytes."""
 
     bounded = {**_DEFAULT_LIMITS, **dict(limits or {})}
+    budget = resource_budget or ResourceBudget(bounded)
+    budget.require_limits(bounded)
     base, head = Path(base_root).resolve(strict=True), Path(head_root).resolve(strict=True)
     if base == head or _SHA40.fullmatch(base_sha or "") is None or _SHA40.fullmatch(head_sha or "") is None:
         raise ValueError("TEST_REVISION_EVIDENCE_INVALID")
-    if _git(base, "rev-parse", "--verify", "HEAD^{commit}", max_bytes=64).decode("ascii").strip() != base_sha:
+    if _git(base, "rev-parse", "--verify", "HEAD^{commit}", max_bytes=64, resource_budget=budget).decode("ascii").strip() != base_sha:
         raise ValueError("TEST_REVISION_BASE_MISMATCH")
-    if _git(head, "rev-parse", "--verify", "HEAD^{commit}", max_bytes=64).decode("ascii").strip() != head_sha:
+    if _git(head, "rev-parse", "--verify", "HEAD^{commit}", max_bytes=64, resource_budget=budget).decode("ascii").strip() != head_sha:
         raise ValueError("TEST_REVISION_HEAD_MISMATCH")
-    _git(head, "fetch", "--quiet", "--no-tags", str(base), base_sha, max_bytes=1024)
+    _git(
+        head, "fetch", "--quiet", "--no-tags", str(base), base_sha,
+        max_bytes=1024, resource_budget=budget,
+    )
     ancestor = subprocess.run(
         ["git", "-C", str(head), "merge-base", "--is-ancestor", base_sha, head_sha],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -178,12 +219,15 @@ def derive_git_manifests(
         raise ValueError("TEST_REVISION_UNRELATED")
     usage = {"files": 0, "bytes": 0}
     return (
-        _tree_manifest(base, base_sha, max_file_bytes, bounded, usage),
-        _tree_manifest(head, head_sha, max_file_bytes, bounded, usage),
+        _tree_manifest(base, base_sha, max_file_bytes, bounded, usage, budget),
+        _tree_manifest(head, head_sha, max_file_bytes, bounded, usage, budget),
     )
 
 
-def _gh(*args: str, max_response_bytes: int, usage: Dict[str, int] = None) -> Any:
+def _gh(
+    *args: str, max_response_bytes: int, usage: Dict[str, int] = None,
+    resource_budget: ResourceBudget = None,
+) -> Any:
     remaining = max_response_bytes
     if usage is not None:
         remaining -= usage.get("response_bytes", 0)
@@ -194,6 +238,8 @@ def _gh(*args: str, max_response_bytes: int, usage: Dict[str, int] = None) -> An
     )
     if usage is not None:
         usage["response_bytes"] = usage.get("response_bytes", 0) + len(raw)
+    if resource_budget is not None:
+        resource_budget.consume_github(response_bytes=len(raw))
     return json.loads(raw.decode("utf-8"))
 
 
@@ -217,6 +263,7 @@ def validate_github_pages(
 def _github_mission(
     repository: str, pull_request: int, base_sha: str, head_sha: str,
     policy: Mapping[str, Any], changed_files: Sequence[str],
+    resource_budget: ResourceBudget = None,
 ) -> Dict[str, Any]:
     limits = _DEFAULT_LIMITS
     response_cap = limits["max_github_response_bytes"]
@@ -224,6 +271,7 @@ def _github_mission(
     pr = _gh(
         "repos/%s/pulls/%d" % (repository, pull_request),
         max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     if (
         not isinstance(pr, Mapping) or pr.get("number") != pull_request
@@ -239,6 +287,7 @@ def _github_mission(
     issue = _gh(
         "repos/%s/issues/%d" % (repository, issue_number),
         max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     if not isinstance(issue, Mapping) or issue.get("number") != issue_number:
         raise ValueError("TEST_MISSION_ISSUE_INVALID")
@@ -247,15 +296,19 @@ def _github_mission(
         "--paginate", "--slurp",
         "repos/%s/issues/%d/comments?per_page=100" % (repository, issue_number),
         max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     comments = validate_github_pages(
         comment_pages, limits["max_github_pages"], limits["max_github_items"], response_cap,
     )
     usage["pages"] += len(comment_pages)
     usage["items"] += 2 + len(comments)
+    if resource_budget is not None:
+        resource_budget.consume_github(pages=len(comment_pages), items=2 + len(comments))
     run_pages = _gh(
         "--paginate", "--slurp", "repos/%s/actions/runs?per_page=100" % repository,
         max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     actions_runs = []
     if not isinstance(run_pages, list):
@@ -271,6 +324,8 @@ def _github_mission(
         if usage["items"] + len(actions_runs) + len(page["workflow_runs"]) > limits["max_github_items"]:
             raise ValueError("TEST_GITHUB_RESOURCE_LIMIT")
         actions_runs.extend(page["workflow_runs"])
+    if resource_budget is not None:
+        resource_budget.consume_github(pages=len(run_pages), items=len(actions_runs))
     return authenticate_integrity_context(
         mission, comments, policy, changed_files, repository=repository,
         mission_issue=issue_number, pull_request=pull_request,
@@ -281,12 +336,14 @@ def _github_mission(
 def _coverage_attestation(
     repository: str, commit_sha: str, root: Path, manifest: Mapping[str, Any],
     coverage_path: str, coverage_paths: Sequence[str], limits: Mapping[str, int],
+    resource_budget: ResourceBudget = None,
 ) -> CoverageAttestation:
     response_cap = limits["max_github_response_bytes"]
     usage = {"response_bytes": 0}
     runs = _gh(
         "repos/%s/actions/workflows/coverage.yml/runs?head_sha=%s&status=completed&per_page=100"
         % (repository, commit_sha), max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     candidates = runs.get("workflow_runs") if isinstance(runs, Mapping) else None
     if not isinstance(candidates, list) or len(candidates) > limits["max_github_items"]:
@@ -305,6 +362,7 @@ def _coverage_attestation(
     workflow = _gh(
         "repos/%s/contents/.github/workflows/coverage.yml?ref=%s" % (repository, commit_sha),
         max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     workflow_sha = workflow.get("sha") if isinstance(workflow, Mapping) else None
     if not isinstance(workflow_sha, str) or _SHA40.fullmatch(workflow_sha) is None:
@@ -312,6 +370,7 @@ def _coverage_attestation(
     artifacts = _gh(
         "repos/%s/actions/runs/%d/artifacts?per_page=100" % (repository, run["id"]),
         max_response_bytes=response_cap, usage=usage,
+        resource_budget=resource_budget,
     )
     candidates = artifacts.get("artifacts") if isinstance(artifacts, Mapping) else None
     expected_name = "eos-coverage-%s" % commit_sha
@@ -335,6 +394,8 @@ def _coverage_attestation(
         ["gh", "api", "repos/%s/actions/artifacts/%d/zip" % (repository, artifact.get("id"))],
         limits["max_coverage_bytes"], env=os.environ,
     )
+    if resource_budget is not None:
+        resource_budget.consume_coverage(len(archive))
     if hashlib.sha256(archive).hexdigest() != artifact_digest:
         raise ValueError("TEST_COVERAGE_ATTESTATION_UNAVAILABLE")
     try:
@@ -351,6 +412,8 @@ def _coverage_attestation(
         raise ValueError("TEST_COVERAGE_ATTESTATION_UNAVAILABLE")
     if len(coverage_bytes) > limits["max_coverage_bytes"]:
         raise OverflowError("TEST_RESOURCE_LIMIT")
+    if resource_budget is not None:
+        resource_budget.consume_coverage(len(coverage_bytes))
     file_digest = hashlib.sha256(coverage_bytes).hexdigest()
     if file_digest != manifest[coverage_path]["sha256"]:
         raise ValueError("TEST_COVERAGE_ATTESTATION_UNAVAILABLE")
@@ -375,6 +438,7 @@ def _coverage_attestations(
     repository: str, base_sha: str, head_sha: str, base_root: Path, head_root: Path,
     base_manifest: Mapping[str, Any], head_manifest: Mapping[str, Any],
     coverage_paths: Sequence[str], limits: Mapping[str, int],
+    resource_budget: ResourceBudget = None,
 ):
     present_base = [path for path in coverage_paths if path in base_manifest]
     present_head = [path for path in coverage_paths if path in head_manifest]
@@ -387,12 +451,16 @@ def _coverage_attestations(
             "base": _coverage_attestation(
                 repository, base_sha, base_root, base_manifest, present_base[0],
                 coverage_paths, limits,
+                resource_budget,
             ),
             "head": _coverage_attestation(
                 repository, head_sha, head_root, head_manifest, present_head[0],
                 coverage_paths, limits,
+                resource_budget,
             ),
         }
+    except OverflowError:
+        raise
     except (Exception, MemoryError, UnicodeError):
         return None
 
@@ -443,9 +511,10 @@ def main(argv: Sequence[str] = None) -> int:
             raise ValueError("TEST_BASE_POLICY_INVALID")
         max_file_bytes = 16 * 1024 * 1024
         limits = dict(_DEFAULT_LIMITS)
+        resource_budget = ResourceBudget(limits)
         base_manifest, head_manifest = derive_git_manifests(
             args.base_root, args.head_root, args.base_sha, args.head_sha, max_file_bytes,
-            limits,
+            limits, resource_budget=resource_budget,
         )
         changed = sorted({
             path for path in set(base_manifest) | set(head_manifest)
@@ -453,7 +522,7 @@ def main(argv: Sequence[str] = None) -> int:
         })
         mission = _github_mission(
             args.repository, args.pull_request, args.base_sha, args.head_sha,
-            policy, changed,
+            policy, changed, resource_budget,
         )
         evaluated = args.evaluated_at or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         configuration = {
@@ -482,6 +551,7 @@ def main(argv: Sequence[str] = None) -> int:
             args.repository, args.base_sha, args.head_sha,
             Path(args.base_root), Path(args.head_root), base_manifest, head_manifest,
             configuration["coverage_paths"], limits,
+            resource_budget,
         )
         analysis_policy = {
             "schema_version": "1.0.0", "repository": args.repository,
@@ -492,10 +562,37 @@ def main(argv: Sequence[str] = None) -> int:
             "founder_identities": policy["founder_identities"], "mission": mission,
             "configuration": configuration,
         }
-        report = analyze_test_integrity(args.base_root, args.head_root, analysis_policy)
-        output.write_text(json.dumps(report.to_dict(), sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+        report = analyze_test_integrity(
+            args.base_root, args.head_root, analysis_policy,
+            resource_budget=resource_budget,
+        )
+        report_bytes = (
+            json.dumps(report.to_dict(), sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
+        resource_budget.consume_bytes(len(report_bytes), phase="report-output")
+        output.write_bytes(report_bytes)
         return 0 if report.allowed else 1
-    except (Exception, MemoryError, UnicodeError) as error:
+    except (OverflowError, MemoryError) as error:
+        value = {
+            "schema_version": "1.0.0",
+            "repository": getattr(locals().get("args"), "repository", ""),
+            "base_sha": getattr(locals().get("args"), "base_sha", ""),
+            "head_sha": getattr(locals().get("args"), "head_sha", ""),
+            "allowed": False,
+            "findings": [{
+                "code": "TEST_RESOURCE_LIMIT",
+                "message": "Integrity processing exceeded its shared deterministic resource budget.",
+                "path": "$", "details": {},
+            }],
+            "deltas": {},
+        }
+        output.write_text(
+            json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        print(str(error), file=sys.stderr)
+        return 1
+    except (Exception, UnicodeError) as error:
         print(str(error), file=sys.stderr)
         return 1
 

@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from engineering_os.test_integrity import analyze_test_integrity
 from tests.engineering_os.test_test_integrity import FIXTURES, codes, policy
@@ -144,6 +145,107 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
         self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
 
+    def test_python_parametrize_cardinality_decline_changes_collection_semantics(self):
+        base = (
+            "import pytest\n"
+            "@pytest.mark.parametrize('value', [1, 2])\n"
+            "def test_value(value):\n    assert value > 0\n"
+        )
+        head = base.replace("[1, 2]", "[1]")
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()))
+
+    def test_python_signature_defaults_decorators_and_async_state_are_semantic(self):
+        cases = (
+            (
+                "def test_value(value=authoritative()):\n    assert value\n",
+                "def test_value(value=True):\n    assert value\n",
+            ),
+            (
+                "@mark.authoritative\ndef test_value():\n    assert True\n",
+                "@mark.fallback\ndef test_value():\n    assert True\n",
+            ),
+            (
+                "async def test_value():\n    assert True\n",
+                "def test_value():\n    assert True\n",
+            ),
+        )
+        for base, head in cases:
+            with self.subTest(head=head.splitlines()[0]):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()))
+
+    def test_python_enclosing_class_skip_and_collection_disable_are_detected(self):
+        cases = (
+            (
+                "import unittest\nclass TestValues(unittest.TestCase):\n"
+                "    def test_value(self):\n        self.assertTrue(True)\n",
+                "import unittest\n@unittest.skip('disabled')\nclass TestValues(unittest.TestCase):\n"
+                "    def test_value(self):\n        self.assertTrue(True)\n",
+            ),
+            (
+                "class TestValues:\n    def test_value(self):\n        assert True\n",
+                "class TestValues:\n    __test__ = False\n"
+                "    def test_value(self):\n        assert True\n",
+            ),
+        )
+        for base, head in cases:
+            with self.subTest(disablement=head.splitlines()[1]):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_python_function_test_flag_and_enclosing_collection_metadata_are_semantic(self):
+        cases = (
+            (
+                "def test_value():\n    assert True\n",
+                "def test_value():\n    assert True\ntest_value.__test__ = False\n",
+            ),
+            (
+                "class TestValues(Base):\n    def test_value(self):\n        assert True\n",
+                "class TestValues(AlternateBase):\n    def test_value(self):\n        assert True\n",
+            ),
+        )
+        for base, head in cases:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                found = codes(self.analyze())
+                self.assertTrue(found & {"TEST_SKIP_ADDED", "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS"})
+
+    def test_javascript_computed_suite_disablement_is_detected(self):
+        base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
+        heads = (
+            "describe['skip']('suite', () => { test('value', () => { expect(1); }); });\n",
+            "describe[\"s\" + 'kip']('suite', () => { test('value', () => { expect(1); }); });\n",
+            "const disabled = describe['skip']; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
+            "const suiteAlias = describe; suiteAlias.skip('suite', () => { test('value', () => { expect(1); }); });\n",
+            "const suiteAlias = describe; const disabled = suiteAlias['skip']; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_javascript_dynamic_collection_indirection_fails_closed(self):
+        base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
+        heads = (
+            "describe[mode]('suite', () => { test('value', () => { expect(1); }); });\n",
+            "const disabled = condition ? describe.skip : describe; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
+            "(describe)['skip']('suite', () => { test('value', () => { expect(1); }); });\n",
+            "globalThis.describe.skip('suite', () => { test('value', () => { expect(1); }); });\n",
+            "const {skip: disabled} = describe; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
+            "let disabled; disabled = describe.skip; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_package_test_command_change_is_blocked(self):
         for root, command in ((self.base, "vitest"), (self.head, "echo tests-disabled")):
             (root / "package.json").write_text(
@@ -255,6 +357,41 @@ class DetectorEvasionTests(unittest.TestCase):
         report = self.analyze(configured)
         self.assertIn("TEST_RESOURCE_LIMIT", codes(report))
 
+    def test_shared_budget_counts_scan_and_parse_phases(self):
+        configured = policy(self.base, self.head)
+        scan_bytes = sum(path.stat().st_size for root in (self.base, self.head) for path in root.rglob("*") if path.is_file())
+        configured["configuration"]["max_total_bytes"] = scan_bytes
+        self.assertIn("TEST_RESOURCE_LIMIT", codes(self.analyze(configured)))
+
+    def test_checkout_traversal_streams_without_path_rglob_materialization(self):
+        configured = policy(self.base, self.head)
+        with mock.patch.object(Path, "rglob", side_effect=AssertionError("unbounded rglob")):
+            report = self.analyze(configured)
+        self.assertNotIn("TEST_CHECKOUT_UNAVAILABLE", codes(report))
+
+    def test_resource_budget_uses_one_exact_aggregate_boundary(self):
+        from engineering_os.test_integrity import ResourceBudget
+        budget = ResourceBudget({
+            **policy(self.base, self.head)["configuration"],
+            "max_total_bytes": 10,
+        })
+        budget.consume_bytes(4, phase="discovery")
+        budget.consume_bytes(6, phase="parsing")
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            budget.consume_bytes(1, phase="reporting")
+
+    def test_resource_budget_rejects_many_small_files_across_phases(self):
+        from engineering_os.test_integrity import ResourceBudget
+        budget = ResourceBudget({
+            **policy(self.base, self.head)["configuration"],
+            "max_files": 3,
+        })
+        budget.consume_file("a", phase="discovery")
+        budget.consume_file("b", phase="git")
+        budget.consume_file("c", phase="parsing")
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            budget.consume_file("d", phase="reporting")
+
     def test_report_contains_authenticated_mission_and_pr_truth(self):
         report = self.analyze().to_dict()
         for field in (
@@ -329,6 +466,31 @@ class CliFailureArtifactTests(unittest.TestCase):
             self.assertNotIn(forbidden, wrapper)
             self.assertNotIn(forbidden, adapter)
 
+    def test_cli_resource_exhaustion_replaces_sentinel_with_bounded_error(self):
+        from engineering_os.test_integrity_cli import main
+        from tests.engineering_os.helpers import load_fixture
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "report.json"
+            repository_policy = root / "policy.json"
+            repository_policy.write_text(
+                json.dumps(load_fixture("policy-control-plane.json")), encoding="utf-8",
+            )
+            with mock.patch(
+                "engineering_os.test_integrity_cli.derive_git_manifests",
+                side_effect=OverflowError("TEST_RESOURCE_LIMIT"),
+            ):
+                status = main([
+                    "--base-root", str(root), "--head-root", str(root),
+                    "--base-sha", "1" * 40, "--head-sha", "2" * 40,
+                    "--repository", "josephmccann/AIFO-Control-Plane",
+                    "--base-policy", str(repository_policy), "--pull-request", "42",
+                    "--output", str(output),
+                ])
+            self.assertEqual(status, 1)
+            value = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(value["findings"][0]["code"], "TEST_RESOURCE_LIMIT")
+
 
 class RevisionEvidenceTests(unittest.TestCase):
     def setUp(self):
@@ -392,3 +554,48 @@ class RevisionEvidenceTests(unittest.TestCase):
         self.git(repo, "worktree", "add", "-q", "--detach", str(base), base_sha)
         with self.assertRaisesRegex(ValueError, "TEST_REVISION_UNRELATED"):
             self.derive(repo, base, head_sha, base_sha)
+
+    def test_git_adapter_consumes_existing_shared_budget(self):
+        from engineering_os.test_integrity import ResourceBudget
+        from engineering_os.test_integrity_cli import derive_git_manifests
+        repo, base_sha = self.repository("repo")
+        (repo / "tests/test_value.py").write_text(
+            "def test_value():\n    assert 1 == 1\n", encoding="utf-8",
+        )
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-qm", "head")
+        head_sha = self.git(repo, "rev-parse", "HEAD")
+        base = self.root / "base-worktree"
+        self.git(repo, "worktree", "add", "-q", "--detach", str(base), base_sha)
+        limits = {
+            "max_files": 100, "max_total_bytes": 512,
+            "max_path_bytes": 128, "max_git_record_bytes": 128,
+            "max_github_pages": 2, "max_github_items": 10,
+            "max_github_response_bytes": 256, "max_coverage_bytes": 256,
+        }
+        budget = ResourceBudget(limits)
+        budget.consume_bytes(500, phase="prior-github")
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            derive_git_manifests(
+                base, repo, base_sha, head_sha, 1024 * 1024, limits,
+                resource_budget=budget,
+            )
+
+
+class SharedTransportBudgetTests(unittest.TestCase):
+    def test_github_transport_uses_prior_phase_budget_without_reset(self):
+        from engineering_os.test_integrity import ResourceBudget
+        from engineering_os.test_integrity_cli import _gh
+        limits = {
+            "max_files": 100, "max_total_bytes": 12,
+            "max_path_bytes": 128, "max_git_record_bytes": 128,
+            "max_github_pages": 2, "max_github_items": 10,
+            "max_github_response_bytes": 12, "max_coverage_bytes": 12,
+        }
+        budget = ResourceBudget(limits)
+        budget.consume_bytes(11, phase="git")
+        with mock.patch(
+            "engineering_os.test_integrity_cli._command_bytes", return_value=b"{}",
+        ):
+            with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+                _gh("repos/acme/widgets", max_response_bytes=12, resource_budget=budget)

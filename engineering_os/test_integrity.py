@@ -9,6 +9,7 @@ import ast
 import copy
 import hashlib
 import json
+import os
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -171,6 +172,76 @@ class IntegrityDecision:
     details: Dict[str, Any] = field(default_factory=dict)
 
 
+class ResourceBudget:
+    """One fail-closed aggregate budget shared by every integrity phase."""
+
+    def __init__(self, limits: Mapping[str, Any]):
+        self._limits = dict(limits)
+        self._usage = {
+            "files": 0, "bytes": 0, "github_pages": 0,
+            "github_items": 0, "github_response_bytes": 0,
+            "coverage_bytes": 0,
+        }
+
+    def require_limits(self, limits: Mapping[str, Any]) -> None:
+        for name in (
+            "max_files", "max_total_bytes", "max_path_bytes",
+            "max_git_record_bytes", "max_github_pages", "max_github_items",
+            "max_github_response_bytes", "max_coverage_bytes",
+        ):
+            if self._limits.get(name) != limits.get(name):
+                raise ValueError("TEST_RESOURCE_BUDGET_MISMATCH")
+
+    def consume_bytes(self, amount: int, *, phase: str) -> None:
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0 or not phase:
+            raise ValueError("TEST_RESOURCE_USAGE_INVALID")
+        self._usage["bytes"] += amount
+        if self._usage["bytes"] > self._limits["max_total_bytes"]:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+
+    def consume_file(self, path: str, *, phase: str) -> None:
+        if not isinstance(path, str) or not path or not phase:
+            raise ValueError("TEST_RESOURCE_USAGE_INVALID")
+        if len(path.encode("utf-8")) > self._limits["max_path_bytes"]:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+        self._usage["files"] += 1
+        if self._usage["files"] > self._limits["max_files"]:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+
+    def consume_git_record(self, amount: int) -> None:
+        if amount > self._limits["max_git_record_bytes"]:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+        self.consume_bytes(amount, phase="git")
+
+    def consume_github(self, *, response_bytes: int = 0, pages: int = 0, items: int = 0) -> None:
+        for name, amount in (
+            ("github_response_bytes", response_bytes),
+            ("github_pages", pages), ("github_items", items),
+        ):
+            if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
+                raise ValueError("TEST_RESOURCE_USAGE_INVALID")
+            self._usage[name] += amount
+        if (
+            self._usage["github_response_bytes"] > self._limits["max_github_response_bytes"]
+            or self._usage["github_pages"] > self._limits["max_github_pages"]
+            or self._usage["github_items"] > self._limits["max_github_items"]
+        ):
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+        self.consume_bytes(response_bytes, phase="github")
+
+    def consume_coverage(self, amount: int) -> None:
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
+            raise ValueError("TEST_RESOURCE_USAGE_INVALID")
+        self._usage["coverage_bytes"] += amount
+        if self._usage["coverage_bytes"] > self._limits["max_coverage_bytes"]:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+        self.consume_bytes(amount, phase="coverage")
+
+    @property
+    def usage(self) -> Dict[str, int]:
+        return dict(self._usage)
+
+
 def authenticate_integrity_context(
     mission: Mapping[str, Any], comments: Sequence[Mapping[str, Any]],
     policy: Mapping[str, Any], changed_files: Sequence[str], *, repository: str,
@@ -269,6 +340,7 @@ def _strings(value: Any, *, nonempty: bool = True) -> Tuple[str, ...]:
 
 def _validate_manifest(
     value: Any, *, max_files: int = 10000, max_path_bytes: int = 1024,
+    budget: Optional[ResourceBudget] = None, phase: str = "policy",
 ) -> Dict[str, Dict[str, str]]:
     if not isinstance(value, Mapping):
         raise ValueError("manifest is not an object")
@@ -289,11 +361,15 @@ def _validate_manifest(
             or _SHA40.fullmatch(evidence["git_blob_sha"]) is None
         ):
             raise ValueError("manifest entry is invalid")
+        if budget is not None:
+            budget.consume_file(path, phase=phase)
         result[path] = dict(evidence)
     return result
 
 
-def _validate_policy(policy: Any) -> Dict[str, Any]:
+def _validate_policy(
+    policy: Any, resource_budget: Optional[ResourceBudget] = None,
+) -> Dict[str, Any]:
     if not isinstance(policy, Mapping) or set(policy) != _POLICY_FIELDS:
         raise ValueError("policy fields are not closed")
     if (
@@ -368,6 +444,8 @@ def _validate_policy(policy: Any) -> Dict[str, Any]:
         )
     ):
         raise ValueError("resource configuration is invalid")
+    budget = resource_budget or ResourceBudget(parsed_config)
+    budget.require_limits(parsed_config)
     # Parse every glob before it can influence a decision. Unsupported syntax
     # fails closed through the shared matcher.
     for name in (
@@ -387,20 +465,26 @@ def _validate_policy(policy: Any) -> Dict[str, Any]:
         **dict(policy),
         "base_manifest": _validate_manifest(
             policy.get("base_manifest"), max_files=parsed_config["max_files"],
-            max_path_bytes=parsed_config["max_path_bytes"],
+            max_path_bytes=parsed_config["max_path_bytes"], budget=budget,
+            phase="base-manifest",
         ),
         "head_manifest": _validate_manifest(
             policy.get("head_manifest"), max_files=parsed_config["max_files"],
-            max_path_bytes=parsed_config["max_path_bytes"],
+            max_path_bytes=parsed_config["max_path_bytes"], budget=budget,
+            phase="head-manifest",
         ),
         "founder_identities": founders,
         "mission": dict(mission),
         "coverage_attestations": attestations,
         "configuration": parsed_config,
+        "_resource_budget": budget,
     }
 
 
-def _file_digests(path: Path, max_file_bytes: int) -> Dict[str, str]:
+def _file_digests(
+    path: Path, max_file_bytes: int, budget: Optional[ResourceBudget] = None,
+    *, phase: str = "discovery",
+) -> Dict[str, str]:
     size = path.stat().st_size
     if size > max_file_bytes:
         raise OverflowError("TEST_RESOURCE_LIMIT")
@@ -412,34 +496,39 @@ def _file_digests(path: Path, max_file_bytes: int) -> Dict[str, str]:
             chunk = handle.read(min(1024 * 1024, max_file_bytes + 1))
             if not chunk:
                 break
+            if budget is not None:
+                budget.consume_bytes(len(chunk), phase=phase)
             sha256.update(chunk)
             blob.update(chunk)
     return {"sha256": sha256.hexdigest(), "git_blob_sha": blob.hexdigest()}
 
 
 def _scan(
-    root: Path, config: Mapping[str, Any], usage: Dict[str, int],
+    root: Path, config: Mapping[str, Any], budget: ResourceBudget,
 ) -> Dict[str, Dict[str, str]]:
     if not root.is_dir() or root.is_symlink():
         raise ValueError("checkout root is unavailable")
     result = {}
-    for path in sorted(root.rglob("*")):
-        relative_parts = path.relative_to(root).parts
-        if relative_parts and relative_parts[0] == ".git":
-            continue
-        if path.is_symlink():
-            raise ValueError("checkout contains a symlink")
-        if path.is_file():
-            relative = path.relative_to(root).as_posix()
-            if len(relative.encode("utf-8")) > config["max_path_bytes"]:
-                raise OverflowError("TEST_RESOURCE_LIMIT")
-            usage["files"] += 1
-            if usage["files"] > config["max_files"]:
-                raise OverflowError("TEST_RESOURCE_LIMIT")
-            usage["bytes"] += path.stat().st_size
-            if usage["bytes"] > config["max_total_bytes"]:
-                raise OverflowError("TEST_RESOURCE_LIMIT")
-            result[relative] = _file_digests(path, config["max_file_bytes"])
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(str(directory)) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                relative = path.relative_to(root).as_posix()
+                if relative == ".git" or relative.startswith(".git/"):
+                    continue
+                if entry.is_symlink():
+                    raise ValueError("checkout contains a symlink")
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(path)
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    raise ValueError("checkout contains an unsupported entry")
+                budget.consume_file(relative, phase="checkout-discovery")
+                result[relative] = _file_digests(
+                    path, config["max_file_bytes"], budget, phase="checkout-digest",
+                )
     return result
 
 
@@ -447,8 +536,13 @@ def _matches(path: str, patterns: Sequence[str]) -> bool:
     return any(path_matches(path, pattern) for pattern in patterns)
 
 
-def _source(path: Path) -> str:
-    return path.read_bytes().decode("utf-8")
+def _source(
+    path: Path, budget: Optional[ResourceBudget] = None, *, phase: str = "parsing",
+) -> str:
+    payload = path.read_bytes()
+    if budget is not None:
+        budget.consume_bytes(len(payload), phase=phase)
+    return payload.decode("utf-8")
 
 
 class _DuplicateCaseError(ValueError):
@@ -504,14 +598,100 @@ def _python_stats(text: str, module: str) -> _FileStats:
                     aliases.add(name.asname or name.name)
     cases = []
 
-    def visit(nodes, prefix=""):
+    def normalized(value: Any) -> str:
+        folded = _SafeConstantFolder().visit(copy.deepcopy(value))
+        return ast.dump(folded, include_attributes=False)
+
+    def decorators_disable(decorators: Sequence[ast.expr]) -> bool:
+        for decorator in decorators:
+            rendered = ast.dump(decorator, include_attributes=False).lower()
+            root_name = (
+                decorator.func.id
+                if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name)
+                else ""
+            )
+            if root_name in aliases or "skip" in rendered or "disabled" in rendered:
+                return True
+        return False
+
+    def false_assignment(statement: ast.stmt, name: str) -> bool:
+        targets = []
+        value = None
+        if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            value = statement.value
+        return (
+            isinstance(value, ast.Constant) and value.value is False
+            and any(isinstance(target, ast.Name) and target.id == name for target in targets)
+        )
+
+    function_disabled = set()
+    for statement in tree.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        value = statement.value
+        if not isinstance(value, ast.Constant) or value.value is not False:
+            continue
+        for target in targets:
+            if (
+                isinstance(target, ast.Attribute) and target.attr == "__test__"
+                and isinstance(target.value, ast.Name) and target.value.id.startswith("test")
+            ):
+                function_disabled.add(target.value.id)
+
+    module_metadata = tuple(
+        normalized(statement) for statement in tree.body
+        if not (
+            isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and statement.name.startswith("test")
+        ) and not isinstance(statement, ast.ClassDef)
+    )
+    module_disabled = any(false_assignment(statement, "__test__") for statement in tree.body)
+
+    def visit(
+        nodes: Sequence[ast.stmt], prefix: str = "", context: Tuple[str, ...] = (),
+        inherited_skip: bool = False,
+    ):
         for node in nodes:
             if isinstance(node, ast.ClassDef):
-                visit(node.body, prefix + node.name + ".")
+                class_metadata = normalized(ast.ClassDef(
+                    name=node.name, bases=copy.deepcopy(node.bases),
+                    keywords=copy.deepcopy(node.keywords),
+                    body=[
+                        copy.deepcopy(statement) for statement in node.body
+                        if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                    ], decorator_list=copy.deepcopy(node.decorator_list),
+                    type_params=copy.deepcopy(getattr(node, "type_params", [])),
+                ))
+                class_disabled = (
+                    decorators_disable(node.decorator_list)
+                    or any(false_assignment(statement, "__test__") for statement in node.body)
+                    or any(
+                        "skip" in normalized(statement).lower()
+                        for statement in node.body
+                        if isinstance(statement, (ast.Assign, ast.AnnAssign))
+                        and any(
+                            isinstance(target, ast.Name) and target.id == "pytestmark"
+                            for target in (
+                                statement.targets if isinstance(statement, ast.Assign)
+                                else [statement.target]
+                            )
+                        )
+                    )
+                )
+                visit(
+                    node.body, prefix + node.name + ".",
+                    context + (class_metadata,),
+                    inherited_skip or class_disabled or module_disabled,
+                )
                 continue
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test"):
                 continue
-            assertions = skips = sourcing = properties = 0
+            assertions = sourcing = properties = 0
+            skips = 1 if (
+                inherited_skip or module_disabled or node.name in function_disabled
+            ) else 0
             semantic_checks = []
             local_identity = prefix + node.name
             identity = module + "::" + local_identity
@@ -548,11 +728,18 @@ def _python_stats(text: str, module: str) -> _FileStats:
                 and isinstance(body[0].value.value, str)
             ):
                 body = body[1:]
-            folded = [_SafeConstantFolder().visit(statement) for statement in body]
-            normalized_body = ast.dump(
-                ast.Module(body=folded, type_ignores=[]), include_attributes=False,
-            )
-            body_hash = hashlib.sha256(normalized_body.encode("utf-8")).hexdigest()
+            function_metadata = {
+                "kind": "async" if isinstance(node, ast.AsyncFunctionDef) else "sync",
+                "arguments": normalized(node.args),
+                "decorators": [normalized(item) for item in node.decorator_list],
+                "returns": normalized(node.returns) if node.returns is not None else None,
+                "type_comment": node.type_comment,
+                "module": module_metadata,
+                "enclosing": context,
+            }
+            normalized_body = normalized(ast.Module(body=body, type_ignores=[]))
+            semantic = canonical_json({"metadata": function_metadata, "body": normalized_body})
+            body_hash = hashlib.sha256(semantic.encode("utf-8")).hexdigest()
             cases.append(_CaseStats(
                 identity, local_identity, body_hash, assertions, skips, sourcing, properties,
             ))
@@ -648,28 +835,120 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                     return cursor
         raise SyntaxError("truncated JavaScript expression")
 
-    aliases = {}
-    for index in range(len(tokens) - 5):
-        values = [item.value for item in tokens[index:index + 6]]
-        if (
-            values[0] in ("const", "let", "var")
-            and tokens[index + 1].kind == "identifier"
-            and values[2] == "=" and values[3] in ("test", "it")
-            and values[4] == "." and values[5] in ("skip", "todo", "disabled")
-        ):
-            aliases[values[1]] = values[5]
-
     cases = []
     test_names = {"test", "it"}
     suite_names = {"describe", "suite", "context"}
     modifiers = {"skip", "todo", "disabled", "only"}
+
+    def string_value(token: _JSToken) -> str:
+        if token.kind != "string":
+            raise SyntaxError("static JavaScript member required")
+        if token.value[0] == "`":
+            value = token.value[1:-1]
+            if "${" in value:
+                raise SyntaxError("dynamic JavaScript member")
+            return value
+        try:
+            value = ast.literal_eval(token.value)
+        except (SyntaxError, ValueError):
+            raise SyntaxError("invalid JavaScript member")
+        if not isinstance(value, str):
+            raise SyntaxError("invalid JavaScript member")
+        return value
+
+    def computed_member(opening: int) -> Tuple[str, int]:
+        ending = closing(opening)
+        cursor = opening + 1
+        parts = []
+        expect_string = True
+        while cursor < ending:
+            if expect_string:
+                parts.append(string_value(tokens[cursor]))
+            elif tokens[cursor].value != "+":
+                raise SyntaxError("dynamic JavaScript member")
+            expect_string = not expect_string
+            cursor += 1
+        if expect_string or not parts:
+            raise SyntaxError("dynamic JavaScript member")
+        return "".join(parts), ending + 1
+
+    aliases: Dict[str, Tuple[str, Optional[str]]] = {}
+    alias_reference_positions = set()
+    alias_declaration_positions = set()
+
+    def reference(start: int, stop: int) -> Tuple[str, Optional[str], int]:
+        if start >= stop or tokens[start].kind != "identifier":
+            raise SyntaxError("indirect JavaScript collection reference")
+        name = tokens[start].value
+        if name in aliases:
+            root, modifier = aliases[name]
+        elif name in test_names | suite_names:
+            root, modifier = name, None
+        else:
+            raise SyntaxError("indirect JavaScript collection reference")
+        cursor = start + 1
+        if cursor < stop and tokens[cursor].value == ".":
+            if cursor + 1 >= stop or tokens[cursor + 1].kind != "identifier":
+                raise SyntaxError("malformed JavaScript test modifier")
+            if modifier is not None:
+                raise SyntaxError("chained JavaScript test modifier")
+            modifier = tokens[cursor + 1].value
+            cursor += 2
+        elif cursor < stop and tokens[cursor].value == "[":
+            if modifier is not None:
+                raise SyntaxError("chained JavaScript test modifier")
+            modifier, cursor = computed_member(cursor)
+        if modifier is not None and modifier not in modifiers:
+            raise SyntaxError("unsupported JavaScript test modifier")
+        return root, modifier, cursor
+
+    index = 0
+    while index < len(tokens) - 3:
+        if tokens[index].value in ("const", "let", "var"):
+            end = index + 1
+            while end < len(tokens) and tokens[end].value not in (";", ","):
+                end += 1
+            simple_assignment = (
+                index + 2 < end and tokens[index + 1].kind == "identifier"
+                and tokens[index + 2].value == "="
+            )
+            known_reference = any(
+                item.kind == "identifier"
+                and (item.value in test_names | suite_names or item.value in aliases)
+                for item in tokens[index + 1:end]
+            )
+            if known_reference:
+                if not simple_assignment:
+                    raise SyntaxError("indirect JavaScript collection reference")
+                root, modifier, consumed = reference(index + 3, end)
+                if consumed != end:
+                    raise SyntaxError("indirect JavaScript collection reference")
+                aliases[tokens[index + 1].value] = (root, modifier)
+                alias_declaration_positions.add(index + 1)
+                alias_reference_positions.add(index + 3)
+            index = end + 1
+            continue
+        index += 1
+
+    for index, token in enumerate(tokens):
+        if token.kind != "identifier" or token.value not in test_names | suite_names:
+            continue
+        previous = tokens[index - 1].value if index else ""
+        following = tokens[index + 1].value if index + 1 < len(tokens) else ""
+        if previous == "." or (
+            index not in alias_reference_positions and following not in ("(", ".", "[")
+        ):
+            raise SyntaxError("indirect JavaScript collection reference")
 
     def static_title(token: _JSToken) -> str:
         if token.kind != "string" or token.value[0] == "`":
             raise SyntaxError("static JavaScript test title required")
         return token.value[1:-1]
 
-    def visit(start: int, stop: int, suites: Tuple[str, ...], inherited_skip: bool) -> None:
+    def visit(
+        start: int, stop: int, suites: Tuple[str, ...], inherited_skip: bool,
+        suite_semantics: Tuple[Tuple[str, Optional[str]], ...] = (),
+    ) -> None:
         index = start
         while index < stop:
             token = tokens[index]
@@ -681,16 +960,10 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
             if name not in test_names | suite_names and not is_alias:
                 index += 1
                 continue
-            modifier = aliases.get(name)
-            cursor = index + 1
-            if not is_alias and cursor < stop and tokens[cursor].value == ".":
-                if cursor + 1 >= stop or tokens[cursor + 1].kind != "identifier":
-                    raise SyntaxError("malformed JavaScript test modifier")
-                modifier = tokens[cursor + 1].value
-                if modifier not in modifiers:
-                    raise SyntaxError("unsupported JavaScript test modifier")
-                cursor += 2
+            root, modifier, cursor = reference(index, stop)
             if cursor >= stop or tokens[cursor].value != "(":
+                if index not in alias_reference_positions | alias_declaration_positions:
+                    raise SyntaxError("indirect JavaScript collection reference")
                 index += 1
                 continue
             call_end = closing(cursor)
@@ -712,10 +985,13 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
             else:
                 body_start = body_open
             skipped = inherited_skip or modifier in ("skip", "todo", "disabled")
-            if name in suite_names:
+            if root in suite_names:
                 if tokens[body_open].value != "{":
                     raise SyntaxError("suite callback must be a block")
-                visit(body_start, body_close, suites + (case_title,), skipped)
+                visit(
+                    body_start, body_close, suites + (case_title,), skipped,
+                    suite_semantics + ((case_title, modifier),),
+                )
             else:
                 local_identity = " > ".join(suites + (case_title,))
                 identity = module + "::" + local_identity
@@ -725,7 +1001,11 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                     if item.kind == "identifier" and item.value in ("expect", "assert")
                     and body_tokens[position + 1].value == "("
                 )
-                normalized = canonical_json([(item.kind, item.value) for item in body_tokens])
+                normalized = canonical_json({
+                    "suite_semantics": suite_semantics,
+                    "case_modifier": modifier,
+                    "body": [(item.kind, item.value) for item in body_tokens],
+                })
                 lowered = normalized.lower() + " " + local_identity.lower()
                 cases.append(_CaseStats(
                     identity, local_identity,
@@ -745,11 +1025,12 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
 
 def _test_stats(
     root: Path, paths: Iterable[str], findings: list, config: Mapping[str, Any],
+    budget: Optional[ResourceBudget] = None,
 ) -> Dict[str, _FileStats]:
     result = {}
     for relative in sorted(paths):
         try:
-            text = _source(root / relative)
+            text = _source(root / relative, budget, phase="test-parsing")
             result[relative] = (
                 _python_stats(text, relative) if relative.endswith(".py")
                 else _javascript_stats(text, relative)
@@ -769,8 +1050,8 @@ def _test_stats(
     return result
 
 
-def _fixture_cases(path: Path) -> int:
-    text = _source(path)
+def _fixture_cases(path: Path, budget: Optional[ResourceBudget] = None) -> int:
+    text = _source(path, budget, phase="fixture-parsing")
     suffix = path.suffix.lower()
     if suffix == ".json":
         value = json.loads(text)
@@ -791,8 +1072,9 @@ def _fixture_cases(path: Path) -> int:
 def _coverage(
     path: Path, *, repository: str, commit_sha: str,
     source_manifest_sha256: str, evaluated_at: str, max_age_seconds: int,
+    budget: Optional[ResourceBudget] = None,
 ) -> float:
-    value = json.loads(_source(path))
+    value = json.loads(_source(path, budget, phase="coverage-parsing"))
     if not isinstance(value, Mapping) or set(value) != {
         "schema_version", "repository", "commit_sha", "source_manifest_sha256",
         "generated_at", "coverage",
@@ -824,6 +1106,7 @@ def _verify_coverage_attestation(
     source_manifest_sha256: str, coverage_path: str,
     manifest: Mapping[str, Mapping[str, str]], evaluated_at: str,
     max_age_seconds: int, max_coverage_bytes: int,
+    budget: Optional[ResourceBudget] = None,
 ) -> None:
     if attestation is None:
         raise PermissionError("coverage transport attestation is unavailable")
@@ -850,7 +1133,7 @@ def _verify_coverage_attestation(
         or not attestation.transport_provenance
     ):
         raise LookupError("coverage transport attestation is not bound")
-    document = json.loads(_source(path))
+    document = json.loads(_source(path, budget, phase="coverage-verification"))
     if document.get("generated_at") != attestation.generated_at:
         raise LookupError("coverage generation timestamp is not bound")
     generated = _timestamp(attestation.generated_at)
@@ -909,8 +1192,9 @@ def _rename_projection(stats: Optional[_FileStats]) -> Tuple[Tuple[Any, ...], ..
     ))
 
 
-def analyze_test_integrity(
+def _analyze_test_integrity(
     base_root: Any, head_root: Any, policy: Mapping[str, Any],
+    resource_budget: Optional[ResourceBudget] = None,
 ) -> IntegrityReport:
     """Compare complete immutable base/head trees and return raw deltas."""
 
@@ -924,7 +1208,7 @@ def analyze_test_integrity(
             "Base and head revision evidence must identify distinct commits.",
         )
     try:
-        checked = _validate_policy(policy)
+        checked = _validate_policy(policy, resource_budget)
     except (OverflowError, MemoryError):
         return _invalid_report(policy, "TEST_RESOURCE_LIMIT", "Policy evidence exceeds deterministic resource limits.")
     except (PathInputError, TypeError, ValueError, re.error):
@@ -934,9 +1218,9 @@ def analyze_test_integrity(
         head = Path(head_root).resolve(strict=True)
         if base == head:
             raise ValueError("base and head roots must differ")
-        usage = {"files": 0, "bytes": 0}
-        actual_base = _scan(base, checked["configuration"], usage)
-        actual_head = _scan(head, checked["configuration"], usage)
+        budget = checked["_resource_budget"]
+        actual_base = _scan(base, checked["configuration"], budget)
+        actual_head = _scan(head, checked["configuration"], budget)
     except (OverflowError, MemoryError):
         return _invalid_report(checked, "TEST_RESOURCE_LIMIT", "Checkout exceeds deterministic resource limits.")
     except (OSError, TypeError, ValueError, UnicodeError):
@@ -952,8 +1236,8 @@ def analyze_test_integrity(
     findings = []
     base_tests = {path for path in actual_base if _matches(path, config["test_globs"])}
     head_tests = {path for path in actual_head if _matches(path, config["test_globs"])}
-    base_stats = _test_stats(base, base_tests, findings, config)
-    head_stats = _test_stats(head, head_tests, findings, config)
+    base_stats = _test_stats(base, base_tests, findings, config, budget)
+    head_stats = _test_stats(head, head_tests, findings, config, budget)
 
     deleted = sorted(base_tests - head_tests)
     added = set(head_tests - base_tests)
@@ -1064,7 +1348,8 @@ def analyze_test_integrity(
         ))
     for path in sorted(base_workflows & head_workflows):
         try:
-            before_text, after_text = _source(base / path), _source(head / path)
+            before_text = _source(base / path, budget, phase="workflow-comparison")
+            after_text = _source(head / path, budget, phase="workflow-comparison")
             if _weakened(before_text, after_text):
                 findings.append(IntegrityFinding(
                     "VALIDATION_WORKFLOW_WEAKENED", "A validation workflow was weakened.", path,
@@ -1085,7 +1370,8 @@ def analyze_test_integrity(
         ))
     for path in sorted(base_configs & head_configs):
         try:
-            before_text, after_text = _source(base / path), _source(head / path)
+            before_text = _source(base / path, budget, phase="configuration-comparison")
+            after_text = _source(head / path, budget, phase="configuration-comparison")
             weakened = _weakened(before_text, after_text)
             if path == "package.json" or path.endswith("/package.json"):
                 before_package, after_package = json.loads(before_text), json.loads(after_text)
@@ -1113,8 +1399,8 @@ def analyze_test_integrity(
     base_fixture_cases = head_fixture_cases = 0
     for path in sorted(base_fixtures | head_fixtures):
         try:
-            before = _fixture_cases(base / path) if path in base_fixtures else 0
-            after = _fixture_cases(head / path) if path in head_fixtures else 0
+            before = _fixture_cases(base / path, budget) if path in base_fixtures else 0
+            after = _fixture_cases(head / path, budget) if path in head_fixtures else 0
             base_fixture_cases += before
             head_fixture_cases += after
             if after < before:
@@ -1159,12 +1445,14 @@ def analyze_test_integrity(
                     commit_sha=checked["base_sha"], source_manifest_sha256=source_base,
                     evaluated_at=checked["evaluated_at"],
                     max_age_seconds=config["coverage_max_age_seconds"],
+                    budget=budget,
                 )
                 after = _coverage(
                     head / present_head[0], repository=checked["repository"],
                     commit_sha=checked["head_sha"], source_manifest_sha256=source_head,
                     evaluated_at=checked["evaluated_at"],
                     max_age_seconds=config["coverage_max_age_seconds"],
+                    budget=budget,
                 )
                 attestations = checked["coverage_attestations"]
                 if attestations is None:
@@ -1176,6 +1464,7 @@ def analyze_test_integrity(
                     manifest=checked["base_manifest"], evaluated_at=checked["evaluated_at"],
                     max_age_seconds=config["coverage_max_age_seconds"],
                     max_coverage_bytes=config["max_coverage_bytes"],
+                    budget=budget,
                 )
                 _verify_coverage_attestation(
                     attestations["head"], head / present_head[0],
@@ -1184,6 +1473,7 @@ def analyze_test_integrity(
                     manifest=checked["head_manifest"], evaluated_at=checked["evaluated_at"],
                     max_age_seconds=config["coverage_max_age_seconds"],
                     max_coverage_bytes=config["max_coverage_bytes"],
+                    budget=budget,
                 )
                 coverage_delta = round(after - before, 6)
                 if coverage_delta < -float(config["material_coverage_decline"]):
@@ -1223,6 +1513,12 @@ def analyze_test_integrity(
         "fixture_cases": head_fixture_cases - base_fixture_cases,
         "coverage_percent": coverage_delta,
     }
+    budget.consume_bytes(
+        len(canonical_json({
+            "findings": [asdict(item) for item in findings], "deltas": deltas,
+        }).encode("utf-8")),
+        phase="reporting",
+    )
     ordered = tuple(sorted(findings, key=lambda item: (item.code, item.path, canonical_json(item.details))))
     return IntegrityReport(
         "1.0.0", checked["repository"], checked["base_sha"], checked["head_sha"],
@@ -1236,6 +1532,23 @@ def analyze_test_integrity(
         content_sha256(checked["base_manifest"]), content_sha256(checked["head_manifest"]),
         ordered, deltas, checked["founder_identities"],
     )
+
+
+def analyze_test_integrity(
+    base_root: Any, head_root: Any, policy: Mapping[str, Any], *,
+    resource_budget: Optional[ResourceBudget] = None,
+) -> IntegrityReport:
+    """Run all phases against one aggregate fail-closed resource budget."""
+
+    try:
+        return _analyze_test_integrity(
+            base_root, head_root, policy, resource_budget=resource_budget,
+        )
+    except (OverflowError, MemoryError):
+        return _invalid_report(
+            policy, "TEST_RESOURCE_LIMIT",
+            "Integrity processing exceeded its shared deterministic resource budget.",
+        )
 
 
 def _closed(value: Any, fields: frozenset) -> bool:

@@ -114,6 +114,24 @@ class IncidentTests(unittest.TestCase):
             "INCIDENT_RECOVERY_AUTHORITY_REQUIRED",
         )
 
+    def test_read_only_default_cannot_authorize_any_recovery_class(self):
+        for rollback in (
+            "clean_revert", "forward_fix", "point_in_time_restore",
+            "data_migration_recovery", "irreversible",
+        ):
+            with self.subTest(rollback=rollback):
+                self.assertEqual(
+                    validate_incident(
+                        self.incident(), origin_mission_id="mission-7",
+                        repository="acme/widgets", pull_request=42,
+                        rollback_class=rollback,
+                        **self.recovery_context(
+                            recovery_action="read", authority_records=[],
+                        ),
+                    ).code,
+                    "INCIDENT_RECOVERY_AUTHORITY_REQUIRED",
+                )
+
     def test_wrong_linkage_or_missing_recovery_evidence_fails_closed(self):
         self.assertEqual(
             validate_incident(

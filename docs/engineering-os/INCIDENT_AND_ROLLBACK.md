@@ -10,4 +10,5 @@ mutate deployment, cloud, data, or other external state require their own
 current authority. The incident validator accepts authenticated authority
 records, not a caller-supplied authorization flag, and consumes one exact
 single-use record bound to the originating mission, repository, pull request,
-reviewed head, responder, changed paths, and recovery action.
+reviewed head, responder, changed paths, and recovery action. Read-only default
+authority cannot authorize any recovery class.

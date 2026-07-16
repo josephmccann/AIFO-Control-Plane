@@ -11,6 +11,10 @@ _ROLLBACKS = frozenset((
     "clean_revert", "forward_fix", "point_in_time_restore",
     "data_migration_recovery", "irreversible",
 ))
+_RECOVERY_ACTIONS = frozenset((
+    "write", "merge", "deploy", "cloud_mutation", "secrets",
+    "customer_data", "spend", "cutover",
+))
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,9 @@ def validate_incident(
         not isinstance(mission, Mapping)
         or mission.get("mission_id") != origin_mission_id
         or mission.get("repository") != repository
+        or recovery_action not in _RECOVERY_ACTIONS
+        or not isinstance(authority_records, (list, tuple))
+        or not authority_records
     ):
         return IncidentDecision(False, "INCIDENT_RECOVERY_AUTHORITY_REQUIRED")
     authority = validate_authority(

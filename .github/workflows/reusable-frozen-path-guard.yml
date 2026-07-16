@@ -44,28 +44,15 @@ jobs:
             printf '[]\n' > "$RUNNER_TEMP/frozen-declarations.json"
           fi
           python3 - <<'PY'
-          import hashlib, json, os, subprocess
+          import json, os
           root = os.environ["RUNNER_TEMP"]
-          base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
           raw = open(os.path.join(root, "changed-files.zlist"), "rb").read()
           if raw and not raw.endswith(b"\0"):
               raise SystemExit("incomplete NUL-delimited git diff")
           changed = [item.decode("utf-8") for item in raw.split(b"\0") if item]
           if len(changed) != len(set(changed)):
               raise SystemExit("duplicate changed path")
-          def tree(revision):
-              names = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", "-z", revision]).split(b"\0")
-              result = {}
-              for raw_name in names:
-                  if not raw_name:
-                      continue
-                  name = raw_name.decode("utf-8")
-                  content = subprocess.check_output(["git", "show", "%s:%s" % (revision, name)])
-                  result[name] = hashlib.sha256(content).hexdigest()
-              return result
-          evidence = {"repository": os.environ["GITHUB_REPOSITORY"], "base_sha": base, "head_sha": head, "complete": True, "changed_files": changed, "base_files": tree(base), "head_files": tree(head)}
-          json.dump(changed, open(os.path.join(root, "changed-files.json"), "w", encoding="utf-8"))
-          json.dump(evidence, open(os.path.join(root, "git-evidence.json"), "w", encoding="utf-8"), sort_keys=True)
+          json.dump(changed, open(os.path.join(root, "changed-files-audit.json"), "w", encoding="utf-8"))
           PY
       - name: Authenticate mission history
         env:
@@ -91,11 +78,6 @@ jobs:
       - name: Fail closed until Task 5 authenticates exceptions and reservations
         run: |
           printf '[]\n' > "$RUNNER_TEMP/exceptions.json"
-          printf '[]\n' > "$RUNNER_TEMP/authenticated-sources.json"
-          printf '[]\n' > "$RUNNER_TEMP/release-records.json"
-          printf '[]\n' > "$RUNNER_TEMP/durable-reservations.json"
-          printf '[]\n' > "$RUNNER_TEMP/consumed-exceptions.json"
-          printf '[]\n' > "$RUNNER_TEMP/consumed-nonces.json"
       - name: Enforce frozen declarations from base revision
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -104,17 +86,11 @@ jobs:
           scripts/engineering-os/validate-frozen-artifacts \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy "$RUNNER_TEMP/base-policy.json" \
-            --changed-files "$RUNNER_TEMP/changed-files.json" \
             --declarations "$RUNNER_TEMP/frozen-declarations.json" \
             --exceptions "$RUNNER_TEMP/exceptions.json" \
             --repository "$GITHUB_REPOSITORY" \
             --pull-request "$PR_NUMBER" \
+            --base-sha "${{ github.event.pull_request.base.sha }}" \
             --head-sha "$HEAD_SHA" \
             --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --action write \
-            --git-evidence "$RUNNER_TEMP/git-evidence.json" \
-            --authenticated-sources "$RUNNER_TEMP/authenticated-sources.json" \
-            --release-records "$RUNNER_TEMP/release-records.json" \
-            --durable-reservations "$RUNNER_TEMP/durable-reservations.json" \
-            --consumed-exceptions "$RUNNER_TEMP/consumed-exceptions.json" \
-            --consumed-nonces "$RUNNER_TEMP/consumed-nonces.json"
+            --action write

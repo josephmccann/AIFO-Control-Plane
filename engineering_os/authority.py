@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 import re
 from typing import Any, Dict, Mapping, Sequence
 
+from .canonical import content_sha256
+from .consumption import ConsumptionBinding, consume_once
+from .records import VerifiedRecordEnvelope, verify_record_envelope
 from .schema import validate_document
 from .scope import PathInputError, normalize_paths
 
@@ -40,8 +43,8 @@ def validate_authority(
     mission: Mapping[str, Any], policy: Mapping[str, Any], changed_files: Sequence[str],
     authority_records: Sequence[Mapping[str, Any]], *, action: str,
     pull_request: int, head_sha: str, now: str, subject: str,
-    authenticated_sources: Sequence[Mapping[str, Any]],
-    consumed_record_ids: Sequence[str], consumed_nonces: Sequence[str],
+    verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    consumption_store: str = "",
 ) -> AuthorityDecision:
     """Require one exact authority record for every action other than read."""
 
@@ -51,12 +54,9 @@ def validate_authority(
         return _deny("AUTHORITY_POLICY_INVALID")
     if (
         not isinstance(authority_records, (list, tuple))
-        or not isinstance(authenticated_sources, (list, tuple))
-        or any(not isinstance(source, Mapping) for source in authenticated_sources)
-        or not isinstance(consumed_record_ids, (list, tuple))
-        or any(not isinstance(value, str) or not value for value in consumed_record_ids)
-        or not isinstance(consumed_nonces, (list, tuple))
-        or any(not isinstance(value, str) or not value for value in consumed_nonces)
+        or not isinstance(verified_envelopes, (list, tuple))
+        or any(not isinstance(item, VerifiedRecordEnvelope) for item in verified_envelopes)
+        or not isinstance(consumption_store, str)
     ):
         return _deny("AUTHORITY_INPUT_INVALID")
     try:
@@ -140,14 +140,10 @@ def validate_authority(
             (current < starts, "AUTHORITY_NOT_STARTED"),
             (current >= expires, "AUTHORITY_EXPIRED"),
             (
-                record.get("record_id") in set(consumed_record_ids)
-                or record.get("nonce") in set(consumed_nonces),
-                "AUTHORITY_REPLAYED",
-            ),
-            (
-                record.get("source", {}).get("actor") != record.get("issuer")
-                or record.get("source", {}).get("repository") != mission.get("repository")
-                or not any(dict(source) == dict(record.get("source", {})) for source in authenticated_sources),
+                not verify_record_envelope(
+                    record, "authority", verified_envelopes,
+                    repository=mission.get("repository"), actor=record.get("issuer"),
+                ),
                 "AUTHORITY_SOURCE_UNAUTHENTICATED",
             ),
         )
@@ -155,5 +151,12 @@ def validate_authority(
         if failed:
             last_denial = _deny(failed, record)
             continue
+        payload = dict(record)
+        del payload["source"]
+        consumed = consume_once(consumption_store, [ConsumptionBinding(
+            "authority", record["record_id"], record["nonce"], content_sha256(payload),
+        )])
+        if not consumed:
+            return _deny("AUTHORITY_REPLAYED", record)
         return AuthorityDecision(True, "AUTHORITY_ALLOWED", record.get("authority_id", ""))
     return last_denial

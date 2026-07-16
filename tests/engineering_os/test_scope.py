@@ -4,6 +4,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from engineering_os.records import authenticate_github_record_comment, record_comment_body
 from engineering_os.scope import detect_mission_conflicts, validate_scope
 from tests.engineering_os.test_risk import mission, policy
 
@@ -14,6 +15,20 @@ ACTIVE = ROOT / "tests" / "engineering_os" / "fixtures" / "active-missions"
 
 def active(name):
     return json.loads((ACTIVE / name).read_text(encoding="utf-8"))
+
+
+def github_record(record_kind, payload, *, comment_id=9001, issue_number=10, actor="founder"):
+    comment = {
+        "id": comment_id,
+        "html_url": "https://github.com/acme/widgets/issues/%d#issuecomment-%d" % (
+            issue_number, comment_id,
+        ),
+        "issue_url": "https://api.github.com/repos/acme/widgets/issues/%d" % issue_number,
+        "user": {"login": actor},
+        "created_at": "2026-07-15T10:00:00Z",
+        "body": record_comment_body(record_kind, payload),
+    }
+    return authenticate_github_record_comment(comment, "acme/widgets")
 
 
 class ScopeTests(unittest.TestCase):
@@ -60,14 +75,76 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("MISSION_PATH_CONFLICT", {item.code for item in path_conflicts})
         self.assertIn("MISSION_SEMANTIC_CONFLICT", {item.code for item in semantic_conflicts})
 
-    def test_coordinated_overlap_requires_exact_missions_and_scopes(self):
-        source = {
-            "provider": "github", "repository": "acme/widgets", "issue_number": 10,
-            "comment_id": 9001, "url": "https://github.com/acme/widgets/issues/10#issuecomment-9001",
-            "actor": "founder", "created_at": "2026-07-15T10:00:00Z",
-            "content_sha256": "a" * 64,
+    def test_semantic_domains_intersect_declared_globs_conservatively(self):
+        intersecting = [{
+            "mission_id": "mission-other", "state": "Claimed",
+            "paths": ["tests/**/reporting/**"],
+        }]
+        conflicts = detect_mission_conflicts(
+            self.mission, policy(), ["src/reporting/new.py"], intersecting,
+        )
+        self.assertIn("MISSION_SEMANTIC_CONFLICT", {item.code for item in conflicts})
+
+        for disjoint in ("tests/billing/**", "clients/**/*.js", "docs/private/**"):
+            with self.subTest(disjoint=disjoint):
+                active_missions = [{
+                    "mission_id": "mission-other", "state": "Claimed", "paths": [disjoint],
+                }]
+                self.assertEqual(detect_mission_conflicts(
+                    self.mission, policy(), ["src/reporting/new.py"], active_missions,
+                ), [])
+
+    def test_proposed_and_ready_do_not_reserve_scope_but_claimed_does(self):
+        for state in ("Proposed", "Ready"):
+            with self.subTest(state=state):
+                self.assertEqual(detect_mission_conflicts(
+                    self.mission, policy(), ["src/reporting/render.py"], [{
+                        "mission_id": "mission-other", "state": state, "paths": ["**"],
+                    }],
+                ), [])
+        self.assertEqual(detect_mission_conflicts(
+            self.mission, policy(), ["src/reporting/render.py"], [{
+                "mission_id": "mission-proposed-malformed-scope",
+                "state": "Proposed", "paths": ["src/[z-a]/**"],
+            }],
+        ), [])
+        claimed = detect_mission_conflicts(
+            self.mission, policy(), ["src/reporting/render.py"], [{
+                "mission_id": "mission-other", "state": "Claimed", "paths": ["**"],
+            }],
+        )
+        self.assertIn("MISSION_PATH_CONFLICT", {item.code for item in claimed})
+
+    def test_fabricated_coordination_cannot_reuse_a_copied_source(self):
+        fabricated_payload = {
+            "record_id": "coordination-forged", "repository": "acme/widgets",
+            "status": "active", "issuer": "founder",
+            "mission_ids": ["mission-123", "mission-other"], "pull_request": 42,
+            "head_sha": "2" * 40, "starts_at": "2026-07-15T00:00:00Z",
+            "expires_at": "2026-07-16T00:00:00Z", "nonce": "forged-nonce",
+            "scopes": {
+                "mission-123": ["src/reporting/render.py"],
+                "mission-other": ["src/reporting/**"],
+            },
         }
-        records = [{
+        legitimate_payload = dict(fabricated_payload)
+        legitimate_payload["scopes"] = {
+            "mission-123": ["src/reporting/other.py"],
+            "mission-other": ["src/reporting/**"],
+        }
+        legitimate, envelope = github_record("coordination", legitimate_payload)
+        fabricated = dict(fabricated_payload)
+        fabricated["source"] = legitimate["source"]
+        conflicts = detect_mission_conflicts(
+            self.mission, policy(), ["src/reporting/render.py"],
+            active("conflicting/path-overlap.json"), coordination_records=[fabricated],
+            repository="acme/widgets", pull_request=42, head_sha="2" * 40,
+            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
+        )
+        self.assertIn("MISSION_PATH_CONFLICT", {item.code for item in conflicts})
+
+    def test_coordinated_overlap_requires_exact_missions_and_scopes(self):
+        payload = {
             "record_id": "coordination-1",
             "repository": "acme/widgets",
             "status": "active",
@@ -78,17 +155,18 @@ class ScopeTests(unittest.TestCase):
             "starts_at": "2026-07-15T00:00:00Z",
             "expires_at": "2026-07-16T00:00:00Z",
             "nonce": "coordination-nonce-1",
-            "source": source,
             "scopes": {
                 "mission-123": ["src/reporting/render.py"],
                 "mission-other": ["src/reporting/**"],
             },
-        }]
+        }
+        authenticated, envelope = github_record("coordination", payload)
+        records = [authenticated]
         conflicts = detect_mission_conflicts(
             self.mission, policy(), ["src/reporting/render.py"],
             active("conflicting/path-overlap.json"), coordination_records=records,
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", authenticated_sources=[source],
+            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
         )
         self.assertEqual(conflicts, [])
         records[0]["scopes"]["mission-123"] = ["src/reporting/other.py"]
@@ -96,24 +174,24 @@ class ScopeTests(unittest.TestCase):
             self.mission, policy(), ["src/reporting/render.py"],
             active("conflicting/path-overlap.json"), coordination_records=records,
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", authenticated_sources=[source],
+            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
         ))
 
     def test_coordination_rejects_wrong_founder_or_missing_authenticated_source(self):
-        records = [{
+        payload = {
             "record_id": "coordination-1", "repository": "acme/widgets",
             "status": "active", "issuer": "outsider",
             "mission_ids": ["mission-123", "mission-other"], "pull_request": 42,
             "head_sha": "2" * 40, "starts_at": "2026-07-15T00:00:00Z",
             "expires_at": "2026-07-16T00:00:00Z", "nonce": "nonce",
-            "source": {"actor": "outsider"},
             "scopes": {"mission-123": ["src/reporting/render.py"], "mission-other": ["src/reporting/**"]},
-        }]
+        }
+        authenticated, envelope = github_record("coordination", payload, actor="outsider")
         conflicts = detect_mission_conflicts(
             self.mission, policy(), ["src/reporting/render.py"],
-            active("conflicting/path-overlap.json"), coordination_records=records,
+            active("conflicting/path-overlap.json"), coordination_records=[authenticated],
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", authenticated_sources=[],
+            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
         )
         self.assertIn("MISSION_PATH_CONFLICT", {item.code for item in conflicts})
 
@@ -148,6 +226,21 @@ class ScopeTests(unittest.TestCase):
         codes = {item.code for item in validate_scope(self.mission, broken, ["src/reporting/render.py"])}
         self.assertIn("SCOPE_POLICY_INVALID", codes)
 
+    def test_malformed_regex_ranges_fail_closed_without_exceptions(self):
+        malformed_mission = dict(self.mission)
+        malformed_mission["allowed_paths"] = ["src/[z-a]/**"]
+        codes = {item.code for item in validate_scope(
+            malformed_mission, policy(), ["src/reporting/render.py"],
+        )}
+        self.assertIn("SCOPE_PATH_INVALID", codes)
+
+        conflicts = detect_mission_conflicts(
+            self.mission, policy(), ["src/reporting/render.py"], [{
+                "mission_id": "mission-other", "state": "Claimed", "paths": ["src/[z-a]/**"],
+            }],
+        )
+        self.assertIn("MISSION_CONFLICT_INPUT_INVALID", {item.code for item in conflicts})
+
     def test_complete_mission_and_policy_schemas_are_required(self):
         incomplete_mission = dict(self.mission)
         incomplete_mission.pop("objective")
@@ -174,6 +267,8 @@ class ScopeTests(unittest.TestCase):
         self.assertNotIn("mission_json", text)
         self.assertIn("discover_repository_mission_candidates", text)
         self.assertIn("authenticate_event_history", text)
+        self.assertIn("issues?state=all", text)
+        self.assertIn('"state": checked.projection.state', text)
         self.assertIn("validate-tier", text)
         self.assertIn("validate-paths", text)
         self.assertNotIn("--coordination-records", wrapper.read_text(encoding="utf-8"))
@@ -185,6 +280,7 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("authenticated GitHub source", authority)
         self.assertIn("caller-supplied coordination", authority)
         self.assertIn("blocked", authority)
+        self.assertIn("Proposed and Ready", authority)
 
 
 if __name__ == "__main__":

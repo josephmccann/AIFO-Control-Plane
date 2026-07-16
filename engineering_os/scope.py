@@ -5,15 +5,24 @@ import re
 from typing import Any, Iterable, List, Mapping, Sequence, Tuple
 
 from .errors import Violation
+from .records import VerifiedRecordEnvelope, verify_record_envelope
 from .schema import validate_document
 
 
 _GLOB_CHARS = frozenset("*?[")
-_INACTIVE_STATES = frozenset(("Merged", "Verified", "Closed", "Parked", "Cancelled"))
+_BLOCKING_STATES = frozenset((
+    "Claimed", "In Progress", "Adversarial Review", "Founder Approval",
+    "Merge Authorized", "Incident",
+))
 _MISSION_STATES = frozenset((
     "Proposed", "Ready", "Claimed", "In Progress", "Adversarial Review",
     "Founder Approval", "Merge Authorized", "Merged", "Verified", "Closed",
     "Parked", "Incident", "Cancelled",
+))
+_COORDINATION_FIELDS = frozenset((
+    "record_id", "repository", "status", "issuer", "mission_ids",
+    "pull_request", "head_sha", "starts_at", "expires_at", "nonce",
+    "source", "scopes",
 ))
 
 
@@ -85,7 +94,12 @@ def _glob_regex(pattern: str) -> str:
         else:
             translated.append(re.escape(char))
         index += 1
-    return "".join(translated)
+    result = "".join(translated)
+    try:
+        re.compile(result)
+    except re.error as error:
+        raise PathInputError("invalid glob expression") from error
+    return result
 
 
 def _policy_patterns(policy: Mapping[str, Any]) -> Tuple[Tuple[str, ...], Tuple[Mapping[str, Any], ...]]:
@@ -118,7 +132,7 @@ def _domain_groups(paths: Sequence[str], domains: Sequence[Mapping[str, Any]]) -
     return {
         domain["conflict_group"]
         for domain in domains
-        if any(path_matches(path, pattern) for path in paths for pattern in domain["paths"])
+        if _paths_overlap(paths, domain["paths"])
     }
 
 
@@ -166,36 +180,111 @@ def validate_scope(
     return violations
 
 
-def _literal_prefix(pattern: str) -> str:
-    wildcard = min((pattern.find(char) for char in _GLOB_CHARS if char in pattern), default=len(pattern))
-    return pattern[:wildcard].rstrip("/")
+def _segment_tokens(pattern: str) -> Tuple[Tuple[str, str], ...]:
+    tokens = []
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "*":
+            tokens.append(("star", ""))
+        elif char == "?":
+            tokens.append(("any", ""))
+        elif char == "[":
+            end = pattern.find("]", index + 1)
+            if end < 0:
+                raise PathInputError("invalid glob character class")
+            expression = pattern[index:end + 1]
+            try:
+                re.compile(expression)
+            except re.error as error:
+                raise PathInputError("invalid glob character class") from error
+            tokens.append(("class", expression))
+            index = end
+        else:
+            tokens.append(("literal", char))
+        index += 1
+    return tuple(tokens)
+
+
+def _token_intersects(left: Tuple[str, str], right: Tuple[str, str], alphabet: set) -> bool:
+    if left[0] in ("star", "any") or right[0] in ("star", "any"):
+        return True
+    if left[0] == "literal" and right[0] == "literal":
+        return left[1] == right[1]
+    if left[0] == "literal":
+        return re.fullmatch(right[1], left[1]) is not None
+    if right[0] == "literal":
+        return re.fullmatch(left[1], right[1]) is not None
+    return any(
+        re.fullmatch(left[1], char) is not None
+        and re.fullmatch(right[1], char) is not None
+        for char in alphabet
+    )
+
+
+def _segments_overlap(left: str, right: str) -> bool:
+    left_tokens, right_tokens = _segment_tokens(left), _segment_tokens(right)
+    alphabet = {
+        *(chr(value) for value in range(1, 128) if chr(value) not in "/\\"),
+        *(char for char in left + right if char not in "*?[]!-/\\"),
+        "\u0100",
+    }
+    pending = [(0, 0)]
+    visited = set()
+    while pending:
+        left_index, right_index = pending.pop()
+        if (left_index, right_index) in visited:
+            continue
+        visited.add((left_index, right_index))
+        if left_index == len(left_tokens) and right_index == len(right_tokens):
+            return True
+        if left_index < len(left_tokens) and left_tokens[left_index][0] == "star":
+            pending.append((left_index + 1, right_index))
+        if right_index < len(right_tokens) and right_tokens[right_index][0] == "star":
+            pending.append((left_index, right_index + 1))
+        if left_index >= len(left_tokens) or right_index >= len(right_tokens):
+            continue
+        left_token, right_token = left_tokens[left_index], right_tokens[right_index]
+        if not _token_intersects(left_token, right_token, alphabet):
+            continue
+        pending.append((
+            left_index if left_token[0] == "star" else left_index + 1,
+            right_index if right_token[0] == "star" else right_index + 1,
+        ))
+    return False
+
+
+def _patterns_overlap(left: str, right: str) -> bool:
+    left_segments, right_segments = left.split("/"), right.split("/")
+    pending = [(0, 0)]
+    visited = set()
+    while pending:
+        left_index, right_index = pending.pop()
+        if (left_index, right_index) in visited:
+            continue
+        visited.add((left_index, right_index))
+        if left_index == len(left_segments) and right_index == len(right_segments):
+            return True
+        left_recursive = left_index < len(left_segments) and left_segments[left_index] == "**"
+        right_recursive = right_index < len(right_segments) and right_segments[right_index] == "**"
+        if left_recursive:
+            pending.append((left_index + 1, right_index))
+        if right_recursive:
+            pending.append((left_index, right_index + 1))
+        if left_index >= len(left_segments) or right_index >= len(right_segments):
+            continue
+        if left_recursive or right_recursive or _segments_overlap(
+            left_segments[left_index], right_segments[right_index],
+        ):
+            pending.append((
+                left_index if left_recursive else left_index + 1,
+                right_index if right_recursive else right_index + 1,
+            ))
+    return False
 
 
 def _paths_overlap(left: Sequence[str], right: Sequence[str]) -> bool:
-    for first in left:
-        for second in right:
-            if first == second or path_matches(first, second) or path_matches(second, first):
-                return True
-            first_glob = any(char in first for char in _GLOB_CHARS)
-            second_glob = any(char in second for char in _GLOB_CHARS)
-            if not first_glob or not second_glob:
-                continue
-            first_prefix = _literal_prefix(first)
-            second_prefix = _literal_prefix(second)
-            if not first_prefix or not second_prefix:
-                return True
-            if not (
-                first_prefix == second_prefix
-                or first_prefix.startswith(second_prefix.rstrip("/") + "/")
-                or second_prefix.startswith(first_prefix.rstrip("/") + "/")
-            ):
-                continue
-            first_suffix = first.rsplit("*", 1)[-1]
-            second_suffix = second.rsplit("*", 1)[-1]
-            if first_suffix and second_suffix and first_suffix != second_suffix:
-                continue
-            return True
-    return False
+    return any(_patterns_overlap(first, second) for first in left for second in right)
 
 
 def _time(value: str) -> datetime:
@@ -206,22 +295,11 @@ def _time(value: str) -> datetime:
     return datetime.fromisoformat(value[:-1] + "+00:00").astimezone(timezone.utc)
 
 
-def _authenticated_source(source: Any, authenticated_sources: Any, issuer: str, repository: str) -> bool:
-    return (
-        isinstance(source, Mapping)
-        and source.get("provider") == "github"
-        and source.get("repository") == repository
-        and source.get("actor") == issuer
-        and isinstance(authenticated_sources, list)
-        and any(isinstance(item, Mapping) and dict(item) == dict(source) for item in authenticated_sources)
-    )
-
-
 def _coordinated(
     mission_id: str, current_paths: Sequence[str], other_id: str, other_paths: Sequence[str],
     records: Iterable[Mapping[str, Any]], policy: Mapping[str, Any], *,
     repository: str, pull_request: int, head_sha: str, now: str,
-    authenticated_sources: Sequence[Mapping[str, Any]],
+    verified_envelopes: Sequence[VerifiedRecordEnvelope],
 ) -> bool:
     expected_ids = {mission_id, other_id}
     try:
@@ -232,7 +310,7 @@ def _coordinated(
     if not isinstance(founders, list):
         return False
     for record in records:
-        if not isinstance(record, Mapping):
+        if not isinstance(record, Mapping) or set(record) != _COORDINATION_FIELDS:
             continue
         ids = record.get("mission_ids")
         scopes = record.get("scopes")
@@ -261,7 +339,10 @@ def _coordinated(
             and record.get("head_sha") == head_sha
             and issuer in founders
             and starts <= current < expires
-            and _authenticated_source(record.get("source"), authenticated_sources, issuer, repository)
+            and verify_record_envelope(
+                record, "coordination", verified_envelopes,
+                repository=repository, actor=issuer,
+            )
             and set(left) == set(current_paths) and len(left) == len(current_paths)
             and set(right) == set(other_paths) and len(right) == len(other_paths)
         ):
@@ -274,7 +355,7 @@ def detect_mission_conflicts(
     active_missions: Sequence[Mapping[str, Any]], *,
     coordination_records: Iterable[Mapping[str, Any]] = (),
     repository: str = "", pull_request: int = 0, head_sha: str = "", now: str = "",
-    authenticated_sources: Sequence[Mapping[str, Any]] = (),
+    verified_envelopes: Sequence[VerifiedRecordEnvelope] = (),
 ) -> List[Violation]:
     """Deny active path or semantic overlap absent an exact founder coordination record."""
 
@@ -304,6 +385,8 @@ def detect_mission_conflicts(
         ):
             return [Violation("MISSION_CONFLICT_INPUT_INVALID", "active mission identity or state is invalid")]
         seen_ids.add(other_id)
+        if state not in _BLOCKING_STATES:
+            continue
         try:
             other_paths = normalize_paths(other.get("paths", []), allow_glob=True)
             for pattern in other_paths:
@@ -317,7 +400,7 @@ def detect_mission_conflicts(
     current_groups = _domain_groups(current_paths, domains)
     violations = []
     for other, other_id, state, other_paths in normalized_active:
-        if other_id == mission_id or state in _INACTIVE_STATES:
+        if other_id == mission_id:
             continue
         other_groups = _domain_groups(other_paths, domains)
         path_conflict = _paths_overlap(current_paths, other_paths)
@@ -327,7 +410,7 @@ def detect_mission_conflicts(
         if _coordinated(
             mission_id, current_paths, other_id, other_paths, coordination_records, policy,
             repository=repository, pull_request=pull_request, head_sha=head_sha,
-            now=now, authenticated_sources=authenticated_sources,
+            now=now, verified_envelopes=verified_envelopes,
         ):
             continue
         if path_conflict:

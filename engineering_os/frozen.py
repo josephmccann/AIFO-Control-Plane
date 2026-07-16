@@ -5,8 +5,12 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import re
+import subprocess
 from typing import Any, Dict, Mapping, Sequence
 
+from .canonical import content_sha256
+from .consumption import ConsumptionBinding, consume_once
+from .records import VerifiedRecordEnvelope, verify_record_envelope
 from .schema import validate_document
 from .scope import PathInputError, normalize_paths, path_matches
 
@@ -20,6 +24,15 @@ _EXCEPTION_FIELDS = frozenset((
     "head_sha", "paths", "action", "issuer", "issuer_role", "starts_at",
     "expires_at", "status", "pinned_commit", "sealed_manifest_sha256",
     "protected_version", "release_condition", "one_shot", "nonce", "source",
+))
+_RELEASE_FIELDS = frozenset((
+    "record_id", "repository", "mission_id", "pull_request", "head_sha",
+    "condition", "issuer", "expires_at", "source",
+))
+_RESERVATION_FIELDS = frozenset((
+    "reservation_id", "exception_id", "repository", "mission_id",
+    "pull_request", "head_sha", "status", "nonce", "created_at",
+    "expires_at", "source",
 ))
 
 
@@ -56,6 +69,8 @@ def _declaration_valid(declaration: Mapping[str, Any], repository: str) -> bool:
         if validate_document("frozen-path", dict(declaration)):
             return False
         paths = normalize_paths(declaration.get("paths", []), allow_glob=True)
+        for pattern in paths:
+            path_matches("eos-glob-validation", pattern)
         expiry = declaration.get("expires_at")
         if expiry is not None:
             _time(expiry)
@@ -73,16 +88,6 @@ def _declaration_valid(declaration: Mapping[str, Any], repository: str) -> bool:
         ))
     except (PathInputError, TypeError, ValueError):
         return False
-
-
-def _source_authenticated(source: Any, authenticated_sources: Sequence[Mapping[str, Any]], issuer: str, repository: str) -> bool:
-    return (
-        isinstance(source, Mapping)
-        and source.get("provider") == "github"
-        and source.get("repository") == repository
-        and source.get("actor") == issuer
-        and any(isinstance(item, Mapping) and dict(item) == dict(source) for item in authenticated_sources)
-    )
 
 
 def _git_files(value: Any) -> Dict[str, str]:
@@ -127,6 +132,70 @@ def _validate_git_evidence(
     return base_sha, base_files, head_files
 
 
+def derive_git_evidence(
+    repository: str, base_sha: str, head_sha: str, *, worktree: str = ".",
+) -> Dict[str, Any]:
+    """Derive complete evidence from exact commits in the local Git object DB."""
+
+    if (
+        not isinstance(repository, str) or not repository
+        or not isinstance(base_sha, str) or re.fullmatch(r"[0-9a-f]{40}", base_sha) is None
+        or not isinstance(head_sha, str) or re.fullmatch(r"[0-9a-f]{40}", head_sha) is None
+        or not isinstance(worktree, str) or not worktree
+    ):
+        raise ValueError("git identity is invalid")
+
+    def output(arguments: Sequence[str]) -> bytes:
+        return subprocess.check_output(
+            ["git", *arguments], cwd=worktree, stderr=subprocess.DEVNULL,
+        )
+
+    for revision in (base_sha, head_sha):
+        resolved = output(["rev-parse", "--verify", revision + "^{commit}"]).decode().strip()
+        if resolved != revision:
+            raise ValueError("git commit does not resolve exactly")
+    output(["merge-base", base_sha, head_sha])
+
+    changed_raw = output(["diff", "--name-only", "-z", "--no-renames", base_sha, head_sha, "--"])
+    changed = [item.decode("utf-8") for item in changed_raw.split(b"\0") if item]
+    normalized_changed = normalize_paths(changed)
+    if len(normalized_changed) != len(set(normalized_changed)):
+        raise ValueError("git diff contains duplicate paths")
+
+    def tree(revision: str) -> Dict[str, str]:
+        entries = output(["ls-tree", "-r", "-z", "--full-tree", revision]).split(b"\0")
+        files: Dict[str, str] = {}
+        for entry in entries:
+            if not entry:
+                continue
+            try:
+                metadata, raw_path = entry.split(b"\t", 1)
+                _mode, object_type, object_id = metadata.decode("ascii").split(" ")
+                path = normalize_paths([raw_path.decode("utf-8")])[0]
+            except (UnicodeDecodeError, ValueError, PathInputError) as error:
+                raise ValueError("git tree entry is invalid") from error
+            if path in files:
+                raise ValueError("git tree contains duplicate paths")
+            if object_type == "blob":
+                content = output(["cat-file", "blob", object_id])
+            elif object_type == "commit":
+                content = ("gitlink:" + object_id).encode("ascii")
+            else:
+                raise ValueError("git tree object type is unsupported")
+            files[path] = hashlib.sha256(content).hexdigest()
+        return files
+
+    return {
+        "repository": repository,
+        "base_sha": base_sha,
+        "head_sha": head_sha,
+        "complete": True,
+        "changed_files": list(normalized_changed),
+        "base_files": tree(base_sha),
+        "head_files": tree(head_sha),
+    }
+
+
 def _manifest_sha256(patterns: Sequence[str], files: Mapping[str, str]) -> str:
     manifest = {
         path: digest for path, digest in files.items()
@@ -139,10 +208,11 @@ def _manifest_sha256(patterns: Sequence[str], files: Mapping[str, str]) -> str:
 def _release_allowed(
     declaration: Mapping[str, Any], records: Sequence[Mapping[str, Any]], *,
     mission_id: str, repository: str, pull_request: int, head_sha: str,
-    current: datetime, founders: set, authenticated_sources: Sequence[Mapping[str, Any]],
+    current: datetime, founders: set,
+    verified_envelopes: Sequence[VerifiedRecordEnvelope],
 ) -> bool:
     for record in records:
-        if not isinstance(record, Mapping):
+        if not isinstance(record, Mapping) or set(record) != _RELEASE_FIELDS:
             continue
         try:
             expires = _time(record.get("expires_at"))
@@ -157,7 +227,10 @@ def _release_allowed(
             and record.get("pull_request") == pull_request
             and record.get("head_sha") == head_sha
             and issuer in founders and current < expires
-            and _source_authenticated(record.get("source"), authenticated_sources, issuer, repository)
+            and verify_record_envelope(
+                record, "frozen_release", verified_envelopes,
+                repository=repository, actor=issuer,
+            )
         ):
             return True
     return False
@@ -166,11 +239,11 @@ def _release_allowed(
 def _reserved(
     exception: Mapping[str, Any], reservations: Sequence[Mapping[str, Any]], *,
     mission_id: str, repository: str, pull_request: int, head_sha: str,
-    current: datetime, authenticated_sources: Sequence[Mapping[str, Any]],
+    current: datetime, verified_envelopes: Sequence[VerifiedRecordEnvelope],
 ) -> bool:
     matches = []
     for reservation in reservations:
-        if not isinstance(reservation, Mapping):
+        if not isinstance(reservation, Mapping) or set(reservation) != _RESERVATION_FIELDS:
             continue
         try:
             created, expires = _time(reservation.get("created_at")), _time(reservation.get("expires_at"))
@@ -186,9 +259,10 @@ def _reserved(
             and reservation.get("head_sha") == head_sha
             and reservation.get("status") == "reserved"
             and created <= current < expires
-            and _source_authenticated(
-                reservation.get("source"), authenticated_sources,
-                reservation.get("source", {}).get("actor"), repository,
+            and isinstance(reservation.get("source"), Mapping)
+            and verify_record_envelope(
+                reservation, "frozen_reservation", verified_envelopes,
+                repository=repository, actor=reservation.get("source", {}).get("actor"),
             )
         ):
             matches.append(reservation)
@@ -199,10 +273,11 @@ def validate_frozen_changes(
     mission: Mapping[str, Any], policy: Mapping[str, Any], changed_files: Sequence[str],
     declarations: Sequence[Mapping[str, Any]], exceptions: Sequence[Mapping[str, Any]], *,
     repository: str, pull_request: int, head_sha: str, now: str, action: str,
-    git_evidence: Mapping[str, Any], authenticated_sources: Sequence[Mapping[str, Any]],
-    authenticated_release_records: Sequence[Mapping[str, Any]],
+    git_evidence: Mapping[str, Any],
+    verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    release_records: Sequence[Mapping[str, Any]],
     durable_reservations: Sequence[Mapping[str, Any]],
-    consumed_exception_ids: Sequence[str], consumed_nonces: Sequence[str],
+    consumption_store: str = "",
 ) -> FrozenDecision:
     """Deny frozen writes unless exact authenticated evidence and reservation exist."""
 
@@ -211,14 +286,13 @@ def validate_frozen_changes(
     if not isinstance(policy, Mapping) or validate_document("repository-policy", dict(policy)):
         return _decision(False, "FROZEN_POLICY_INVALID")
     collections = (
-        declarations, exceptions, authenticated_sources, authenticated_release_records,
-        durable_reservations, consumed_exception_ids, consumed_nonces,
+        declarations, exceptions, verified_envelopes, release_records,
+        durable_reservations,
     )
     if (
         any(not isinstance(value, (list, tuple)) for value in collections)
-        or any(not isinstance(item, Mapping) for item in authenticated_sources)
-        or any(not isinstance(item, str) or not item for item in consumed_exception_ids)
-        or any(not isinstance(item, str) or not item for item in consumed_nonces)
+        or any(not isinstance(item, VerifiedRecordEnvelope) for item in verified_envelopes)
+        or not isinstance(consumption_store, str)
         or not isinstance(repository, str) or policy.get("repository") != repository
         or mission.get("repository") != repository
         or not isinstance(pull_request, int) or isinstance(pull_request, bool) or pull_request < 1
@@ -229,7 +303,7 @@ def validate_frozen_changes(
     if any(not isinstance(item, Mapping) for item in exceptions):
         return _decision(False, "FROZEN_EXCEPTION_INVALID")
     if (
-        any(not isinstance(item, Mapping) for item in authenticated_release_records)
+        any(not isinstance(item, Mapping) for item in release_records)
         or any(not isinstance(item, Mapping) for item in durable_reservations)
     ):
         return _decision(False, "FROZEN_INPUT_INVALID")
@@ -243,11 +317,14 @@ def validate_frozen_changes(
     for declaration in declarations:
         if not isinstance(declaration, Mapping) or not _declaration_valid(declaration, repository):
             return _decision(False, "FROZEN_DECLARATION_INVALID", declaration)
-        patterns = normalize_paths(declaration.get("paths", []), allow_glob=True)
-        expiry = declaration.get("expires_at")
-        if expiry is not None and current >= _time(expiry):
-            continue
-        touched = tuple(path for path in changed if any(path_matches(path, pattern) for pattern in patterns))
+        try:
+            patterns = normalize_paths(declaration.get("paths", []), allow_glob=True)
+            expiry = declaration.get("expires_at")
+            if expiry is not None and current >= _time(expiry):
+                continue
+            touched = tuple(path for path in changed if any(path_matches(path, pattern) for pattern in patterns))
+        except (PathInputError, TypeError, ValueError):
+            return _decision(False, "FROZEN_DECLARATION_INVALID", declaration)
         if touched:
             affected.append((declaration, patterns, touched))
 
@@ -269,6 +346,8 @@ def validate_frozen_changes(
         return _decision(False, "FROZEN_EXCEPTION_DUPLICATE")
 
     founders = set(policy["founder_identities"])
+    consumption_bindings = []
+    last_exception = None
     for declaration, patterns, touched in affected:
         if declaration.get("pinned_commit") is not None and declaration.get("pinned_commit") != base_sha:
             return _decision(False, "FROZEN_PIN_MISMATCH", declaration)
@@ -322,20 +401,18 @@ def validate_frozen_changes(
                 (exception.get("release_condition") != declaration.get("release_condition"), "FROZEN_RELEASE_CONDITION_MISMATCH"),
                 (exception.get("one_shot") is not declaration.get("one_shot"), "FROZEN_EXCEPTION_ONE_SHOT_MISMATCH"),
                 (
-                    not _source_authenticated(exception.get("source"), authenticated_sources, issuer, repository),
+                    not verify_record_envelope(
+                        exception, "frozen_exception", verified_envelopes,
+                        repository=repository, actor=issuer,
+                    ),
                     "FROZEN_EXCEPTION_SOURCE_UNAUTHENTICATED",
                 ),
                 (
-                    exception.get("exception_id") in set(consumed_exception_ids)
-                    or exception.get("nonce") in set(consumed_nonces),
-                    "FROZEN_EXCEPTION_CONSUMED",
-                ),
-                (
                     not _release_allowed(
-                        declaration, authenticated_release_records,
+                        declaration, release_records,
                         mission_id=mission["mission_id"], repository=repository,
                         pull_request=pull_request, head_sha=head_sha, current=current,
-                        founders=founders, authenticated_sources=authenticated_sources,
+                        founders=founders, verified_envelopes=verified_envelopes,
                     ),
                     "FROZEN_RELEASE_CONDITION_UNMET",
                 ),
@@ -345,7 +422,7 @@ def validate_frozen_changes(
                         mission_id=mission["mission_id"], repository=repository,
                         pull_request=pull_request, head_sha=head_sha,
                         current=current,
-                        authenticated_sources=authenticated_sources,
+                        verified_envelopes=verified_envelopes,
                     ),
                     "FROZEN_EXCEPTION_RESERVATION_REQUIRED",
                 ),
@@ -354,8 +431,21 @@ def validate_frozen_changes(
             if failed:
                 last = _decision(False, failed, declaration, exception)
                 continue
+            payload = dict(exception)
+            del payload["source"]
+            consumption_bindings.append(ConsumptionBinding(
+                "frozen_exception", exception["exception_id"], exception["nonce"],
+                content_sha256(payload),
+            ))
+            last_exception = exception
             last = _decision(True, "FROZEN_EXCEPTION_ALLOWED", declaration, exception)
             break
         if not last.allowed:
             return last
-    return _decision(True, "FROZEN_EXCEPTION_ALLOWED", affected[-1][0])
+    if not consume_once(consumption_store, consumption_bindings):
+        return _decision(
+            False, "FROZEN_EXCEPTION_CONSUMED", affected[-1][0], last_exception,
+        )
+    return _decision(
+        True, "FROZEN_EXCEPTION_ALLOWED", affected[-1][0], last_exception,
+    )

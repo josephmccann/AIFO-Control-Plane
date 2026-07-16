@@ -1,9 +1,15 @@
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
 from engineering_os.authority import validate_authority
+from engineering_os.records import (
+    authenticate_github_record_comment, RecordEnvelopeError, record_comment_body,
+    VerifiedRecordEnvelope, verify_record_envelope,
+)
 from tests.engineering_os.test_risk import mission, policy
 
 
@@ -16,24 +22,102 @@ def record():
     return json.loads((AUTHORITY / "valid/write.json").read_text(encoding="utf-8"))
 
 
+def authority_envelope():
+    candidate = record()
+    source = candidate.pop("source")
+    comment = {
+        "id": source["comment_id"],
+        "html_url": source["url"],
+        "issue_url": "https://api.github.com/repos/acme/widgets/issues/%d" % source["issue_number"],
+        "user": {"login": source["actor"]},
+        "created_at": source["created_at"],
+        "body": record_comment_body("authority", candidate),
+    }
+    authenticated, envelope = authenticate_github_record_comment(comment, "acme/widgets")
+    if authenticated != record():
+        raise AssertionError("authority fixture is not its canonical GitHub record")
+    return envelope
+
+
 def decide(records, **updates):
+    consumption_store = updates.pop("consumption_store", None)
+    if consumption_store is None:
+        with tempfile.TemporaryDirectory() as directory:
+            return decide(
+                records, consumption_store=str(Path(directory) / "consumed.sqlite3"),
+                **updates,
+            )
+    changed_files = updates.pop("changed_files", ["src/reporting/render.py"])
     context = {
         "action": "write",
         "pull_request": 42,
         "head_sha": HEAD,
         "now": "2026-07-15T12:00:00Z",
         "subject": "producer-a",
-        "authenticated_sources": [item["source"] for item in records if isinstance(item, dict) and "source" in item],
-        "consumed_record_ids": [],
-        "consumed_nonces": [],
+        "verified_envelopes": [authority_envelope()],
+        "consumption_store": consumption_store,
     }
     context.update(updates)
     return validate_authority(
-        mission("Tier 1"), policy(), ["src/reporting/render.py"], records, **context
+        mission("Tier 1"), policy(), changed_files, records, **context
     )
 
 
 class AuthorityTests(unittest.TestCase):
+    def test_payload_mutation_cannot_reuse_an_old_authenticated_source(self):
+        candidate = record()
+        candidate["paths"] = ["src/reporting/other.py"]
+        decision = validate_authority(
+            mission("Tier 1"), policy(), ["src/reporting/other.py"], [candidate],
+            action="write", pull_request=42, head_sha=HEAD,
+            now="2026-07-15T12:00:00Z", subject="producer-a",
+            verified_envelopes=[authority_envelope()],
+            consumption_store=str(Path(tempfile.gettempdir()) / "unused-authority.sqlite3"),
+        )
+        self.assertEqual(decision.code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
+
+    def test_envelope_metadata_uses_exact_json_types(self):
+        payload = record()
+        payload.pop("source")
+        candidate, envelope = authenticate_github_record_comment({
+            "id": 9001,
+            "html_url": "https://github.com/acme/widgets/issues/1#issuecomment-9001",
+            "issue_url": "https://api.github.com/repos/acme/widgets/issues/1",
+            "user": {"login": "founder"},
+            "created_at": "2026-07-15T00:00:00Z",
+            "body": record_comment_body("authority", payload),
+        }, "acme/widgets")
+        candidate["source"]["issue_number"] = True
+        self.assertFalse(verify_record_envelope(
+            candidate, "authority", [envelope],
+            repository="acme/widgets", actor="founder",
+        ))
+
+    def test_callers_cannot_mint_verified_envelopes(self):
+        with self.assertRaises(RecordEnvelopeError):
+            VerifiedRecordEnvelope(
+                "authority", "a" * 64, "acme/widgets", 1, 2,
+                "https://github.com/acme/widgets/issues/1#issuecomment-2",
+                "founder", "2026-07-15T00:00:00Z",
+            )
+
+    def test_authority_is_consumed_once_sequentially(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "consumed.sqlite3")
+            first = decide([record()], consumption_store=store)
+            second = decide([record()], consumption_store=store)
+        self.assertEqual((first.allowed, second.code), (True, "AUTHORITY_REPLAYED"))
+
+    def test_authority_is_consumed_once_concurrently(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "consumed.sqlite3")
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(
+                    lambda _: decide([record()], consumption_store=store), range(2),
+                ))
+        self.assertEqual(sum(result.allowed for result in results), 1)
+        self.assertEqual(sum(result.code == "AUTHORITY_REPLAYED" for result in results), 1)
+
     def test_default_authority_is_read_only(self):
         read = decide([], action="read")
         write = decide([])
@@ -42,9 +126,11 @@ class AuthorityTests(unittest.TestCase):
 
     def test_authority_requires_authenticated_source_and_rejects_replay(self):
         candidate = record()
-        self.assertEqual(decide([candidate], authenticated_sources=[]).code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
-        self.assertEqual(decide([candidate], consumed_record_ids=[candidate["record_id"]]).code, "AUTHORITY_REPLAYED")
-        self.assertEqual(decide([candidate], consumed_nonces=[candidate["nonce"]]).code, "AUTHORITY_REPLAYED")
+        self.assertEqual(decide([candidate], verified_envelopes=[]).code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "consumed.sqlite3")
+            self.assertTrue(decide([candidate], consumption_store=store).allowed)
+            self.assertEqual(decide([candidate], consumption_store=store).code, "AUTHORITY_REPLAYED")
 
         duplicate = copy.deepcopy(candidate)
         duplicate["authority_id"] = "authority-write-2"
@@ -81,7 +167,8 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), wrong_base, ["src/reporting/render.py"], [record()],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            authenticated_sources=[record()["source"]], consumed_record_ids=[], consumed_nonces=[],
+            verified_envelopes=[authority_envelope()],
+            consumption_store=str(Path(tempfile.gettempdir()) / "wrong-base.sqlite3"),
         )
         self.assertEqual(base_denied.code, "AUTHORITY_POLICY_REPOSITORY_MISMATCH")
 
@@ -101,7 +188,8 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), no_founders, ["src/reporting/render.py"], [record()],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            authenticated_sources=[record()["source"]], consumed_record_ids=[], consumed_nonces=[],
+            verified_envelopes=[authority_envelope()],
+            consumption_store=str(Path(tempfile.gettempdir()) / "no-founders.sqlite3"),
         )
         self.assertEqual(denied.code, "AUTHORITY_POLICY_INVALID")
 
@@ -127,7 +215,8 @@ class AuthorityTests(unittest.TestCase):
             declared_mission, base_policy, ["src/reporting/render.py"], [deploy],
             action="deploy", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            authenticated_sources=[deploy["source"]], consumed_record_ids=[], consumed_nonces=[],
+            verified_envelopes=[authority_envelope()],
+            consumption_store=str(Path(tempfile.gettempdir()) / "disabled.sqlite3"),
         )
         self.assertEqual(disabled.code, "AUTHORITY_POLICY_CAPABILITY_DISABLED")
 
@@ -135,13 +224,13 @@ class AuthorityTests(unittest.TestCase):
         self.assertEqual(validate_authority(
             mission("Tier 1"), policy(), ["src/reporting/render.py"], None,
             action="write", pull_request=42, head_sha=HEAD, now="2026-07-15T12:00:00Z",
-            subject="producer-a", authenticated_sources=[], consumed_record_ids=[], consumed_nonces=[],
+            subject="producer-a", verified_envelopes=[], consumption_store="",
         ).code, "AUTHORITY_INPUT_INVALID")
         self.assertEqual(validate_authority(
             mission("Tier 1"), policy(), ["src/reporting/render.py"], [record()],
             action="write", pull_request=True, head_sha=HEAD, now="2026-07-15T12:00:00Z",
-            subject="producer-a", authenticated_sources=[record()["source"]],
-            consumed_record_ids=[], consumed_nonces=[],
+            subject="producer-a", verified_envelopes=[authority_envelope()],
+            consumption_store="",
         ).code, "AUTHORITY_INPUT_INVALID")
 
     def test_credential_model_names_real_gap_and_github_app_migration(self):
@@ -151,6 +240,13 @@ class AuthorityTests(unittest.TestCase):
         self.assertIn("GitHub App", compact)
         self.assertIn("expiring installation token", compact)
         self.assertIn("does not claim that it enforces path-scoped Git credentials", compact)
+
+    def test_authority_document_names_envelope_and_operational_store_boundaries(self):
+        text = (ROOT / "docs/engineering-os/AUTHORITY_MODEL.md").read_text(encoding="utf-8")
+        self.assertIn("canonical payload SHA-256", text)
+        self.assertIn("SQLite", text)
+        self.assertIn("raw mappings", text)
+        self.assertIn("no operational adapter", text)
 
 
 if __name__ == "__main__":

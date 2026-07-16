@@ -17,12 +17,13 @@
   "single_use": true,
   "source": {
     "provider": "github",
+    "record_kind": "authority",
+    "payload_sha256": "bae9022ea477a3ab0bf7db2eb3d4ca7a9a82a50fc914f5e64ebd8641946f9cae",
     "repository": "acme/widgets",
     "issue_number": 123,
     "comment_id": 9001,
     "url": "https://github.com/acme/widgets/issues/123#issuecomment-9001",
     "actor": "founder",
-    "created_at": "2026-07-15T00:00:00Z",
-    "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    "created_at": "2026-07-15T00:00:00Z"
   }
 }

@@ -1794,6 +1794,8 @@ def _python_stats(
 class _JSToken:
     kind: str
     value: str
+    start: int
+    end: int
 
 
 def _javascript_tokens(text: str) -> Tuple[_JSToken, ...]:
@@ -1830,19 +1832,20 @@ def _javascript_tokens(text: str) -> Tuple[_JSToken, ...]:
             if index >= len(text):
                 raise SyntaxError("unterminated JavaScript string")
             index += 1
-            tokens.append(_JSToken("string", text[start:index]))
+            tokens.append(_JSToken("string", text[start:index], start, index))
             continue
         identifier = re.match(r"[A-Za-z_$][A-Za-z0-9_$]*", text[index:])
         if identifier:
+            start = index
             value = identifier.group(0)
-            tokens.append(_JSToken("identifier", value))
             index += len(value)
+            tokens.append(_JSToken("identifier", value, start, index))
             continue
         if text.startswith("=>", index):
-            tokens.append(_JSToken("symbol", "=>"))
+            tokens.append(_JSToken("symbol", "=>", index, index + 2))
             index += 2
             continue
-        tokens.append(_JSToken("symbol", char))
+        tokens.append(_JSToken("symbol", char, index, index + 1))
         index += 1
     stack = []
     pairs = {")": "(", "}": "{", "]": "["}
@@ -1915,38 +1918,6 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
     global_roots = {"globalThis", "window", "global", "self"}
     global_references = set(global_roots)
 
-    def parenthesized_reference(start: int) -> Tuple[Optional[str], int]:
-        cursor = start
-        openings = 0
-        while cursor < len(tokens) and tokens[cursor].value == "(":
-            openings += 1
-            cursor += 1
-        if cursor >= len(tokens) or tokens[cursor].kind != "identifier":
-            return None, start
-        name = tokens[cursor].value
-        cursor += 1
-        for _ in range(openings):
-            if cursor >= len(tokens) or tokens[cursor].value != ")":
-                return None, start
-            cursor += 1
-        return name, cursor
-
-    changed = True
-    while changed:
-        changed = False
-        for index in range(len(tokens) - 3):
-            if (
-                tokens[index].value in ("const", "let", "var")
-                and tokens[index + 1].kind == "identifier"
-                and tokens[index + 2].value == "="
-            ):
-                referenced, _ = parenthesized_reference(index + 3)
-                if (
-                    referenced in global_references
-                    and tokens[index + 1].value not in global_references
-                ):
-                    global_references.add(tokens[index + 1].value)
-                    changed = True
     collection_names = test_names | suite_names
     for index, token in enumerate(tokens):
         if token.kind == "identifier" and token.value in global_references:
@@ -1970,17 +1941,11 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
         if member in collection_names:
             raise SyntaxError("computed indirect JavaScript collection reference")
 
-    aliases: Dict[str, Tuple[str, Optional[str]]] = {}
-    alias_reference_positions = set()
-    alias_declaration_positions = set()
-
     def reference(start: int, stop: int) -> Tuple[str, Optional[str], int]:
         if start >= stop or tokens[start].kind != "identifier":
             raise SyntaxError("indirect JavaScript collection reference")
         name = tokens[start].value
-        if name in aliases:
-            root, modifier = aliases[name]
-        elif name in test_names | suite_names:
+        if name in test_names | suite_names:
             root, modifier = name, None
         else:
             raise SyntaxError("indirect JavaScript collection reference")
@@ -2006,24 +1971,17 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
             end = index + 1
             while end < len(tokens) and tokens[end].value not in (";", ","):
                 end += 1
-            simple_assignment = (
-                index + 2 < end and tokens[index + 1].kind == "identifier"
-                and tokens[index + 2].value == "="
-            )
             known_reference = any(
                 item.kind == "identifier"
-                and (item.value in test_names | suite_names or item.value in aliases)
+                and item.value in collection_names | global_roots
                 for item in tokens[index + 1:end]
             )
-            if known_reference:
-                if not simple_assignment:
-                    raise SyntaxError("indirect JavaScript collection reference")
-                root, modifier, consumed = reference(index + 3, end)
-                if consumed != end:
-                    raise SyntaxError("indirect JavaScript collection reference")
-                aliases[tokens[index + 1].value] = (root, modifier)
-                alias_declaration_positions.add(index + 1)
-                alias_reference_positions.add(index + 3)
+            shadows_root = (
+                tokens[index + 1].kind == "identifier"
+                and tokens[index + 1].value in collection_names | global_roots
+            )
+            if known_reference or shadows_root:
+                raise SyntaxError("JavaScript collection aliases are unsupported")
             index = end + 1
             continue
         index += 1
@@ -2033,9 +1991,7 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
             continue
         previous = tokens[index - 1].value if index else ""
         following = tokens[index + 1].value if index + 1 < len(tokens) else ""
-        if previous == "." or (
-            index not in alias_reference_positions and following not in ("(", ".", "[")
-        ):
+        if previous == "." or following not in ("(", ".", "["):
             raise SyntaxError("indirect JavaScript collection reference")
 
     def static_title(token: _JSToken) -> str:
@@ -2045,6 +2001,98 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
         if "\\" in value:
             raise SyntaxError("escaped JavaScript test title")
         return value
+
+    def call_arguments(opening: int, ending: int) -> Tuple[Tuple[int, int], ...]:
+        arguments = []
+        start = opening + 1
+        stack = []
+        pairs = {")": "(", "]": "[", "}": "{"}
+        for position in range(start, ending):
+            value = tokens[position].value
+            if value in ("(", "[", "{"):
+                stack.append(value)
+            elif value in pairs:
+                if not stack or stack.pop() != pairs[value]:
+                    raise SyntaxError("unbalanced JavaScript call argument")
+            elif value == "," and not stack:
+                if position == start:
+                    raise SyntaxError("empty JavaScript call argument")
+                arguments.append((start, position))
+                start = position + 1
+        if stack:
+            raise SyntaxError("unbalanced JavaScript call argument")
+        if start < ending:
+            arguments.append((start, ending))
+        elif arguments:
+            raise SyntaxError("trailing JavaScript call argument")
+        return tuple(arguments)
+
+    def direct_arrow_callback(
+        start: int, stop: int,
+    ) -> Tuple[Mapping[str, Any], int, int, bool]:
+        async_state = (
+            start < stop and tokens[start].kind == "identifier"
+            and tokens[start].value == "async"
+        )
+        signature_start = start + 1 if async_state else start
+        stack = []
+        pairs = {")": "(", "]": "[", "}": "{"}
+        arrows = []
+        for position in range(signature_start, stop):
+            value = tokens[position].value
+            if value in ("(", "[", "{"):
+                stack.append(value)
+            elif value in pairs:
+                if not stack or stack.pop() != pairs[value]:
+                    raise SyntaxError("unbalanced JavaScript callback")
+            elif value == "=>" and not stack:
+                arrows.append(position)
+        if stack or len(arrows) != 1:
+            raise SyntaxError("direct JavaScript arrow callback required")
+        arrow = arrows[0]
+        if arrow == signature_start:
+            raise SyntaxError("JavaScript callback parameters required")
+        line_terminators = "\r\n\u2028\u2029"
+        if async_state and any(
+            item in text[tokens[start].end:tokens[signature_start].start]
+            for item in line_terminators
+        ):
+            raise SyntaxError("line break after JavaScript async callback marker")
+        if any(
+            item in text[tokens[arrow - 1].end:tokens[arrow].start]
+            for item in line_terminators
+        ):
+            raise SyntaxError("line break before JavaScript callback arrow")
+        if (
+            arrow == signature_start + 1
+            and tokens[signature_start].kind == "identifier"
+        ):
+            pass
+        elif not (
+            tokens[signature_start].value == "("
+            and closing(signature_start) == arrow - 1
+        ):
+            raise SyntaxError("unsupported JavaScript callback parameters")
+        body_open = arrow + 1
+        if body_open >= stop:
+            raise SyntaxError("missing JavaScript test callback")
+        block_body = tokens[body_open].value == "{"
+        if block_body:
+            body_close = closing(body_open)
+            if body_close != stop - 1:
+                raise SyntaxError("JavaScript callback escapes declaration")
+            body_start = body_open + 1
+        else:
+            body_start = body_open
+            body_close = stop
+        metadata = {
+            "async": async_state,
+            "parameters": [
+                (item.kind, item.value)
+                for item in tokens[signature_start:arrow]
+            ],
+        }
+        return metadata, body_start, body_close, block_body
 
     def visit(
         start: int, stop: int, suites: Tuple[str, ...], inherited_skip: bool,
@@ -2059,52 +2107,44 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                 index += 1
                 continue
             name = token.value
-            is_alias = name in aliases
-            if name not in test_names | suite_names and not is_alias:
+            if name not in test_names | suite_names:
                 index += 1
                 continue
             root, modifier, cursor = reference(index, stop)
             if cursor >= stop or tokens[cursor].value != "(":
-                if index not in alias_reference_positions | alias_declaration_positions:
-                    raise SyntaxError("indirect JavaScript collection reference")
-                index += 1
-                continue
+                raise SyntaxError("indirect JavaScript collection reference")
             call_end = closing(cursor)
             if call_end > stop or cursor + 1 >= call_end:
                 raise SyntaxError("malformed JavaScript test declaration")
-            case_title = static_title(tokens[cursor + 1])
+            arguments = call_arguments(cursor, call_end)
             callback_free_todo = (
                 root in test_names and modifier == "todo"
-                and cursor + 2 == call_end
+                and len(arguments) == 1
             )
-            if not callback_free_todo and (
-                cursor + 2 >= call_end or tokens[cursor + 2].value != ","
-            ):
+            if len(arguments) not in ({1} if callback_free_todo else {2}):
+                raise SyntaxError("unsupported JavaScript test arity")
+            title_start, title_stop = arguments[0]
+            if title_stop != title_start + 1:
                 raise SyntaxError("ambiguous JavaScript test title")
-            arrow = next((position for position in range(cursor + 2, call_end) if tokens[position].value == "=>"), None)
-            if arrow is None:
-                if not callback_free_todo:
-                    raise SyntaxError("ambiguous JavaScript test callback")
+            case_title = static_title(tokens[title_start])
+            if callback_free_todo:
                 body_open = body_start = body_close = call_end
+                block_body = False
+                callback_metadata: Mapping[str, Any] = {"present": False}
             else:
-                body_open = arrow + 1
-                if body_open >= call_end:
-                    raise SyntaxError("missing JavaScript test callback")
-                body_close = call_end
-                if tokens[body_open].value == "{":
-                    body_close = closing(body_open)
-                    if body_close >= call_end:
-                        raise SyntaxError("JavaScript callback escapes declaration")
-                    body_start = body_open + 1
-                else:
-                    body_start = body_open
+                callback_metadata, body_start, body_close, block_body = (
+                    direct_arrow_callback(*arguments[1])
+                )
+                callback_metadata = {
+                    "present": True, **callback_metadata,
+                }
             skipped = inherited_skip or modifier in ("skip", "todo", "disabled")
             focused = inherited_focus or modifier == "only"
             if modifier == "only":
                 any_focus = True
                 focus_declarations += 1
             if root in suite_names:
-                if tokens[body_open].value != "{":
+                if not block_body:
                     raise SyntaxError("suite callback must be a block")
                 visit(
                     body_start, body_close, suites + (case_title,), skipped, focused,
@@ -2122,7 +2162,7 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                 normalized = canonical_json({
                     "suite_semantics": suite_semantics,
                     "case_modifier": modifier,
-                    "callback": "absent" if callback_free_todo else "present",
+                    "callback": callback_metadata,
                     "body": [(item.kind, item.value) for item in body_tokens],
                 })
                 lowered = normalized.lower() + " " + local_identity.lower()

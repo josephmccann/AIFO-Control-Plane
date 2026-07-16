@@ -151,9 +151,6 @@ class DetectorEvasionTests(unittest.TestCase):
         sources = (
             "test.todo('pending'); it.todo('other');\n",
             "test['todo']('pending'); it['to' + 'do']('other');\n",
-            "const pending = test.todo; pending('pending');\n",
-            "const pending = test['to' + 'do']; pending('pending');\n",
-            "const spec = test; spec['todo']('pending');\n",
             "describe('suite', () => { test.todo('pending'); });\n",
         )
         for source in sources:
@@ -163,6 +160,16 @@ class DetectorEvasionTests(unittest.TestCase):
                 report = self.analyze()
                 self.assertNotIn("TEST_FILE_UNPARSABLE", codes(report))
                 self.assertNotIn("TEST_CASE_DUPLICATE", codes(report))
+        aliases = (
+            "const pending = test.todo; pending('pending');\n",
+            "const pending = test['to' + 'do']; pending('pending');\n",
+            "const spec = test; spec['todo']('pending');\n",
+        )
+        for source in aliases:
+            with self.subTest(alias=source):
+                for root in (self.base, self.head):
+                    (root / "tests/todo.test.js").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_javascript_callback_free_non_todo_and_suite_todo_fail_closed(self):
         sources = (
@@ -189,6 +196,85 @@ class DetectorEvasionTests(unittest.TestCase):
         for root in (self.base, self.head):
             (root / "tests/todo.test.js").write_text(callback, encoding="utf-8")
         self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_alias_scope_and_order_always_fail_closed(self):
+        sources = (
+            "pending('x', () => { expect(1); }); const pending = test;\n",
+            "const pending = test;\n",
+            "const pending = test.todo; pending('x');\n",
+            "{ const pending = test; pending('x', () => { expect(1); }); }\n",
+            "function register() { const pending = test; pending('x', () => { expect(1); }); }\n",
+            "let pending = test; pending = it; pending('x', () => { expect(1); });\n",
+            "var pending = test; pending('x', () => { expect(1); });\n",
+            "const pending = test; { const pending = helper; pending('x', () => { expect(1); }); }\n",
+            "const test = helper; test('x', () => { expect(1); });\n",
+            "const root = globalThis; root['describe']('x', () => {});\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/alias.test.js").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_nested_arrow_wrapper_and_extra_arguments_fail_closed(self):
+        sources = (
+            "test('wrapped', wrap(() => { expect(1); }));\n",
+            "test('timeout', () => { expect(1); }, 1000);\n",
+            "test.skip('extra', () => { expect(1); }, options);\n",
+            "describe('suite', () => { test('x', () => { expect(1); }); }, timeout);\n",
+            "test.todo('pending', () => { expect(1); }, 1000);\n",
+            "test('conditional', condition ? () => { expect(1); } : () => { expect(2); });\n",
+            "test('async newline', async\n() => { expect(1); });\n",
+            "test('arrow newline', done\n=> { expect(done); });\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/callback.test.js").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_callback_signature_and_async_state_are_semantic(self):
+        cases = (
+            (
+                "test('x', done => { expect(1); });\n",
+                "test('x', () => { expect(1); });\n",
+            ),
+            (
+                "test('x', ({value}) => { expect(value); });\n",
+                "test('x', ([value]) => { expect(value); });\n",
+            ),
+            (
+                "test('x', (done = () => 1) => { expect(done); });\n",
+                "test('x', (done = () => 2) => { expect(done); });\n",
+            ),
+            (
+                "test('x', () => { expect(1); });\n",
+                "test('x', async () => { expect(1); });\n",
+            ),
+        )
+        for base, head in cases:
+            with self.subTest(head=head):
+                for root, source in ((self.base, base), (self.head, head)):
+                    (root / "tests/callback.test.js").write_text(source, encoding="utf-8")
+                self.assertIn(
+                    "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+                )
+
+    def test_javascript_direct_arrow_callback_forms_remain_supported(self):
+        sources = (
+            "test('plain', () => { expect(1); });\n",
+            "it.skip('done', done => { expect(done); });\n",
+            "test.todo('async', async () => { expect(1); });\n",
+            "test('async arg', async done => { expect(done); });\n",
+            "test('destructured', ({value}, [other]) => { expect(value); });\n",
+            "test('default', (done = () => 1) => { expect(done); });\n",
+            "describe('suite', () => { test('inside', () => { expect(1); }); });\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/callback.test.js").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_duplicate_python_runtime_identity_is_denied_but_class_scopes_are_distinct(self):
         duplicate = (
@@ -1288,7 +1374,11 @@ class DetectorEvasionTests(unittest.TestCase):
             with self.subTest(declaration=declaration):
                 for root, text in ((self.base, outside), (self.head, outside + declaration)):
                     (root / "tests/focus.test.js").write_text(text, encoding="utf-8")
-                self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+                found = codes(self.analyze())
+                if declaration.startswith("const "):
+                    self.assertIn("TEST_FILE_UNPARSABLE", found)
+                else:
+                    self.assertIn("TEST_SKIP_ADDED", found)
 
     def test_python_module_test_flag_requires_bool_and_controls_all_cases(self):
         base = "__test__ = True\ndef test_x():\n    assert True\n"
@@ -1400,7 +1490,11 @@ class DetectorEvasionTests(unittest.TestCase):
             with self.subTest(head=head):
                 for root, text in ((self.base, base), (self.head, head)):
                     (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
-                self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+                found = codes(self.analyze())
+                if head.startswith("const "):
+                    self.assertIn("TEST_FILE_UNPARSABLE", found)
+                else:
+                    self.assertIn("TEST_SKIP_ADDED", found)
 
     def test_javascript_dynamic_collection_indirection_fails_closed(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"

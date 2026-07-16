@@ -1,0 +1,267 @@
+import copy
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from engineering_os.test_integrity import analyze_test_integrity
+from tests.engineering_os.test_test_integrity import FIXTURES, codes, policy
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class DetectorEvasionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        root = Path(self.temp.name)
+        self.base = root / "base"
+        self.head = root / "head"
+        shutil.copytree(FIXTURES / "base", self.base)
+        shutil.copytree(FIXTURES / "head", self.head)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def analyze(self, configured=None):
+        return analyze_test_integrity(
+            self.base, self.head, configured or policy(self.base, self.head),
+        )
+
+    def test_preimported_skip_alias_cannot_hide_new_decorator(self):
+        base = "from unittest import skip as defer\ndef test_value():\n    assert 1 == 1\n"
+        head = "from unittest import skip as defer\n@defer('later')\ndef test_value():\n    assert 1 == 1\n"
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_assertion_comment_cannot_offset_removed_semantic_assertion(self):
+        (self.base / "tests/test_service.py").write_text(
+            "def test_value():\n    assert value() == 1\n", encoding="utf-8",
+        )
+        (self.head / "tests/test_service.py").write_text(
+            "def test_value():\n    # assert value() == 1\n    value()\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_ASSERTION_DECLINE", codes(self.analyze()))
+
+    def test_assertion_added_elsewhere_cannot_offset_case_reduction(self):
+        (self.base / "tests/test_service.py").write_text(
+            "def test_critical():\n    assert critical() == 1\n\n"
+            "def test_other():\n    assert other()\n",
+            encoding="utf-8",
+        )
+        (self.head / "tests/test_service.py").write_text(
+            "def test_critical():\n    critical()\n\n"
+            "def test_other():\n    assert other()\n    assert extra()\n",
+            encoding="utf-8",
+        )
+        self.assertIn("TEST_CASE_ASSERTION_DECLINE", codes(self.analyze()))
+
+    def test_behaviorally_unrelated_same_count_replacement_is_not_a_rename(self):
+        original = self.head / "tests/test_service.py"
+        original.unlink()
+        (self.head / "tests/test_unrelated.py").write_text(
+            "def test_sourced_value():\n    assert True\n\n"
+            "def test_property_invariant():\n    assert True\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(codes(self.analyze()) & {
+            "TEST_RENAME_COVERAGE_REDUCED", "TEST_FILE_DELETED",
+        })
+
+    def test_malformed_or_truncated_javascript_fails_closed(self):
+        for root in (self.base, self.head):
+            path = root / "tests/sample.test.js"
+            path.write_text("test('ok', () => { expect(1).toBe(1); });\n", encoding="utf-8")
+        (self.head / "tests/sample.test.js").write_text(
+            "test('ok', () => { expect(1).toBe(1);\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_package_test_command_change_is_blocked(self):
+        for root, command in ((self.base, "vitest"), (self.head, "echo tests-disabled")):
+            (root / "package.json").write_text(
+                json.dumps({"scripts": {"test": command}}), encoding="utf-8",
+            )
+        self.assertIn("TEST_CONFIGURATION_WEAKENED", codes(self.analyze()))
+
+    def test_nested_yaml_fixture_reduction_is_counted(self):
+        for root, cases in ((self.base, 2), (self.head, 1)):
+            path = root / "tests/fixtures/cases.yaml"
+            path.write_text(
+                "suite:\n  cases:\n" + "".join("    - input: %d\n" % index for index in range(cases)),
+                encoding="utf-8",
+            )
+        self.assertIn("TEST_FIXTURE_CASE_DECLINE", codes(self.analyze()))
+
+    def test_deletion_of_configured_quality_yaml_workflow_is_blocked(self):
+        for root in (self.base, self.head):
+            path = root / ".github/workflows/quality.yaml"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("jobs: {}\n", encoding="utf-8")
+        (self.head / ".github/workflows/quality.yaml").unlink()
+        self.assertIn("VALIDATION_WORKFLOW_DELETED", codes(self.analyze()))
+
+    def test_stale_or_copied_coverage_evidence_is_denied(self):
+        configured = policy(self.base, self.head)
+        for root, commit in ((self.base, configured["base_sha"]), (self.head, configured["base_sha"])):
+            (root / ".eos").mkdir(exist_ok=True)
+            (root / ".eos/coverage.json").write_text(json.dumps({
+                "schema_version": "1.0.0", "repository": "acme/widgets",
+                "commit_sha": commit, "source_manifest_sha256": "0" * 64,
+                "generated_at": "2026-07-14T00:00:00Z",
+                "coverage": {"lines_percent": 90.0},
+            }), encoding="utf-8")
+        configured = policy(self.base, self.head)
+        self.assertTrue(codes(self.analyze(configured)) & {
+            "TEST_COVERAGE_EVIDENCE_STALE", "TEST_COVERAGE_EVIDENCE_UNBOUND",
+        })
+
+    def test_large_file_resource_cap_returns_structured_denial(self):
+        path = self.head / "tests/test_large.py"
+        path.write_text("def test_large():\n    assert True\n" + ("#x\n" * 100), encoding="utf-8")
+        configured = policy(self.base, self.head)
+        configured["configuration"]["max_file_bytes"] = 64
+        report = self.analyze(configured)
+        self.assertIn("TEST_RESOURCE_LIMIT", codes(report))
+
+    def test_report_contains_authenticated_mission_and_pr_truth(self):
+        report = self.analyze().to_dict()
+        for field in (
+            "mission_id", "mission_issue", "pull_request", "declared_tier",
+            "computed_tier", "producer_identity", "adversary_identity",
+        ):
+            self.assertIn(field, report)
+
+    def test_mission_truth_is_derived_from_authenticated_ready_history_and_risk(self):
+        from engineering_os.canonical import content_sha256
+        from engineering_os.test_integrity import authenticate_integrity_context
+        from tests.engineering_os.test_commands import (
+            audit_event, event_comment, ready_details, source_comment, valid_context,
+        )
+        mission, repository_policy = valid_context()
+        source = source_comment(8001, "agent-a", "/eos ready")
+        event = audit_event(
+            "mission.ready", "agent-a", "producer", source["html_url"],
+            source["created_at"], 1, None, ready_details(mission, "ready-8001"),
+        )
+        context = authenticate_integrity_context(
+            mission, [source, event_comment(8002, [event])], repository_policy,
+            ["engineering_os/test_integrity.py"],
+            repository=repository_policy["repository"], mission_issue=101,
+            pull_request=42, base_sha="1" * 40, head_sha="2" * 40,
+        )
+        self.assertEqual(context["mission_sha256"], content_sha256(mission))
+        self.assertEqual(context["mission_event_hash"], event["event_hash"])
+        self.assertEqual(context["effective_tier"], "Tier 2")
+        mission["risk_tier"] = "Tier 1"
+        with self.assertRaisesRegex(ValueError, "TEST_MISSION"):
+            authenticate_integrity_context(
+                mission, [source, event_comment(8002, [event])], repository_policy,
+                ["engineering_os/test_integrity.py"],
+                repository=repository_policy["repository"], mission_issue=101,
+                pull_request=42, base_sha="1" * 40, head_sha="2" * 40,
+            )
+
+
+class CliFailureArtifactTests(unittest.TestCase):
+    def test_cli_writes_structured_report_before_checkout_or_parse_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "report.json"
+            process = subprocess.run([
+                str(ROOT / "scripts/engineering-os/validate-test-integrity"),
+                "--base-root", str(Path(temporary) / "missing-base"),
+                "--head-root", str(Path(temporary) / "missing-head"),
+                "--base-sha", "1" * 40, "--head-sha", "2" * 40,
+                "--repository", "acme/widgets", "--base-policy", "missing.json",
+                "--pull-request", "42", "--output", str(output),
+            ], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertNotEqual(process.returncode, 0)
+            self.assertTrue(output.is_file())
+            value = json.loads(output.read_text(encoding="utf-8"))
+            self.assertFalse(value["allowed"])
+            self.assertEqual(value["findings"][0]["code"], "TEST_INTEGRITY_NOT_COMPLETED")
+
+    def test_workflow_initializes_report_before_any_checkout(self):
+        workflow = (ROOT / ".github/workflows/reusable-test-integrity.yml").read_text(encoding="utf-8")
+        self.assertLess(workflow.index("Initialize fail-closed report"), workflow.index("actions/checkout"))
+        self.assertIn("pull-requests: read", workflow)
+        self.assertIn("issues: read", workflow)
+        self.assertIn("actions: read", workflow)
+        self.assertIn("AIFO-EOS-MISSION-ISSUE", workflow)
+
+    def test_public_cli_exposes_no_raw_override_or_identity_inputs(self):
+        wrapper = (ROOT / "scripts/engineering-os/validate-test-integrity").read_text(encoding="utf-8")
+        adapter = (ROOT / "engineering_os/test_integrity_cli.py").read_text(encoding="utf-8")
+        for forbidden in (
+            "--override", "--review", "--approval", "--reviewer-identity",
+        ):
+            self.assertNotIn(forbidden, wrapper)
+            self.assertNotIn(forbidden, adapter)
+
+
+class RevisionEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def git(self, path, *args):
+        return subprocess.run(
+            ["git", "-C", str(path), *args], check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        ).stdout.decode("utf-8").strip()
+
+    def repository(self, name, content="def test_value():\n    assert True\n"):
+        repo = self.root / name
+        repo.mkdir()
+        self.git(repo, "init", "-q")
+        self.git(repo, "config", "user.name", "EOS Test")
+        self.git(repo, "config", "user.email", "eos@example.invalid")
+        (repo / "tests").mkdir()
+        (repo / "tests/test_value.py").write_text(content + "# repository: " + name + "\n", encoding="utf-8")
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-qm", "base")
+        return repo, self.git(repo, "rev-parse", "HEAD")
+
+    def derive(self, base, head, base_sha, head_sha):
+        from engineering_os.test_integrity_cli import derive_git_manifests
+        return derive_git_manifests(base, head, base_sha, head_sha, 1024 * 1024)
+
+    def test_unrelated_repositories_are_rejected(self):
+        base, base_sha = self.repository("base")
+        head, head_sha = self.repository("head")
+        with self.assertRaisesRegex(ValueError, "TEST_REVISION_UNRELATED"):
+            self.derive(base, head, base_sha, head_sha)
+
+    def test_dirty_or_untracked_head_is_rejected(self):
+        repo, base_sha = self.repository("repo")
+        (repo / "tests/test_value.py").write_text("def test_value():\n    assert 1 == 1\n", encoding="utf-8")
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-qm", "head")
+        head_sha = self.git(repo, "rev-parse", "HEAD")
+        base = self.root / "base-worktree"
+        self.git(repo, "worktree", "add", "-q", "--detach", str(base), base_sha)
+        (repo / "tests/test_value.py").write_text("dirty\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "TEST_CHECKOUT_DIRTY"):
+            self.derive(base, repo, base_sha, head_sha)
+        self.git(repo, "reset", "--hard", "-q", head_sha)
+        (repo / "untracked.txt").write_text("untrusted", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "TEST_CHECKOUT_DIRTY"):
+            self.derive(base, repo, base_sha, head_sha)
+
+    def test_swapped_revision_direction_is_rejected(self):
+        repo, base_sha = self.repository("repo")
+        (repo / "tests/test_value.py").write_text("def test_value():\n    assert 1 == 1\n", encoding="utf-8")
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-qm", "head")
+        head_sha = self.git(repo, "rev-parse", "HEAD")
+        base = self.root / "base-worktree"
+        self.git(repo, "worktree", "add", "-q", "--detach", str(base), base_sha)
+        with self.assertRaisesRegex(ValueError, "TEST_REVISION_UNRELATED"):
+            self.derive(repo, base, head_sha, base_sha)

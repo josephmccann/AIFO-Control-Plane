@@ -11,6 +11,7 @@ from .canonical import canonical_json, content_sha256
 _KINDS = frozenset((
     "authority", "coordination", "frozen_exception", "frozen_release",
     "frozen_reservation",
+    "test_override", "test_override_review", "test_override_approval",
 ))
 _SOURCE_FIELDS = frozenset((
     "provider", "record_kind", "payload_sha256", "repository",

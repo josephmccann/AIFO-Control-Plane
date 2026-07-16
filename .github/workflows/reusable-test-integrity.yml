@@ -8,11 +8,33 @@ permissions: {}
 jobs:
   test-integrity:
     name: Test Integrity
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
+      issues: read
+      pull-requests: read
     steps:
+      - name: Initialize fail-closed report
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          value = {
+              "schema_version": "1.0.0", "repository": os.environ["GITHUB_REPOSITORY"],
+              "base_sha": os.environ["BASE_SHA"], "head_sha": os.environ["HEAD_SHA"],
+              "pull_request": int(os.environ["PULL_REQUEST"]), "allowed": False,
+              "findings": [{"code": "TEST_INTEGRITY_NOT_COMPLETED", "message": "Test-integrity analysis did not complete.", "path": "$", "details": {}}],
+              "deltas": {},
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "test-integrity-report.json"), "w", encoding="utf-8") as handle:
+              json.dump(value, handle, sort_keys=True, separators=(",", ":"))
+              handle.write("\n")
+          PY
+
       - name: Check out immutable enforcement kernel
         uses: actions/checkout@v4
         with:
@@ -37,7 +59,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
           path: head
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Derive complete test-integrity evidence
@@ -46,7 +68,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           EVALUATED_AT: ${{ github.event.pull_request.updated_at }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Mission marker is authenticated from the PR body: AIFO-EOS-MISSION-ISSUE
           set +e
           kernel/scripts/engineering-os/validate-test-integrity \
             --base-root "$GITHUB_WORKSPACE/base" \
@@ -55,6 +80,7 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --base-policy "$GITHUB_WORKSPACE/base/.aifo/engineering-os-policy.json" \
+            --pull-request "$PULL_REQUEST" \
             --evaluated-at "$EVALUATED_AT" \
             --output "$RUNNER_TEMP/test-integrity-report.json"
           status=$?
@@ -71,6 +97,7 @@ jobs:
           retention-days: 90
 
       - name: Enforce test-integrity decision
+        if: always()
         env:
           INTEGRITY_STATUS: ${{ steps.integrity.outputs.status }}
         run: test "$INTEGRITY_STATUS" = "0"

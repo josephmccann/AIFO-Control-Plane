@@ -10,6 +10,8 @@ from engineering_os.test_integrity import (
     analyze_test_integrity,
     validate_test_override,
 )
+from engineering_os.canonical import content_sha256
+from tests.engineering_os.fake_github import SealedFakeGitHubTransport, transported_record
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,10 +25,18 @@ def _hash(path):
 
 
 def _manifest(root):
-    return {
-        path.relative_to(root).as_posix(): _hash(path)
-        for path in sorted(root.rglob("*")) if path.is_file()
-    }
+    result = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        payload = path.read_bytes()
+        result[path.relative_to(root).as_posix()] = {
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "git_blob_sha": hashlib.sha1(
+                b"blob " + str(len(payload)).encode("ascii") + b"\0" + payload
+            ).hexdigest(),
+        }
+    return result
 
 
 def policy(base, head):
@@ -39,18 +49,45 @@ def policy(base, head):
         "base_manifest": _manifest(base),
         "head_manifest": _manifest(head),
         "founder_identities": ["founder"],
-        "reviewer_identities": ["adversary"],
+        "mission": {
+            "mission_id": "mission-123", "mission_issue": 10,
+            "pull_request": 42, "mission_sha256": "3" * 64,
+            "mission_event_hash": "4" * 64,
+            "declared_tier": "Tier 1", "computed_tier": "Tier 1",
+            "effective_tier": "Tier 1", "producer_identity": "producer",
+            "producer_model_family": "openai", "adversary_identity": "adversary",
+            "adversary_model_family": "anthropic",
+        },
         "configuration": {
             "test_globs": ["tests/**/test_*.py", "tests/**/*.test.js", "tests/**/*.spec.js"],
             "fixture_globs": ["tests/**/fixtures/**"],
-            "validation_workflow_globs": [".github/workflows/*validate*.yml", ".github/workflows/*test*.yml"],
+            "validation_workflow_globs": [".github/workflows/**"],
             "test_config_globs": ["pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "package.json", "*vitest*.js", "*jest*.js"],
             "coverage_paths": ["coverage.json", "coverage-summary.json", ".eos/coverage.json"],
             "material_coverage_decline": 1.0,
             "assertion_patterns": [r"\bassert\b", r"\bexpect\s*\(", r"\.assert[A-Z]\w*\s*\("],
             "skip_patterns": [r"\bskip(?:If|Unless|Test)?\b", r"\.(?:skip|todo|disabled)\b", r"\bdisabled\b"],
+            "max_file_bytes": 1048576,
+            "coverage_max_age_seconds": 86400,
         },
     }
+
+
+def write_coverage(root, configured, commit_sha, percent, *, generated_at="2026-07-15T11:00:00Z"):
+    manifest = _manifest(root)
+    source = {
+        path: evidence for path, evidence in manifest.items()
+        if path not in configured["configuration"]["coverage_paths"]
+    }
+    path = root / "coverage-summary.json"
+    path.write_text(json.dumps({
+        "schema_version": "1.0.0", "repository": configured["repository"],
+        "commit_sha": commit_sha,
+        "source_manifest_sha256": hashlib.sha256(
+            json.dumps(source, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+        "generated_at": generated_at, "coverage": {"lines_percent": percent},
+    }), encoding="utf-8")
 
 
 def codes(report):
@@ -164,16 +201,20 @@ class TestIntegrityTests(unittest.TestCase):
         self.assertEqual(report.deltas["fixture_cases"], -1)
 
     def test_material_coverage_decline_is_reported_and_increase_passes(self):
-        (self.base / "coverage-summary.json").write_text('{"total":{"lines":{"pct":90.0}}}', encoding="utf-8")
-        (self.head / "coverage-summary.json").write_text('{"total":{"lines":{"pct":88.9}}}', encoding="utf-8")
+        configured = policy(self.base, self.head)
+        write_coverage(self.base, configured, configured["base_sha"], 90.0)
+        write_coverage(self.head, configured, configured["head_sha"], 88.9)
         report = self.analyze()
         self.assertIn("TEST_COVERAGE_DECLINE", codes(report))
         self.assertEqual(report.deltas["coverage_percent"], -1.1)
-        (self.head / "coverage-summary.json").write_text('{"total":{"lines":{"pct":91.0}}}', encoding="utf-8")
+        configured = policy(self.base, self.head)
+        write_coverage(self.head, configured, configured["head_sha"], 91.0)
         self.assertNotIn("TEST_COVERAGE_DECLINE", codes(self.analyze()))
 
     def test_missing_or_malformed_coverage_fails_closed(self):
-        (self.base / "coverage.json").write_text('{"totals":{"percent_covered":90}}', encoding="utf-8")
+        configured = policy(self.base, self.head)
+        write_coverage(self.base, configured, configured["base_sha"], 90.0)
+        (self.base / "coverage-summary.json").rename(self.base / "coverage.json")
         self.assertIn("TEST_COVERAGE_EVIDENCE_MISSING", codes(self.analyze()))
         (self.head / "coverage.json").write_text("not-json", encoding="utf-8")
         self.assertIn("TEST_COVERAGE_EVIDENCE_INVALID", codes(self.analyze()))
@@ -256,6 +297,7 @@ class OverrideTests(unittest.TestCase):
         shutil.copytree(FIXTURES / "head", self.head)
         (self.head / "tests/test_service.py").write_text("def test_sourced_value():\n    assert True\n", encoding="utf-8")
         self.report = self.analyze()
+        self.store = str(root / "consumption.sqlite")
 
     def tearDown(self):
         self.temp.cleanup()
@@ -263,100 +305,116 @@ class OverrideTests(unittest.TestCase):
     def analyze(self):
         return analyze_test_integrity(self.base, self.head, policy(self.base, self.head))
 
-    def override(self, tier="Tier 1"):
-        value = json.loads((FIXTURES / "overrides/valid.json").read_text(encoding="utf-8"))
-        value["report_sha256"] = self.report.report_sha256
-        value["finding_codes"] = sorted(codes(self.report))
-        value["risk_tier"] = tier
-        return value
+    def set_tier_two(self):
+        configured = policy(self.base, self.head)
+        for field in ("declared_tier", "computed_tier", "effective_tier"):
+            configured["mission"][field] = "Tier 2"
+        self.report = analyze_test_integrity(self.base, self.head, configured)
 
-    def review(self, override=None):
-        override = override or self.override()
-        return {
-            "schema_version": "1.0.0", "status": "approved",
-            "override_id": override["override_id"], "mission_id": override["mission_id"],
-            "repository": override["repository"], "pull_request": override["pull_request"],
-            "head_sha": override["head_sha"], "report_sha256": override["report_sha256"],
-            "reviewer_identity": "adversary", "reviewer_role": "adversary",
-            "reviewed_at": "2026-07-15T11:00:00Z", "nonce": "review-nonce-1",
+    def records(self, *, approval=False):
+        report = self.report
+        override_payload = {
+            "schema_version": "1.0.0", "record_id": "override-record-1",
+            "override_id": "override-1", "mission_id": report.mission_id,
+            "mission_issue": report.mission_issue, "repository": report.repository,
+            "pull_request": report.pull_request, "base_sha": report.base_sha,
+            "head_sha": report.head_sha, "mission_sha256": report.mission_sha256,
+            "mission_event_hash": report.mission_event_hash,
+            "risk_tier": report.effective_tier, "report_sha256": report.report_sha256,
+            "finding_codes": sorted(codes(report)),
+            "reason": "Behavior was intentionally removed.",
+            "behavior_removed": "Legacy behavior is no longer supported.",
+            "producer_identity": report.producer_identity,
+            "adversary_identity": report.adversary_identity,
+            "issued_at": "2026-07-15T12:10:00Z", "expires_at": "2026-07-15T14:00:00Z",
+            "nonce": "override-nonce-1", "single_use": True,
         }
+        override, first = transported_record(
+            "test_override", override_payload, actor=report.producer_identity,
+            created_at=override_payload["issued_at"], head_sha=report.head_sha,
+        )
+        override_digest = content_sha256(override_payload)
+        review_payload = {
+            "schema_version": "1.0.0", "record_id": "review-record-1", "review_id": "review-1",
+            "status": "approved", "override_id": override["override_id"],
+            "override_sha256": override_digest, "mission_id": report.mission_id,
+            "mission_issue": report.mission_issue, "repository": report.repository,
+            "pull_request": report.pull_request, "head_sha": report.head_sha,
+            "report_sha256": report.report_sha256,
+            "reviewer_identity": report.adversary_identity, "reviewer_role": "adversary",
+            "reviewed_at": "2026-07-15T12:20:00Z", "nonce": "review-nonce-1",
+            "single_use": True,
+        }
+        review, second = transported_record(
+            "test_override_review", review_payload, actor=report.adversary_identity,
+            created_at=review_payload["reviewed_at"], head_sha=report.head_sha,
+            comment_id=9002,
+        )
+        approval_record = None
+        evidence = [first, second]
+        if approval:
+            approval_payload = {
+                "schema_version": "1.0.0", "record_id": "approval-record-1",
+                "approval_id": "approval-1", "status": "approved",
+                "action": "test-removal-override", "override_id": override["override_id"],
+                "override_sha256": override_digest, "review_id": review["review_id"],
+                "review_sha256": content_sha256(review_payload), "mission_id": report.mission_id,
+                "mission_issue": report.mission_issue, "repository": report.repository,
+                "pull_request": report.pull_request, "head_sha": report.head_sha,
+                "report_sha256": report.report_sha256, "issuer": "founder",
+                "approved_at": "2026-07-15T12:30:00Z", "expires_at": "2026-07-15T14:00:00Z",
+                "nonce": "approval-nonce-1", "single_use": True,
+            }
+            approval_record, third = transported_record(
+                "test_override_approval", approval_payload, actor="founder",
+                created_at=approval_payload["approved_at"], head_sha=report.head_sha,
+                comment_id=9003,
+            )
+            evidence.append(third)
+        return override, review, approval_record, SealedFakeGitHubTransport(evidence)
 
-    def approval(self, override=None):
-        override = override or self.override("Tier 2")
-        return {
-            "schema_version": "1.0.0", "status": "approved", "action": "test-removal-override",
-            "override_id": override["override_id"], "mission_id": override["mission_id"],
-            "repository": override["repository"], "pull_request": override["pull_request"],
-            "head_sha": override["head_sha"], "report_sha256": override["report_sha256"],
-            "issuer": "founder", "approved_at": "2026-07-15T11:30:00Z",
-            "expires_at": "2026-07-15T14:00:00Z", "nonce": "approval-nonce-1",
-        }
+    def decide(self, override, review, approval, transport):
+        return validate_test_override(
+            self.report, override, review, approval, now="2026-07-15T13:00:00Z",
+            evidence_verifier=transport, consumption_store=self.store,
+        )
 
     def test_valid_bounded_override_allows_but_preserves_findings_and_deltas(self):
-        override = self.override()
-        decision = validate_test_override(self.report, override, self.review(override), None)
+        override, review, approval, transport = self.records()
+        decision = self.decide(override, review, approval, transport)
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.code, "TEST_INTEGRITY_OVERRIDE_ALLOWED")
         self.assertEqual({item["code"] for item in decision.details["findings"]}, codes(self.report))
         self.assertEqual(decision.details["deltas"], self.report.deltas)
 
-    def test_wrong_mission_repository_pr_sha_or_report_is_denied(self):
-        mutations = {
-            "mission_id": "mission-other", "repository": "other/repo", "pull_request": 99,
-            "head_sha": "3" * 40, "base_sha": "4" * 40, "report_sha256": "5" * 64,
-        }
-        expected = {
-            "mission_id": "TEST_OVERRIDE_REVIEW_MISMATCH", "repository": "TEST_OVERRIDE_REPOSITORY_MISMATCH",
-            "pull_request": "TEST_OVERRIDE_REVIEW_MISMATCH", "head_sha": "TEST_OVERRIDE_HEAD_MISMATCH",
-            "base_sha": "TEST_OVERRIDE_BASE_MISMATCH", "report_sha256": "TEST_OVERRIDE_REPORT_MISMATCH",
-        }
-        for field, value in mutations.items():
-            with self.subTest(field=field):
-                override = self.override()
-                override[field] = value
-                decision = validate_test_override(self.report, override, self.review(), None)
-                self.assertEqual(decision.code, expected[field])
+    def test_wrong_context_or_forged_source_is_denied(self):
+        override, review, approval, transport = self.records()
+        override["pull_request"] = 99
+        self.assertEqual(self.decide(override, review, approval, transport).code, "TEST_OVERRIDE_PR_MISMATCH")
+        override, review, approval, transport = self.records()
+        override["reason"] = "forged"
+        self.assertEqual(self.decide(override, review, approval, transport).code, "TEST_OVERRIDE_SOURCE_UNAUTHENTICATED")
 
-    def test_missing_rejected_or_forged_reviewer_is_denied(self):
-        override = self.override()
-        self.assertEqual(validate_test_override(self.report, override, None, None).code, "TEST_OVERRIDE_REVIEW_REQUIRED")
-        review = self.review(override)
-        review["status"] = "rejected"
-        self.assertEqual(validate_test_override(self.report, override, review, None).code, "TEST_OVERRIDE_REVIEW_DENIED")
-        review = self.review(override)
-        review["reviewer_identity"] = "producer"
-        self.assertEqual(validate_test_override(self.report, override, review, None).code, "TEST_OVERRIDE_REVIEWER_DENIED")
-
-    def test_stale_expired_duplicate_and_replayed_override_is_denied(self):
-        override = self.override()
-        override["expires_at"] = "2026-07-15T11:59:59Z"
-        self.assertEqual(validate_test_override(self.report, override, self.review(override), None).code, "TEST_OVERRIDE_EXPIRED")
-        override = self.override()
-        override["finding_codes"].append(override["finding_codes"][0])
-        self.assertEqual(validate_test_override(self.report, override, self.review(override), None).code, "TEST_OVERRIDE_INVALID")
-        override = self.override()
-        override["consumed_at"] = "2026-07-15T11:30:00Z"
-        self.assertEqual(validate_test_override(self.report, override, self.review(override), None).code, "TEST_OVERRIDE_REPLAYED")
+    def test_exact_records_are_atomically_single_use(self):
+        override, review, approval, transport = self.records()
+        self.assertTrue(self.decide(override, review, approval, transport).allowed)
+        self.assertEqual(self.decide(override, review, approval, transport).code, "TEST_OVERRIDE_REPLAYED")
 
     def test_tier_two_requires_exact_founder_approval(self):
-        override = self.override("Tier 2")
-        review = self.review(override)
-        self.assertEqual(validate_test_override(self.report, override, review, None).code, "TEST_OVERRIDE_FOUNDER_APPROVAL_REQUIRED")
-        approval = self.approval(override)
-        approval["issuer"] = "outsider"
-        self.assertEqual(validate_test_override(self.report, override, review, approval).code, "TEST_OVERRIDE_FOUNDER_DENIED")
-        approval = self.approval(override)
-        self.assertTrue(validate_test_override(self.report, override, review, approval).allowed)
+        self.set_tier_two()
+        override, review, _, transport = self.records()
+        self.assertEqual(self.decide(override, review, None, transport).code, "TEST_OVERRIDE_FOUNDER_APPROVAL_REQUIRED")
+        override, review, approval, transport = self.records(approval=True)
+        self.assertTrue(self.decide(override, review, approval, transport).allowed)
 
     def test_unknown_override_review_or_approval_fields_fail_closed(self):
-        override = self.override()
+        override, review, approval, transport = self.records()
         override["unknown"] = True
-        self.assertEqual(validate_test_override(self.report, override, self.review(), None).code, "TEST_OVERRIDE_INVALID")
-        override = self.override()
-        review = self.review(override)
+        self.assertEqual(self.decide(override, review, approval, transport).code, "TEST_OVERRIDE_INVALID")
+        override, review, approval, transport = self.records()
         review["unknown"] = True
-        self.assertEqual(validate_test_override(self.report, override, review, None).code, "TEST_OVERRIDE_REVIEW_INVALID")
-        override = self.override("Tier 2")
-        approval = self.approval(override)
+        self.assertEqual(self.decide(override, review, approval, transport).code, "TEST_OVERRIDE_INVALID")
+        self.set_tier_two()
+        override, review, approval, transport = self.records(approval=True)
         approval["unknown"] = True
-        self.assertEqual(validate_test_override(self.report, override, self.review(override), approval).code, "TEST_OVERRIDE_APPROVAL_INVALID")
+        self.assertEqual(self.decide(override, review, approval, transport).code, "TEST_OVERRIDE_APPROVAL_INVALID")

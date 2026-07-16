@@ -619,7 +619,7 @@ class DetectorEvasionTests(unittest.TestCase):
 
     def test_python_safe_top_level_constructs_remain_parseable(self):
         source = (
-            "import unittest\nimport json as json_module\n"
+            "import unittest\n"
             "LABEL = 'collection metadata'\nENABLED = True\n"
             "def helper(value='collection metadata'):\n    return value\n"
             "class Base(unittest.TestCase):\n    pass\n"
@@ -816,12 +816,185 @@ class DetectorEvasionTests(unittest.TestCase):
             "    'value', [(1, {'label': 'one'}), (2, {'label': 'two'})],\n"
             "    indirect=False, ids=['one', 'two'], scope='function',\n"
             ")\n"
-            "def test_x(value='safe', metadata={'items': [1, -2, +3, None]}):\n"
+            "def test_x(value, metadata={'items': [1, -2, +3, None]}):\n"
             "    assert value is not None\n"
         )
         for root in (self.base, self.head):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")
         self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_module_support_import_fails_closed(self):
+        source = (
+            "import support\n"
+            "import unittest\n"
+            "class TestThing(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.base / "support.py").write_text("VALUE = 1\n", encoding="utf-8")
+        (self.head / "support.py").write_text(
+            "import unittest\n"
+            "unittest.TestCase.__unittest_skip__ = True\n",
+            encoding="utf-8",
+        )
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_module_import_forms_are_exactly_allowlisted(self):
+        denied = (
+            "import support\n",
+            "import typing\n",
+            "import unittest as unit\n",
+            "from unittest import TestCase\n",
+            "from pytest import mark\n",
+            "import unittest, pytest\n",
+            "import pytest as framework\n",
+        )
+        for imported in denied:
+            source = imported + "def test_x():\n    assert True\n"
+            with self.subTest(imported=imported):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        source = "import unittest\nimport pytest\ndef test_x():\n    assert True\n"
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_direct_class_collection_flags_affect_skip_state(self):
+        existing_base = (
+            "import unittest\nclass TestThing(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        existing_head = existing_base.replace(
+            "class TestThing(unittest.TestCase):",
+            "class TestThing(unittest.TestCase):\n"
+            "    __unittest_skip__ = True\n"
+            "    __unittest_skip_why__ = 'disabled'",
+        )
+        for root, text in ((self.base, existing_base), (self.head, existing_head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(existing_base, encoding="utf-8")
+        (self.head / "tests/test_new.py").write_text(
+            "import unittest\nclass TestNew(unittest.TestCase):\n"
+            "    __unittest_skip__ = True\n"
+            "    __unittest_skip_why__ = 'disabled'\n"
+            "    def test_new(self):\n        self.assertTrue(True)\n",
+            encoding="utf-8",
+        )
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_python_direct_class_collection_flags_require_exact_types(self):
+        assignments = (
+            "__unittest_skip__ = 1",
+            "__unittest_skip__ = 'yes'",
+            "__unittest_skip_why__ = 1",
+            "__test__ = 0",
+            "__test__ = enabled",
+        )
+        for assignment in assignments:
+            source = (
+                "enabled = False\nclass TestThing:\n    " + assignment + "\n"
+                "    def test_x(self):\n        assert True\n"
+            )
+            with self.subTest(assignment=assignment):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_compound_assignment_targets_fail_closed(self):
+        assignments = (
+            "LEFT, RIGHT = [1]",
+            "LEFT, RIGHT = [1, 2]",
+            "(LEFT, (RIGHT,)) = (1, (2,))",
+            "LEFT, *RIGHT = [1, 2]",
+            "LEFT = RIGHT = 1",
+        )
+        for assignment in assignments:
+            source = assignment + "\ndef test_x():\n    assert True\n"
+            with self.subTest(assignment=assignment):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_parametrize_validates_collection_shape_and_signature(self):
+        cases = (
+            (
+                "@pytest.mark.parametrize('left,right', [1, 2])\n"
+                "def test_x(left, right):\n    assert left or right\n"
+            ),
+            (
+                "@pytest.mark.parametrize('left,right', [(1,), (2, 3, 4)])\n"
+                "def test_x(left, right):\n    assert left or right\n"
+            ),
+            (
+                "@pytest.mark.parametrize('value', [1, 2], ids=['one'])\n"
+                "def test_x(value):\n    assert value\n"
+            ),
+            (
+                "@pytest.mark.parametrize('left,right', [(1, 2)], indirect=['missing'])\n"
+                "def test_x(left, right):\n    assert left or right\n"
+            ),
+            (
+                "@pytest.mark.parametrize('value,value', [(1, 2)])\n"
+                "def test_x(value):\n    assert value\n"
+            ),
+            (
+                "@pytest.mark.parametrize('not-valid', [1])\n"
+                "def test_x(not_valid):\n    assert not_valid\n"
+            ),
+            (
+                "@pytest.mark.parametrize('request', [1])\n"
+                "def test_x(request):\n    assert request\n"
+            ),
+            (
+                "@pytest.mark.parametrize('value', [1])\n"
+                "def test_x(other):\n    assert other\n"
+            ),
+            (
+                "@pytest.mark.parametrize('value', [1])\n"
+                "def test_x(value=1):\n    assert value\n"
+            ),
+            (
+                "@pytest.mark.parametrize('value', [1])\n"
+                "def test_x(value, /):\n    assert value\n"
+            ),
+            (
+                "@pytest.mark.parametrize('value', [1])\n"
+                "@pytest.mark.parametrize('value', [2])\n"
+                "def test_x(value):\n    assert value\n"
+            ),
+        )
+        for decorated in cases:
+            source = "import pytest\n" + decorated
+            with self.subTest(decorated=decorated):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_parametrize_safe_single_and_multi_argument_shapes(self):
+        sources = (
+            (
+                "import pytest\n@pytest.mark.parametrize('value', [1, (2, 3)])\n"
+                "def test_x(value):\n    assert value\n"
+            ),
+            (
+                "import pytest\n"
+                "@pytest.mark.parametrize(\n"
+                "    ('left', 'right'), [(1, 2), (3, 4)],\n"
+                "    ids=['first', 'second'], indirect=['right'],\n"
+                ")\n"
+                "def test_x(left, right):\n    assert left or right\n"
+            ),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_python_known_safe_definition_metadata_remains_parseable(self):
         sources = (

@@ -9,6 +9,7 @@ import ast
 import copy
 import hashlib
 import json
+import keyword
 import math
 import os
 import re
@@ -679,13 +680,10 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
         return _bounded_definition_literal(value)
 
     def simple_target(target: ast.AST) -> bool:
-        if isinstance(target, ast.Name):
-            return target.id not in reflection_attributes
-        if isinstance(target, (ast.Tuple, ast.List)):
-            return all(simple_target(item) for item in target.elts)
-        if isinstance(target, ast.Starred):
-            return simple_target(target.value)
-        return False
+        return (
+            isinstance(target, ast.Name)
+            and target.id not in reflection_attributes
+        )
 
     def explicit_test_flag(statement: ast.Assign) -> bool:
         return (
@@ -717,12 +715,23 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
 
     def safe_runtime_body(
         body: Sequence[ast.stmt], *, class_scope: bool = False,
+        module_scope: bool = False,
     ) -> bool:
+        framework_imports = set()
         for statement in body:
             if class_scope and direct_binding_names(statement) & {"pytest", "unittest"}:
                 return False
-            if class_scope and isinstance(statement, (ast.Import, ast.ImportFrom)):
-                return False
+            if isinstance(statement, (ast.Import, ast.ImportFrom)):
+                if (
+                    not module_scope
+                    or not isinstance(statement, ast.Import)
+                    or len(statement.names) != 1
+                    or statement.names[0].name not in {"pytest", "unittest"}
+                    or statement.names[0].asname is not None
+                    or statement.names[0].name in framework_imports
+                ):
+                    return False
+                framework_imports.add(statement.names[0].name)
             if references_dynamic_primitive(statement):
                 return False
             if isinstance(statement, ast.ClassDef):
@@ -736,7 +745,7 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
             if isinstance(statement, ast.Assign):
                 if explicit_test_flag(statement):
                     continue
-                if not all(simple_target(target) for target in statement.targets):
+                if len(statement.targets) != 1 or not simple_target(statement.targets[0]):
                     return False
                 simple_alias = (
                     not class_scope and len(statement.targets) == 1
@@ -755,7 +764,9 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
             return False
         return True
 
-    return not isinstance(tree, ast.Module) or not safe_runtime_body(tree.body)
+    return not isinstance(tree, ast.Module) or not safe_runtime_body(
+        tree.body, module_scope=True,
+    )
 
 
 class _SafeConstantFolder(ast.NodeTransformer):
@@ -804,6 +815,15 @@ def _python_stats(
     tree = ast.parse(text)
     if _has_dynamic_namespace_mutation(tree):
         raise SyntaxError("dynamic Python namespace mutation")
+    for statement in tree.body:
+        if not isinstance(statement, ast.Import):
+            continue
+        imported = statement.names[0].name
+        if (
+            (imported == "unittest" and not allow_unittest_testcase)
+            or (imported == "pytest" and not allow_pytest_parametrize)
+        ):
+            raise SyntaxError("shadowed Python collection framework import")
     statement_positions = {id(statement): index for index, statement in enumerate(tree.body)}
 
     def exact_module_import_before(name: str, position: int) -> bool:
@@ -856,8 +876,120 @@ def _python_stats(
             return parent + (value.attr,) if parent else ()
         return ()
 
+    def parametrize_argnames(value: ast.AST) -> Optional[Tuple[str, ...]]:
+        names = []
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            names = [item.strip() for item in value.value.split(",")]
+        elif isinstance(value, (ast.List, ast.Tuple)):
+            if not all(
+                isinstance(item, ast.Constant) and isinstance(item.value, str)
+                for item in value.elts
+            ):
+                return None
+            names = [item.value for item in value.elts]
+        if (
+            not names
+            or any(
+                not name or name == "request"
+                or not name.isidentifier() or keyword.iskeyword(name)
+                for name in names
+            )
+            or len(names) != len(set(names))
+            or not _bounded_definition_literal(value)
+        ):
+            return None
+        return tuple(names)
+
+    def safe_parametrize(
+        decorator: ast.Call, position: int, function: Optional[Any],
+    ) -> bool:
+        if (
+            function is None
+            or not allow_pytest_parametrize
+            or not exact_module_import_before("pytest", position)
+            or len(decorator.args) != 2
+        ):
+            return False
+        names = parametrize_argnames(decorator.args[0])
+        values = decorator.args[1]
+        if (
+            names is None or not isinstance(values, (ast.List, ast.Tuple))
+            or not values.elts
+        ):
+            return False
+        if not _bounded_definition_literal(values):
+            return False
+        if len(names) > 1 and any(
+            not isinstance(item, (ast.List, ast.Tuple)) or len(item.elts) != len(names)
+            for item in values.elts
+        ):
+            return False
+        parameters = {
+            item.arg for item in (
+                list(function.args.args) + list(function.args.kwonlyargs)
+            )
+        }
+        positional = list(function.args.posonlyargs) + list(function.args.args)
+        defaulted = {
+            item.arg for item in positional[-len(function.args.defaults):]
+        } if function.args.defaults else set()
+        defaulted.update(
+            item.arg for item, default in zip(
+                function.args.kwonlyargs, function.args.kw_defaults,
+            ) if default is not None
+        )
+        if not set(names) <= parameters or set(names) & defaulted:
+            return False
+
+        keyword_names = [item.arg for item in decorator.keywords]
+        if (
+            None in keyword_names
+            or len(keyword_names) != len(set(keyword_names))
+            or any(
+                name not in {"ids", "indirect", "scope"}
+                for name in keyword_names
+            )
+        ):
+            return False
+        keyword_values = {item.arg: item.value for item in decorator.keywords}
+        indirect = keyword_values.get("indirect")
+        ids = keyword_values.get("ids")
+        scope = keyword_values.get("scope")
+
+        if indirect is not None:
+            if isinstance(indirect, ast.Constant) and isinstance(indirect.value, bool):
+                pass
+            elif isinstance(indirect, (ast.List, ast.Tuple)):
+                selected = parametrize_argnames(indirect)
+                if selected is None or not set(selected) <= set(names):
+                    return False
+            else:
+                return False
+        if ids is not None:
+            if isinstance(ids, ast.Constant) and ids.value is None:
+                pass
+            elif isinstance(ids, (ast.List, ast.Tuple)):
+                if (
+                    len(ids.elts) != len(values.elts)
+                    or not all(
+                        isinstance(item, ast.Constant)
+                        and (item.value is None or isinstance(item.value, str))
+                        for item in ids.elts
+                    )
+                    or not _bounded_definition_literal(ids)
+                ):
+                    return False
+            else:
+                return False
+        if scope is not None and not (
+            isinstance(scope, ast.Constant)
+            and scope.value in {"class", "function", "module", "package", "session"}
+        ):
+            return False
+        return True
+
     def safe_collection_decorator(
-        decorator: ast.AST, position: int,
+        decorator: ast.AST, position: int, function: Optional[Any] = None,
     ) -> bool:
         if not isinstance(decorator, ast.Call):
             return False
@@ -889,48 +1021,7 @@ def _python_stats(
                 and _bounded_definition_literal(decorator.args[1])
             )
         if name == ("pytest", "mark", "parametrize"):
-            keyword_names = [item.arg for item in decorator.keywords]
-            keyword_values = {item.arg: item.value for item in decorator.keywords}
-            indirect = keyword_values.get("indirect")
-            ids = keyword_values.get("ids")
-            scope = keyword_values.get("scope")
-
-            def string_sequence(value: ast.AST) -> bool:
-                return (
-                    isinstance(value, (ast.List, ast.Tuple))
-                    and all(
-                        isinstance(item, ast.Constant)
-                        and isinstance(item.value, str)
-                        for item in value.elts
-                    )
-                    and _bounded_definition_literal(value)
-                )
-
-            indirect_safe = indirect is None or (
-                isinstance(indirect, ast.Constant)
-                and isinstance(indirect.value, bool)
-            ) or string_sequence(indirect)
-            ids_safe = ids is None or (
-                isinstance(ids, ast.Constant) and ids.value is None
-            ) or string_sequence(ids)
-            scope_safe = scope is None or (
-                isinstance(scope, ast.Constant)
-                and scope.value in {"class", "function", "module", "package", "session"}
-            )
-            return (
-                allow_pytest_parametrize
-                and exact_module_import_before("pytest", position)
-                and len(decorator.args) == 2
-                and isinstance(decorator.args[0], ast.Constant)
-                and isinstance(decorator.args[0].value, str)
-                and bool(decorator.args[0].value)
-                and _bounded_definition_literal(decorator.args[0])
-                and static_definition_value(decorator.args[1])
-                and all(name in {"ids", "indirect", "scope"} for name in keyword_names)
-                and None not in keyword_names
-                and len(keyword_names) == len(set(keyword_names))
-                and indirect_safe and ids_safe and scope_safe
-            )
+            return safe_parametrize(decorator, position, function)
         return False
 
     def safe_init_subclass_body(node: Any) -> bool:
@@ -990,13 +1081,29 @@ def _python_stats(
             annotated.append(arguments.vararg)
         if arguments.kwarg is not None:
             annotated.append(arguments.kwarg)
+        parametrized = set()
+        for decorator in node.decorator_list:
+            if (
+                isinstance(decorator, ast.Call)
+                and dotted_name(decorator.func) == ("pytest", "mark", "parametrize")
+            ):
+                names = (
+                    parametrize_argnames(decorator.args[0])
+                    if decorator.args else None
+                )
+                if names is None or parametrized & set(names):
+                    return False
+                parametrized.update(names)
         return (
             not getattr(node, "type_params", [])
             and (
                 node.name != "__init_subclass__"
                 or safe_init_subclass_body(node)
             )
-            and all(safe_collection_decorator(item, position) for item in node.decorator_list)
+            and all(
+                safe_collection_decorator(item, position, node)
+                for item in node.decorator_list
+            )
             and all(static_definition_value(item) for item in arguments.defaults)
             and all(
                 item is None or static_definition_value(item)
@@ -1005,6 +1112,40 @@ def _python_stats(
             and all(safe_annotation(item.annotation) for item in annotated)
             and safe_annotation(node.returns)
         )
+
+    def validate_direct_class_flags(body: Sequence[ast.stmt]) -> None:
+        fields = {"__test__", "__unittest_skip__", "__unittest_skip_why__"}
+        seen = set()
+        for statement in body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = (
+                statement.targets if isinstance(statement, ast.Assign)
+                else [statement.target]
+            )
+            named = [
+                target.id for target in targets
+                if isinstance(target, ast.Name) and target.id in fields
+            ]
+            if not named:
+                continue
+            if len(targets) != 1 or len(named) != 1 or named[0] in seen:
+                raise SyntaxError("ambiguous direct Python collection flag")
+            seen.add(named[0])
+            value = statement.value
+            if named[0] in {"__test__", "__unittest_skip__"}:
+                valid = (
+                    isinstance(value, ast.Constant)
+                    and isinstance(value.value, bool)
+                )
+            else:
+                valid = (
+                    isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                    and _bounded_definition_literal(value)
+                )
+            if not valid:
+                raise SyntaxError("invalid direct Python collection flag")
 
     def validate_definitions(
         body: Sequence[ast.stmt], owner_position: Optional[int] = None,
@@ -1025,6 +1166,7 @@ def _python_stats(
                     )
                 ):
                     raise SyntaxError("unproven Python class definition execution")
+                validate_direct_class_flags(statement.body)
                 validate_definitions(statement.body, position)
             elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if position is None or not safe_function_definition(statement, position):
@@ -1340,6 +1482,20 @@ def _python_stats(
         return (
             decorators_disable(node.decorator_list)
             or any(false_assignment(statement, "__test__") for statement in node.body)
+            or any(
+                isinstance(statement, (ast.Assign, ast.AnnAssign))
+                and isinstance(statement.value, ast.Constant)
+                and statement.value.value is True
+                and any(
+                    isinstance(target, ast.Name)
+                    and target.id == "__unittest_skip__"
+                    for target in (
+                        statement.targets if isinstance(statement, ast.Assign)
+                        else [statement.target]
+                    )
+                )
+                for statement in node.body
+            )
             or init_subclass_disables
             or any(
                 "skip" in normalized(statement).lower()

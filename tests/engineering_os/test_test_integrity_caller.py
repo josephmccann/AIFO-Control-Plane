@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-KERNEL_SHA = "f22655c2aeb47c988004434913f69aff0b6c3c72"
+KERNEL_SHA = "69f766b1b215eaf6cc15677908441eb3ab00f1c3"
 
 
 class TestIntegrityCallerTests(unittest.TestCase):

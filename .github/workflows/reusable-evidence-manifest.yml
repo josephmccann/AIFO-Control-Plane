@@ -26,6 +26,7 @@ jobs:
       - name: Check out immutable head
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
 
@@ -36,18 +37,24 @@ jobs:
           python3 -m unittest discover -s tests/engineering_os -p 'test_*.py' \
             >"$RUNNER_TEMP/eos-producer/unittest.txt" 2>&1
           python3 - <<'PY'
+          import hashlib
           import json
           import os
           from pathlib import Path
 
           root = Path(os.environ["RUNNER_TEMP"]) / "eos-producer"
+          content = (root / "unittest.txt").read_bytes()
           value = {
               "schema_version": "1.0.0",
               "repository": os.environ["GITHUB_REPOSITORY"],
               "pull_request": int(os.environ["PULL_REQUEST"]),
               "base_sha": os.environ["BASE_SHA"],
               "head_sha": os.environ["HEAD_SHA"],
-              "artifacts": ["unittest.txt"],
+              "artifacts": [{
+                  "name": "unittest.txt",
+                  "sha256": hashlib.sha256(content).hexdigest(),
+                  "size_bytes": len(content),
+              }],
           }
           (root / "bundle.json").write_text(
               json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
@@ -91,16 +98,58 @@ jobs:
           name: eos-producer-${{ inputs.pull_request }}-${{ inputs.head_sha }}
           path: producer
 
-      - name: Validate artifact boundary
+      - name: Check out immutable base
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ inputs.base_sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out immutable head for trusted analysis
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ inputs.head_sha }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate source integrity with immutable kernel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVALUATED_AT: ${{ github.event.pull_request.updated_at }}
         run: |
           set -euo pipefail
-          test -f producer/bundle.json
-          test -f producer/unittest.txt
+          mkdir -p "$RUNNER_TEMP/eos-validated"
+          kernel/scripts/engineering-os/validate-test-integrity \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --head-root "$GITHUB_WORKSPACE/head" \
+            --base-sha "${{ inputs.base_sha }}" \
+            --head-sha "${{ inputs.head_sha }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-policy "$GITHUB_WORKSPACE/base/.aifo/engineering-os-policy.json" \
+            --pull-request "${{ inputs.pull_request }}" \
+            --evaluated-at "$EVALUATED_AT" \
+            --output "$RUNNER_TEMP/eos-validated/test-integrity-report.json"
+
+      - name: Validate producer artifact boundary with immutable kernel
+        run: |
+          set -euo pipefail
+          kernel/scripts/engineering-os/validate-evidence-bundle \
+            producer/bundle.json \
+            producer \
+            "$RUNNER_TEMP/eos-validated/producer-bundle.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --pull-request "${{ inputs.pull_request }}" \
+            --base-sha "${{ inputs.base_sha }}" \
+            --head-sha "${{ inputs.head_sha }}"
 
       - name: Retain validated evidence boundary
         uses: actions/upload-artifact@v4
         with:
           name: eos-evidence-${{ inputs.pull_request }}-${{ inputs.head_sha }}
-          path: producer
+          path: ${{ runner.temp }}/eos-validated
           if-no-files-found: error
           retention-days: 90

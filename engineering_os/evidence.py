@@ -21,6 +21,82 @@ class ArtifactInput:
     source: str
 
 
+def validate_producer_bundle(
+    bundle: Mapping[str, Any],
+    artifact_bytes: Mapping[str, bytes],
+    *,
+    repository: str,
+    pull_request: int,
+    base_sha: str,
+    head_sha: str,
+) -> dict:
+    """Recompute a producer bundle's exact identity, sizes, and byte hashes."""
+
+    if (
+        not isinstance(bundle, Mapping)
+        or set(bundle) != {
+            "schema_version", "repository", "pull_request", "base_sha",
+            "head_sha", "artifacts",
+        }
+        or bundle.get("schema_version") != "1.0.0"
+        or bundle.get("repository") != repository
+        or bundle.get("pull_request") != pull_request
+        or bundle.get("base_sha") != base_sha
+        or bundle.get("head_sha") != head_sha
+        or not isinstance(repository, str)
+        or re.fullmatch(r"[^/]+/[^/]+", repository) is None
+        or not isinstance(pull_request, int)
+        or isinstance(pull_request, bool)
+        or pull_request < 1
+        or re.fullmatch(r"[0-9a-f]{40}", base_sha or "") is None
+        or re.fullmatch(r"[0-9a-f]{40}", head_sha or "") is None
+        or not isinstance(bundle.get("artifacts"), list)
+        or not bundle["artifacts"]
+        or not isinstance(artifact_bytes, Mapping)
+    ):
+        raise ValueError("producer evidence bundle identity is invalid")
+    validated = []
+    names = set()
+    for item in bundle["artifacts"]:
+        if (
+            not isinstance(item, Mapping)
+            or set(item) != {"name", "sha256", "size_bytes"}
+            or not isinstance(item.get("name"), str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", item["name"]) is None
+            or item["name"] in names
+            or not isinstance(item.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) is None
+            or not isinstance(item.get("size_bytes"), int)
+            or isinstance(item.get("size_bytes"), bool)
+            or item["size_bytes"] < 0
+        ):
+            raise ValueError("producer evidence artifact declaration is invalid")
+        names.add(item["name"])
+        content = artifact_bytes.get(item["name"])
+        if (
+            not isinstance(content, bytes)
+            or len(content) != item["size_bytes"]
+            or content_sha256(content) != item["sha256"]
+        ):
+            raise ValueError("producer evidence artifact bytes do not match")
+        validated.append({
+            "name": item["name"],
+            "sha256": item["sha256"],
+            "size_bytes": item["size_bytes"],
+            "source": "producer-evidence",
+        })
+    if set(artifact_bytes) != names:
+        raise ValueError("producer evidence artifact set is not exact")
+    return {
+        "schema_version": "1.0.0",
+        "repository": repository,
+        "pull_request": pull_request,
+        "base_sha": base_sha,
+        "head_sha": head_sha,
+        "artifacts": validated,
+    }
+
+
 def generate_evidence(
     *,
     mission: Mapping[str, Any],

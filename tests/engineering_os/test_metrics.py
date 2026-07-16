@@ -75,6 +75,52 @@ class MetricsTests(unittest.TestCase):
                 period_start="2026-07-15T00:00:00Z",
                 period_end="2026-07-16T00:00:00Z",
             )
+
+    def test_reversed_lifecycle_and_negative_dynamic_schema_values_fail_closed(self):
+        events = [
+            {
+                "mission_id": "mission-7",
+                "type": "mission.ready",
+                "occurred_at": "2026-07-15T12:00:00Z",
+                "details": {},
+            },
+            {
+                "mission_id": "mission-7",
+                "type": "mission.closed",
+                "occurred_at": "2026-07-15T11:00:00Z",
+                "details": {},
+            },
+        ]
+        with self.assertRaises(ValueError):
+            project_metrics(
+                events,
+                [],
+                period_start="2026-07-15T00:00:00Z",
+                period_end="2026-07-16T00:00:00Z",
+            )
+        invalid = {
+            "schema_version": "1.0.0",
+            "period_start": "2026-07-15T00:00:00Z",
+            "period_end": "2026-07-16T00:00:00Z",
+            "founder_minutes": 0,
+            "lifecycle_seconds": {"mission-7": -1},
+            "model_cost_usd": 0,
+            "model_tokens": 0,
+            "findings": {
+                "valid": 0, "invalid": 0, "duplicate": 0,
+                "founder_decision": 0,
+            },
+            "remediation_cycles": 0,
+            "defects": 0,
+            "parked": 0,
+            "orphaned": 0,
+            "false_positive_blocks": 0,
+            "overrides": 0,
+            "rollbacks": 0,
+            "incidents": 0,
+            "throughput": 0,
+        }
+        self.assertTrue(validate_document("metrics", invalid))
         with self.assertRaises(ValueError):
             project_metrics(
                 [{

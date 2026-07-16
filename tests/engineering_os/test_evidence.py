@@ -3,7 +3,11 @@ from pathlib import Path
 
 from engineering_os.audit import normalize_audit_event
 from engineering_os.canonical import content_sha256
-from engineering_os.evidence import ArtifactInput, generate_evidence
+from engineering_os.evidence import (
+    ArtifactInput,
+    generate_evidence,
+    validate_producer_bundle,
+)
 from engineering_os.schema import validate_document
 
 
@@ -166,6 +170,14 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("needs: producer-evidence", workflow)
         self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("actions/download-artifact@", workflow)
+        self.assertIn(
+            "kernel/scripts/engineering-os/validate-test-integrity", workflow
+        )
+        self.assertIn(
+            "kernel/scripts/engineering-os/validate-evidence-bundle", workflow
+        )
+        self.assertIn("path: base", workflow)
+        self.assertIn("path: head", workflow)
         producer = workflow.split("producer-evidence:", 1)[1].split(
             "\n  manifest:", 1
         )[0]
@@ -182,6 +194,48 @@ class EvidenceTests(unittest.TestCase):
         ):
             path = ROOT / "scripts/engineering-os" / name
             self.assertTrue(path.is_file())
+
+    def test_fresh_runner_recomputes_bundle_identity_and_artifact_hashes(self):
+        content = b"326 tests passed\n"
+        bundle = {
+            "schema_version": "1.0.0",
+            "repository": "acme/widgets",
+            "pull_request": 42,
+            "base_sha": "1" * 40,
+            "head_sha": "2" * 40,
+            "artifacts": [{
+                "name": "unittest.txt",
+                "sha256": content_sha256(content),
+                "size_bytes": len(content),
+            }],
+        }
+        validated = validate_producer_bundle(
+            bundle,
+            {"unittest.txt": content},
+            repository="acme/widgets",
+            pull_request=42,
+            base_sha="1" * 40,
+            head_sha="2" * 40,
+        )
+        self.assertEqual(validated["artifacts"][0]["sha256"], content_sha256(content))
+        with self.assertRaises(ValueError):
+            validate_producer_bundle(
+                bundle,
+                {"unittest.txt": content + b"forged"},
+                repository="acme/widgets",
+                pull_request=42,
+                base_sha="1" * 40,
+                head_sha="2" * 40,
+            )
+        with self.assertRaises(ValueError):
+            validate_producer_bundle(
+                bundle,
+                {"unittest.txt": content},
+                repository="acme/widgets",
+                pull_request=42,
+                base_sha="1" * 40,
+                head_sha="3" * 40,
+            )
 
     def test_package_five_documents_name_trust_and_quota_boundaries(self):
         adversary = (

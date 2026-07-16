@@ -14,8 +14,11 @@ The reusable evidence workflow has two runners. The producer-evidence runner
 may execute pull-request code with read-only Actions and contents permission
 and receives no issue write, pull-request write, secret, OIDC, deployment, or
 cloud authority. A fresh runner downloads only the retained artifact boundary,
-checks out the immutable reusable-workflow kernel, and validates the bundle.
-The fresh runner does not trust the producer workspace or environment.
+checks out the immutable reusable-workflow kernel plus exact base and head
+revisions, and runs the immutable test-integrity analyzer. It then recomputes
+the producer bundle's repository, pull request, base/head bindings, artifact
+sizes, and byte hashes before retaining validated output. The fresh runner
+does not trust the producer workspace, tests, metadata, or environment.
 
 Founder approval is an authenticated GitHub record bound independently to one
 mission, action, repository, pull request, head SHA, environment, merge method,

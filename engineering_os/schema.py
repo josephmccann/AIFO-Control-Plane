@@ -80,6 +80,14 @@ def _walk(schema: Dict[str, Any], value: Any, path: str, kind: str) -> Iterable[
                     "%s.%s" % (path, field),
                     field=field,
                 )
+        elif isinstance(schema.get("additionalProperties"), dict):
+            for field in sorted(set(value) - set(properties)):
+                yield from _walk(
+                    schema["additionalProperties"],
+                    value[field],
+                    "%s.%s" % (path, field),
+                    kind,
+                )
         for field, child in properties.items():
             if field in value:
                 yield from _walk(child, value[field], "%s.%s" % (path, field), kind)

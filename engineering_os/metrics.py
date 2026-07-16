@@ -89,6 +89,8 @@ def project_metrics(
         elif event_type == "mission.closed":
             if mission_id not in lifecycle_starts or mission_id in lifecycle_seconds:
                 raise ValueError("mission lifecycle is incomplete")
+            if occurred < lifecycle_starts[mission_id]:
+                raise ValueError("mission lifecycle timestamps are reversed")
             lifecycle_seconds[mission_id] = int(
                 (occurred - lifecycle_starts[mission_id]).total_seconds()
             )

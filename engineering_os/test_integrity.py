@@ -1529,7 +1529,9 @@ def _python_stats(
                 class_reference_names[name] = class_reference_names[value.id]
                 class_reference_positions[name] = position
                 changed = True
-    class_cache: Dict[str, Tuple[str, bool]] = {}
+    class_cache: Dict[
+        str, Tuple[str, Dict[str, bool], Dict[str, bool]]
+    ] = {}
 
     def own_class_metadata(node: ast.ClassDef) -> str:
         return normalized(ast.ClassDef(
@@ -1540,63 +1542,82 @@ def _python_stats(
             type_params=copy.deepcopy(getattr(node, "type_params", [])),
         ))
 
-    def own_class_disabled(node: ast.ClassDef) -> bool:
-        init_subclass_disables = any(
-            isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and statement.name == "__init_subclass__"
-            and any(
-                isinstance(child, (ast.Assign, ast.AnnAssign))
-                and isinstance(child.value, ast.Constant)
-                and any(
-                    isinstance(target, ast.Attribute)
-                    and target.attr in {"__unittest_skip__", "__test__"}
-                    and (
-                        (target.attr == "__unittest_skip__" and child.value.value is True)
-                        or (target.attr == "__test__" and child.value.value is False)
-                    )
-                    for target in (
-                        child.targets if isinstance(child, ast.Assign) else [child.target]
-                    )
-                )
-                for child in ast.walk(statement)
+    def direct_class_flags(node: ast.ClassDef) -> Dict[str, bool]:
+        flags = {}
+        for statement in node.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = (
+                statement.targets if isinstance(statement, ast.Assign)
+                else [statement.target]
             )
-            for statement in node.body
-        )
-        return (
-            decorators_disable(node.decorator_list)
-            or any(false_assignment(statement, "__test__") for statement in node.body)
-            or any(
-                isinstance(statement, (ast.Assign, ast.AnnAssign))
-                and isinstance(statement.value, ast.Constant)
-                and statement.value.value is True
-                and any(
+            for target in targets:
+                if (
                     isinstance(target, ast.Name)
-                    and target.id == "__unittest_skip__"
-                    for target in (
-                        statement.targets if isinstance(statement, ast.Assign)
-                        else [statement.target]
-                    )
-                )
-                for statement in node.body
-            )
-            or init_subclass_disables
-            or any(
-                "skip" in normalized(statement).lower()
-                for statement in node.body
-                if isinstance(statement, (ast.Assign, ast.AnnAssign))
-                and any(
-                    isinstance(target, ast.Name) and target.id == "pytestmark"
-                    for target in (
-                        statement.targets if isinstance(statement, ast.Assign)
-                        else [statement.target]
-                    )
-                )
-            )
-        )
+                    and target.id in {"__test__", "__unittest_skip__"}
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, bool)
+                ):
+                    flags[target.id] = statement.value.value
+            if any(
+                isinstance(target, ast.Name) and target.id == "pytestmark"
+                for target in targets
+            ) and "skip" in normalized(statement).lower():
+                flags["__pytest_skip__"] = True
+        return flags
 
-    def resolved_class_metadata(
+    def decorator_class_flags(node: ast.ClassDef) -> Dict[str, bool]:
+        flags = {}
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            name = dotted_name(decorator.func)
+            disabled = (
+                name == ("unittest", "skip")
+                or (
+                    name == ("unittest", "skipIf")
+                    and decorator.args[0].value is True
+                )
+                or (
+                    name == ("unittest", "skipUnless")
+                    and decorator.args[0].value is False
+                )
+            )
+            if disabled:
+                flags["__unittest_skip__"] = True
+        return flags
+
+    def own_init_subclass_effect(
+        node: ast.ClassDef,
+    ) -> Optional[Dict[str, bool]]:
+        effect = None
+        for statement in node.body:
+            if not (
+                isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and statement.name == "__init_subclass__"
+            ):
+                continue
+            effect = {}
+            for child in statement.body:
+                if not isinstance(child, (ast.Assign, ast.AnnAssign)):
+                    continue
+                targets = (
+                    child.targets if isinstance(child, ast.Assign)
+                    else [child.target]
+                )
+                for target in targets:
+                    if (
+                        isinstance(target, ast.Attribute)
+                        and target.attr in {"__test__", "__unittest_skip__"}
+                        and isinstance(child.value, ast.Constant)
+                        and isinstance(child.value.value, bool)
+                    ):
+                        effect[target.attr] = child.value.value
+        return effect
+
+    def resolved_class_details(
         node: ast.ClassDef, trail: Tuple[str, ...] = (),
-    ) -> Tuple[str, bool]:
+    ) -> Tuple[str, Dict[str, bool], Dict[str, bool]]:
         cacheable = local_classes.get(node.name) is node
         if cacheable and node.name in class_cache:
             return class_cache[node.name]
@@ -1605,33 +1626,52 @@ def _python_stats(
         if len(node.bases) > 1:
             raise SyntaxError("ambiguous Python test MRO")
         inherited_metadata = []
-        inherited_disabled = False
+        inherited_flags: Dict[str, bool] = {}
+        inherited_initializer: Dict[str, bool] = {}
         for base in node.bases:
             if isinstance(base, ast.Name) and base.id in class_reference_names:
                 if class_reference_positions[base.id] >= class_binding_positions.get(node.name, len(tree.body)):
                     raise SyntaxError("local test base used before binding")
                 resolved_name = class_reference_names[base.id]
-                base_metadata, base_disabled = resolved_class_metadata(
+                base_metadata, base_flags, base_initializer = resolved_class_details(
                     local_classes[resolved_name], trail + (node.name,),
                 )
                 inherited_metadata.append((base.id, resolved_name, base_metadata))
-                inherited_disabled = inherited_disabled or base_disabled
+                inherited_flags = dict(base_flags)
+                inherited_initializer = dict(base_initializer)
             elif isinstance(base, ast.Name) and base.id in assignments_by_name:
                 raise SyntaxError("ambiguous local test base class")
             elif isinstance(base, ast.Name):
                 raise SyntaxError("unresolved Python test base class")
         if len(inherited_metadata) > 1:
             raise SyntaxError("ambiguous multiple local Python test bases")
+        effective_flags = dict(inherited_flags)
+        effective_flags.update(direct_class_flags(node))
+        effective_flags.update(inherited_initializer)
+        effective_flags.update(decorator_class_flags(node))
+        own_initializer = own_init_subclass_effect(node)
         result = (
             canonical_json({
                 "class": own_class_metadata(node),
                 "local_bases": inherited_metadata,
             }),
-            own_class_disabled(node) or inherited_disabled,
+            effective_flags,
+            dict(inherited_initializer) if own_initializer is None else own_initializer,
         )
         if cacheable:
             class_cache[node.name] = result
         return result
+
+    def resolved_class_metadata(
+        node: ast.ClassDef,
+    ) -> Tuple[str, bool]:
+        metadata, flags, _ = resolved_class_details(node)
+        disabled = (
+            flags.get("__test__", True) is False
+            or flags.get("__unittest_skip__", False) is True
+            or flags.get("__pytest_skip__", False) is True
+        )
+        return metadata, disabled
 
     def local_base_name(node: ast.ClassDef) -> Optional[str]:
         local_bases = []

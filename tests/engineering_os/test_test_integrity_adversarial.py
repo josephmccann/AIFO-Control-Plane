@@ -466,6 +466,119 @@ class DetectorEvasionTests(unittest.TestCase):
         ]
         self.assertEqual(skipped, ["tests/test_service.py::TestThing.test_x"])
 
+    def test_python_subclass_unskip_override_removal_adds_raw_skip(self):
+        base = (
+            "import unittest\n"
+            "@unittest.skip('base disabled')\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class TestThing(Base):\n    __unittest_skip__ = False\n"
+        )
+        head = base.replace("    __unittest_skip__ = False\n", "    pass\n")
+        for root, source in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        report = self.analyze()
+        self.assertEqual(report.deltas["skips"], 1)
+        self.assertEqual(
+            [
+                finding.details["case"] for finding in report.findings
+                if finding.code == "TEST_CASE_SKIP_ADDED"
+            ],
+            ["tests/test_service.py::TestThing.test_x"],
+        )
+
+    def test_python_subclass_collection_flag_overrides_work_both_directions(self):
+        cases = (
+            ("__unittest_skip__", "False", "True", 1),
+            ("__unittest_skip__", "True", "False", -1),
+            ("__test__", "True", "False", 1),
+            ("__test__", "False", "True", -1),
+        )
+        for flag, before, after, delta in cases:
+            base = (
+                "import unittest\n"
+                "class Base(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+                f"class TestThing(Base):\n    {flag} = {before}\n"
+            )
+            head = base.replace(f"{flag} = {before}", f"{flag} = {after}")
+            with self.subTest(flag=flag, before=before, after=after):
+                for root, source in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertEqual(self.analyze().deltas["skips"], delta)
+
+    def test_python_collection_flag_lookup_is_transitive_and_inherited_when_absent(self):
+        base = (
+            "import unittest\n"
+            "@unittest.skip('base disabled')\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class Middle(Base):\n    __unittest_skip__ = False\n"
+            "class TestThing(Middle):\n    pass\n"
+        )
+        head = base.replace("    __unittest_skip__ = False\n", "    pass\n")
+        for root, source in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], 2)
+
+        absent_base = base.replace(
+            "@unittest.skip('base disabled')\n",
+            "",
+        ).replace("    __unittest_skip__ = False\n", "    pass\n")
+        absent_head = absent_base.replace(
+            "class Base(unittest.TestCase):\n",
+            "class Base(unittest.TestCase):\n    __test__ = False\n",
+        )
+        for root, source in ((self.base, absent_base), (self.head, absent_head)):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], 3)
+
+    def test_python_class_decorator_overrides_direct_collection_flag(self):
+        skipped = (
+            "import unittest\n"
+            "@unittest.skip('decorator wins')\n"
+            "class TestThing(unittest.TestCase):\n"
+            "    __unittest_skip__ = False\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        active = skipped.replace("@unittest.skip('decorator wins')\n", "")
+        for root, source in ((self.base, skipped), (self.head, active)):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], -1)
+
+        conditional = (
+            "import unittest\n"
+            "@unittest.skip('base disabled')\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "@unittest.skipIf(False, 'no-op')\n"
+            "class TestThing(Base):\n    __unittest_skip__ = False\n"
+        )
+        conditional_head = conditional.replace("skipIf(False", "skipIf(True")
+        for root, source in ((self.base, conditional), (self.head, conditional_head)):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], 1)
+
+    def test_python_init_subclass_effect_applies_to_child_after_direct_flag(self):
+        cases = (
+            ("__unittest_skip__", "True", "False", "False"),
+            ("__test__", "False", "True", "True"),
+        )
+        for flag, before, after, direct in cases:
+            base = (
+                "import unittest\n"
+                "class Base(unittest.TestCase):\n"
+                "    def __init_subclass__(cls):\n"
+                f"        cls.{flag} = {before}\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+                f"class TestThing(Base):\n    {flag} = {direct}\n"
+            )
+            head = base.replace(f"cls.{flag} = {before}", f"cls.{flag} = {after}")
+            with self.subTest(flag=flag):
+                for root, source in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertEqual(self.analyze().deltas["skips"], -1)
+
     def test_python_transitive_inherited_methods_project_once_per_runtime_class(self):
         base = (
             "import unittest\n"

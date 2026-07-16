@@ -648,6 +648,68 @@ def _python_stats(text: str, module: str) -> _FileStats:
         ) and not isinstance(statement, ast.ClassDef)
     )
     module_disabled = any(false_assignment(statement, "__test__") for statement in tree.body)
+    local_classes = {
+        statement.name: statement for statement in tree.body
+        if isinstance(statement, ast.ClassDef)
+    }
+    class_cache: Dict[str, Tuple[str, bool]] = {}
+
+    def own_class_metadata(node: ast.ClassDef) -> str:
+        return normalized(ast.ClassDef(
+            name=node.name, bases=copy.deepcopy(node.bases),
+            keywords=copy.deepcopy(node.keywords),
+            body=[
+                copy.deepcopy(statement) for statement in node.body
+                if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            ], decorator_list=copy.deepcopy(node.decorator_list),
+            type_params=copy.deepcopy(getattr(node, "type_params", [])),
+        ))
+
+    def own_class_disabled(node: ast.ClassDef) -> bool:
+        return (
+            decorators_disable(node.decorator_list)
+            or any(false_assignment(statement, "__test__") for statement in node.body)
+            or any(
+                "skip" in normalized(statement).lower()
+                for statement in node.body
+                if isinstance(statement, (ast.Assign, ast.AnnAssign))
+                and any(
+                    isinstance(target, ast.Name) and target.id == "pytestmark"
+                    for target in (
+                        statement.targets if isinstance(statement, ast.Assign)
+                        else [statement.target]
+                    )
+                )
+            )
+        )
+
+    def resolved_class_metadata(
+        node: ast.ClassDef, trail: Tuple[str, ...] = (),
+    ) -> Tuple[str, bool]:
+        cacheable = local_classes.get(node.name) is node
+        if cacheable and node.name in class_cache:
+            return class_cache[node.name]
+        if node.name in trail:
+            raise SyntaxError("cyclic local test base class")
+        inherited_metadata = []
+        inherited_disabled = False
+        for base in node.bases:
+            if isinstance(base, ast.Name) and base.id in local_classes:
+                base_metadata, base_disabled = resolved_class_metadata(
+                    local_classes[base.id], trail + (node.name,),
+                )
+                inherited_metadata.append((base.id, base_metadata))
+                inherited_disabled = inherited_disabled or base_disabled
+        result = (
+            canonical_json({
+                "class": own_class_metadata(node),
+                "local_bases": inherited_metadata,
+            }),
+            own_class_disabled(node) or inherited_disabled,
+        )
+        if cacheable:
+            class_cache[node.name] = result
+        return result
 
     def visit(
         nodes: Sequence[ast.stmt], prefix: str = "", context: Tuple[str, ...] = (),
@@ -655,31 +717,7 @@ def _python_stats(text: str, module: str) -> _FileStats:
     ):
         for node in nodes:
             if isinstance(node, ast.ClassDef):
-                class_metadata = normalized(ast.ClassDef(
-                    name=node.name, bases=copy.deepcopy(node.bases),
-                    keywords=copy.deepcopy(node.keywords),
-                    body=[
-                        copy.deepcopy(statement) for statement in node.body
-                        if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                    ], decorator_list=copy.deepcopy(node.decorator_list),
-                    type_params=copy.deepcopy(getattr(node, "type_params", [])),
-                ))
-                class_disabled = (
-                    decorators_disable(node.decorator_list)
-                    or any(false_assignment(statement, "__test__") for statement in node.body)
-                    or any(
-                        "skip" in normalized(statement).lower()
-                        for statement in node.body
-                        if isinstance(statement, (ast.Assign, ast.AnnAssign))
-                        and any(
-                            isinstance(target, ast.Name) and target.id == "pytestmark"
-                            for target in (
-                                statement.targets if isinstance(statement, ast.Assign)
-                                else [statement.target]
-                            )
-                        )
-                    )
-                )
+                class_metadata, class_disabled = resolved_class_metadata(node)
                 visit(
                     node.body, prefix + node.name + ".",
                     context + (class_metadata,),
@@ -871,6 +909,44 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
         if expect_string or not parts:
             raise SyntaxError("dynamic JavaScript member")
         return "".join(parts), ending + 1
+
+    global_roots = {"globalThis", "window", "global", "self"}
+    global_references = set(global_roots)
+    changed = True
+    while changed:
+        changed = False
+        for index in range(len(tokens) - 4):
+            if (
+                tokens[index].value in ("const", "let", "var")
+                and tokens[index + 1].kind == "identifier"
+                and tokens[index + 2].value == "="
+                and tokens[index + 3].kind == "identifier"
+                and tokens[index + 3].value in global_references
+                and tokens[index + 4].value in (";", ",")
+                and tokens[index + 1].value not in global_references
+            ):
+                global_references.add(tokens[index + 1].value)
+                changed = True
+    collection_names = test_names | suite_names
+    for index, token in enumerate(tokens):
+        if token.kind == "identifier" and token.value in global_references:
+            cursor = index + 1
+            if cursor + 1 < len(tokens) and tokens[cursor].value == "?" and tokens[cursor + 1].value == ".":
+                cursor += 2
+            if cursor < len(tokens) and tokens[cursor].value == "[":
+                member, _ = computed_member(cursor)
+                if member in collection_names:
+                    raise SyntaxError("computed global JavaScript collection reference")
+        if token.value != "[" or index == 0 or tokens[index - 1].kind != "identifier":
+            continue
+        if tokens[index - 1].value in collection_names:
+            continue
+        try:
+            member, _ = computed_member(index)
+        except SyntaxError:
+            continue
+        if member in collection_names:
+            raise SyntaxError("computed indirect JavaScript collection reference")
 
     aliases: Dict[str, Tuple[str, Optional[str]]] = {}
     alias_reference_positions = set()

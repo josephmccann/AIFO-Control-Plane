@@ -215,6 +215,45 @@ class DetectorEvasionTests(unittest.TestCase):
                 found = codes(self.analyze())
                 self.assertTrue(found & {"TEST_SKIP_ADDED", "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS"})
 
+    def test_python_local_base_class_skip_is_inherited_by_collected_tests(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n    pass\n"
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        heads = (
+            base.replace(
+                "class Base(unittest.TestCase):",
+                "@unittest.skip('disabled')\nclass Base(unittest.TestCase):",
+            ),
+            base.replace(
+                "class Base(unittest.TestCase):\n    pass",
+                "class Base(unittest.TestCase):\n    __test__ = False",
+            ),
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_python_transitive_local_base_collection_metadata_is_semantic(self):
+        base = (
+            "import unittest\n"
+            "class Root(unittest.TestCase):\n    pass\n"
+            "class Middle(Root):\n    pass\n"
+            "class TestThing(Middle):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        head = base.replace(
+            "class Root(unittest.TestCase):",
+            "@unittest.skip('disabled')\nclass Root(unittest.TestCase):",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
         heads = (
@@ -239,6 +278,33 @@ class DetectorEvasionTests(unittest.TestCase):
             "globalThis.describe.skip('suite', () => { test('value', () => { expect(1); }); });\n",
             "const {skip: disabled} = describe; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
             "let disabled; disabled = describe.skip; disabled('suite', () => { test('value', () => { expect(1); }); });\n",
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_computed_global_suite_reference_fails_closed(self):
+        base = "globalThis['describe']('suite', () => { it('value', () => { expect(1); }); });\n"
+        heads = (
+            "globalThis['describe']['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+            "globalThis['des' + 'cribe']['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+            "window[`describe`]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+            "const root = globalThis; root['describe']['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_dynamic_global_computed_reference_fails_closed(self):
+        base = "describe('suite', () => { it('value', () => { expect(1); }); });\n"
+        heads = (
+            "globalThis[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n",
+            "window[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+            "const root = globalThis; root[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
         )
         for head in heads:
             with self.subTest(head=head):

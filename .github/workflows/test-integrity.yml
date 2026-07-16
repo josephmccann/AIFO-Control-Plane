@@ -18,4 +18,4 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@828f4ae746f377e60d99b5e9a9973122b84dbeb9
+    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@1d9ce471519ec435c260a152cb8cef8a15872343

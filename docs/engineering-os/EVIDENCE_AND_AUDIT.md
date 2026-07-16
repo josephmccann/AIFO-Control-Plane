@@ -13,7 +13,12 @@ derived hashes, approval state, cleanup state, or deployment state.
 The reusable evidence workflow has two runners. The producer-evidence runner
 may execute pull-request code with read-only Actions and contents permission
 and receives no issue write, pull-request write, secret, OIDC, deployment, or
-cloud authority. A fresh runner downloads only the retained artifact boundary,
+cloud authority. Its required validation command comes from the versioned
+target-repository caller, so the reusable workflow does not assume a language,
+package manager, or Control Plane test path exists in the target. The command
+is passed through the step environment and its output remains untrusted. An
+empty or failing command stops evidence generation. A fresh runner downloads
+only the retained artifact boundary,
 checks out the immutable reusable-workflow kernel plus exact base and head
 revisions, and runs the immutable test-integrity analyzer. It then recomputes
 the producer bundle's repository, pull request, base/head bindings, artifact

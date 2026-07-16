@@ -96,6 +96,17 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             "needs: [mission-history, tier-path, frozen-path, test-integrity, evidence]",
             workflow,
         )
+        producer_input = workflow.split("producer_validation_command:", 1)[1].split(
+            "permissions:", 1
+        )[0]
+        self.assertIn("required: true", producer_input)
+        evidence_job = workflow.split("\n  evidence:", 1)[1].split(
+            "\n  merge-authorization:", 1
+        )[0]
+        self.assertIn(
+            "producer_validation_command: ${{ inputs.producer_validation_command }}",
+            evidence_job,
+        )
         self.assertNotIn("issues: write", workflow)
         self.assertNotIn("pull-requests: write", workflow)
 

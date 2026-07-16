@@ -7,6 +7,10 @@ on:
         description: Mission issue number
         required: true
         type: number
+      producer_validation_command:
+        description: Target-repository validation command run in the unprivileged evidence job
+        required: true
+        type: string
 
 permissions: {}
 
@@ -129,6 +133,7 @@ jobs:
       base_sha: ${{ github.event.pull_request.base.sha }}
       head_sha: ${{ github.event.pull_request.head.sha }}
       pull_request: ${{ github.event.pull_request.number }}
+      producer_validation_command: ${{ inputs.producer_validation_command }}
 
   merge-authorization:
     name: Merge authorization

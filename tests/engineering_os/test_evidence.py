@@ -196,6 +196,22 @@ class EvidenceTests(unittest.TestCase):
         producer = workflow.split("producer-evidence:", 1)[1].split(
             "\n  manifest:", 1
         )[0]
+        self.assertIn("producer_validation_command:", workflow)
+        self.assertIn("required: true", workflow.split(
+            "producer_validation_command:", 1
+        )[1].split("jobs:", 1)[0])
+        self.assertIn(
+            "PRODUCER_VALIDATION_COMMAND: ${{ inputs.producer_validation_command }}",
+            producer,
+        )
+        self.assertIn(
+            'bash -euo pipefail -c "$PRODUCER_VALIDATION_COMMAND"', producer
+        )
+        self.assertIn("producer-validation.txt", producer)
+        self.assertNotIn("tests/engineering_os", producer)
+        self.assertNotIn("${{ inputs.producer_validation_command }}\n", producer.split(
+            "run: |", 1
+        )[1])
         for permission in ("contents: read", "actions: read"):
             self.assertIn(permission, producer)
         for capability in (

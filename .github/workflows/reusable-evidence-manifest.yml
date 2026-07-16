@@ -12,6 +12,10 @@ on:
       pull_request:
         required: true
         type: number
+      producer_validation_command:
+        description: Target-repository validation command run without privileged authority
+        required: true
+        type: string
 
 permissions: {}
 
@@ -31,11 +35,17 @@ jobs:
           persist-credentials: false
 
       - name: Capture unprivileged validation outputs
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PRODUCER_VALIDATION_COMMAND: ${{ inputs.producer_validation_command }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/eos-producer"
-          python3 -m unittest discover -s tests/engineering_os -p 'test_*.py' \
-            >"$RUNNER_TEMP/eos-producer/unittest.txt" 2>&1
+          [[ "$PRODUCER_VALIDATION_COMMAND" =~ [^[:space:]] ]]
+          bash -euo pipefail -c "$PRODUCER_VALIDATION_COMMAND" \
+            >"$RUNNER_TEMP/eos-producer/producer-validation.txt" 2>&1
           python3 - <<'PY'
           import hashlib
           import json
@@ -43,7 +53,7 @@ jobs:
           from pathlib import Path
 
           root = Path(os.environ["RUNNER_TEMP"]) / "eos-producer"
-          content = (root / "unittest.txt").read_bytes()
+          content = (root / "producer-validation.txt").read_bytes()
           value = {
               "schema_version": "1.0.0",
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -51,7 +61,7 @@ jobs:
               "base_sha": os.environ["BASE_SHA"],
               "head_sha": os.environ["HEAD_SHA"],
               "artifacts": [{
-                  "name": "unittest.txt",
+                  "name": "producer-validation.txt",
                   "sha256": hashlib.sha256(content).hexdigest(),
                   "size_bytes": len(content),
               }],
@@ -61,10 +71,6 @@ jobs:
               encoding="utf-8",
           )
           PY
-        env:
-          BASE_SHA: ${{ inputs.base_sha }}
-          HEAD_SHA: ${{ inputs.head_sha }}
-          PULL_REQUEST: ${{ inputs.pull_request }}
 
       - name: Upload producer-only evidence
         uses: actions/upload-artifact@v4

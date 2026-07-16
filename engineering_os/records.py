@@ -12,6 +12,7 @@ _KINDS = frozenset((
     "authority", "coordination", "frozen_exception", "frozen_release",
     "frozen_reservation",
     "test_override", "test_override_review", "test_override_approval",
+    "founder_approval",
 ))
 _SOURCE_FIELDS = frozenset((
     "provider", "record_kind", "payload_sha256", "repository",

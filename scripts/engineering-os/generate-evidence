@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec python3 - "$@" <<'PY'
+"""Generate an evidence manifest from a closed machine-input JSON document."""
+
+import argparse
+import json
+
+from engineering_os.evidence import ArtifactInput, generate_evidence
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_file")
+    parser.add_argument("output_file")
+    args = parser.parse_args()
+    try:
+        with open(args.input_file, encoding="utf-8") as handle:
+            value = json.load(handle)
+        if not isinstance(value, dict) or set(value) != {
+            "mission", "policy", "audit_events", "repository", "pull_request",
+            "base_sha", "head_sha", "generated_at", "status_checks",
+            "artifacts", "cleanup_state", "deployment_state",
+        }:
+            raise ValueError("input is not closed")
+        artifacts = []
+        for item in value.pop("artifacts"):
+            if not isinstance(item, dict) or set(item) != {"name", "path", "source"}:
+                raise ValueError("artifact input is not closed")
+            with open(item["path"], "rb") as handle:
+                artifacts.append(ArtifactInput(
+                    item["name"], handle.read(), item["source"],
+                ))
+        manifest = generate_evidence(artifacts=artifacts, **value)
+        with open(args.output_file, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+        return 0
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec python3 - "$@" <<'PY'
+"""Fail-closed public approval entrypoint.
+
+Operational approval validation requires an adapter-owned authenticated GitHub
+transport and durable consumption store. Raw files cannot supply that trust.
+"""
+
+import json
+
+
+def main() -> int:
+    print(json.dumps({
+        "allowed": False,
+        "code": "APPROVAL_AUTHENTICATED_ADAPTER_REQUIRED",
+    }, sort_keys=True, separators=(",", ":")))
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY

@@ -34,6 +34,20 @@ _DEFAULT_LIMITS = {
 }
 
 
+def _bounded_file_bytes(
+    path: Path, resource_budget: ResourceBudget, *, phase: str,
+) -> bytes:
+    payload = bytearray()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(65536)
+            if not chunk:
+                break
+            resource_budget.consume_bytes(len(chunk), phase=phase)
+            payload.extend(chunk)
+    return bytes(payload)
+
+
 def _command_bytes(
     command: Sequence[str], max_bytes: int, *, env=None,
     resource_budget: ResourceBudget = None, phase: str = "command",
@@ -348,6 +362,8 @@ def _coverage_attestation(
     candidates = runs.get("workflow_runs") if isinstance(runs, Mapping) else None
     if not isinstance(candidates, list) or len(candidates) > limits["max_github_items"]:
         raise ValueError("TEST_COVERAGE_ATTESTATION_UNAVAILABLE")
+    if resource_budget is not None:
+        resource_budget.consume_github(pages=1, items=len(candidates))
     candidates = [
         item for item in candidates
         if isinstance(item, Mapping)
@@ -367,6 +383,8 @@ def _coverage_attestation(
     workflow_sha = workflow.get("sha") if isinstance(workflow, Mapping) else None
     if not isinstance(workflow_sha, str) or _SHA40.fullmatch(workflow_sha) is None:
         raise ValueError("TEST_COVERAGE_ATTESTATION_UNAVAILABLE")
+    if resource_budget is not None:
+        resource_budget.consume_github(pages=1, items=1)
     artifacts = _gh(
         "repos/%s/actions/runs/%d/artifacts?per_page=100" % (repository, run["id"]),
         max_response_bytes=response_cap, usage=usage,
@@ -376,6 +394,8 @@ def _coverage_attestation(
     expected_name = "eos-coverage-%s" % commit_sha
     if not isinstance(candidates, list) or len(candidates) > limits["max_github_items"]:
         raise ValueError("TEST_COVERAGE_ATTESTATION_UNAVAILABLE")
+    if resource_budget is not None:
+        resource_budget.consume_github(pages=1, items=len(candidates))
     candidates = [
         item for item in candidates
         if isinstance(item, Mapping) and item.get("name") == expected_name
@@ -505,13 +525,15 @@ def main(argv: Sequence[str] = None) -> int:
         args = parser.parse_args(values)
         if re.fullmatch(r"[^/]+/[^/]+", args.repository) is None:
             raise ValueError("TEST_REPOSITORY_INVALID")
-        policy = json.loads(Path(args.base_policy).read_text(encoding="utf-8"))
+        limits = dict(_DEFAULT_LIMITS)
+        resource_budget = ResourceBudget(limits)
+        policy = json.loads(_bounded_file_bytes(
+            Path(args.base_policy), resource_budget, phase="policy-input",
+        ).decode("utf-8"))
         violations = validate_document("repository-policy", policy)
         if violations or policy.get("repository") != args.repository:
             raise ValueError("TEST_BASE_POLICY_INVALID")
         max_file_bytes = 16 * 1024 * 1024
-        limits = dict(_DEFAULT_LIMITS)
-        resource_budget = ResourceBudget(limits)
         base_manifest, head_manifest = derive_git_manifests(
             args.base_root, args.head_root, args.base_sha, args.head_sha, max_file_bytes,
             limits, resource_budget=resource_budget,

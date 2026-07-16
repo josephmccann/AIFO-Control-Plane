@@ -599,3 +599,20 @@ class SharedTransportBudgetTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
                 _gh("repos/acme/widgets", max_response_bytes=12, resource_budget=budget)
+
+    def test_policy_input_uses_prior_phase_budget_without_unbounded_read(self):
+        from engineering_os.test_integrity import ResourceBudget
+        from engineering_os.test_integrity_cli import _bounded_file_bytes
+        limits = {
+            "max_files": 100, "max_total_bytes": 12,
+            "max_path_bytes": 128, "max_git_record_bytes": 128,
+            "max_github_pages": 2, "max_github_items": 10,
+            "max_github_response_bytes": 12, "max_coverage_bytes": 12,
+        }
+        budget = ResourceBudget(limits)
+        budget.consume_bytes(9, phase="prior")
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "policy.json"
+            path.write_bytes(b"1234")
+            with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+                _bounded_file_bytes(path, budget, phase="policy-input")

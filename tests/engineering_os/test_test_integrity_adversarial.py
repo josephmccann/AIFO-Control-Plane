@@ -275,6 +275,183 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(text, encoding="utf-8")
         self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
 
+    def test_python_inherited_unittest_method_uses_subclass_skip_state(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class TestThing(Base):\n    pass\n"
+        )
+        head = base.replace(
+            "class TestThing(Base):",
+            "@unittest.skip('disabled')\nclass TestThing(Base):",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        report = self.analyze()
+        self.assertIn("TEST_CASE_SKIP_ADDED", codes(report))
+        self.assertEqual(report.deltas["skips"], 1)
+        skipped = [
+            finding.details["case"] for finding in report.findings
+            if finding.code == "TEST_CASE_SKIP_ADDED"
+        ]
+        self.assertEqual(skipped, ["tests/test_service.py::TestThing.test_x"])
+
+    def test_python_transitive_inherited_methods_project_once_per_runtime_class(self):
+        base = (
+            "import unittest\n"
+            "class Root(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class Middle(Root):\n    pass\n"
+            "class TestThing(Middle):\n    pass\n"
+        )
+        head = base.replace(
+            "class Root(unittest.TestCase):",
+            "@unittest.skip('disabled')\nclass Root(unittest.TestCase):",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        report = self.analyze()
+        self.assertEqual(report.deltas["skips"], 3)
+
+    def test_python_inherited_method_honors_subclass_and_base_test_flags(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class TestThing(Base):\n    pass\n"
+        )
+        heads = (
+            base.replace("class TestThing(Base):\n", "class TestThing(Base):\n    __test__ = False\n"),
+            base.replace(
+                "class Base(unittest.TestCase):\n",
+                "class Base(unittest.TestCase):\n    __test__ = False\n",
+            ),
+        )
+        for index, head in enumerate(heads):
+            with self.subTest(index=index):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                report = self.analyze()
+                self.assertIn("TEST_SKIP_ADDED", codes(report))
+                self.assertEqual(report.deltas["skips"], index + 1)
+
+    def test_python_inherited_method_resolves_ordered_local_alias(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "Alias = Base\nOther = Alias\n"
+            "class TestThing(Other):\n    pass\n"
+        )
+        head = base.replace(
+            "class TestThing(Other):",
+            "@unittest.skip('disabled')\nclass TestThing(Other):",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], 1)
+        base_skip = base.replace(
+            "class Base(unittest.TestCase):",
+            "@unittest.skip('disabled')\nclass Base(unittest.TestCase):",
+        )
+        for root, text in ((self.base, base), (self.head, base_skip)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], 2)
+
+    def test_python_inherited_method_body_hash_is_projected_per_subclass(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class TestThing(Base):\n    pass\n"
+        )
+        head = base.replace("self.assertTrue(True)", "self.assertTrue(False)")
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        changed = [
+            finding.details["case"] for finding in self.analyze().findings
+            if finding.code == "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS"
+        ]
+        self.assertEqual(changed, [
+            "tests/test_service.py::Base.test_x",
+            "tests/test_service.py::TestThing.test_x",
+        ])
+
+    def test_python_local_override_suppresses_inherited_runtime_method(self):
+        direct_override = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        direct_head = direct_override.replace(
+            "    def test_x(self):\n        self.assertTrue(True)\n",
+            "    @unittest.skip('base only')\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n",
+            1,
+        )
+        for root, text in ((self.base, direct_override), (self.head, direct_head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertEqual(self.analyze().deltas["skips"], 1)
+
+        non_test_override = direct_override.replace(
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n",
+            "class TestThing(Base):\n    test_x = None\n",
+        )
+        non_test_head = non_test_override.replace(
+            "class TestThing(Base):",
+            "@unittest.skip('must not invent a case')\nclass TestThing(Base):",
+        )
+        for root, text in ((self.base, non_test_override), (self.head, non_test_head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertNotIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_python_compound_inherited_method_declaration_fails_closed(self):
+        source = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    if True:\n"
+            "        def test_x(self):\n            self.assertTrue(True)\n"
+            "class TestThing(Base):\n    pass\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_multiple_local_base_method_resolution_fails_closed(self):
+        sources = (
+            (
+                "import unittest\n"
+                "class Left(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+                "class Right(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+                "class TestThing(Left, Right):\n    pass\n"
+            ),
+            (
+                "import unittest\n"
+                "class Root(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+                "class Left(Root):\n    pass\n"
+                "class Right(Root):\n    pass\n"
+                "class TestThing(Left, Right):\n    pass\n"
+            ),
+            (
+                "import unittest\n"
+                "class Base(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+                "class TestThing(Base, unittest.TestCase):\n    pass\n"
+            ),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_python_rebound_local_base_fails_closed(self):
         base = (
             "import unittest\n"

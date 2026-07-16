@@ -1602,6 +1602,8 @@ def _python_stats(
             return class_cache[node.name]
         if node.name in trail:
             raise SyntaxError("cyclic local test base class")
+        if len(node.bases) > 1:
+            raise SyntaxError("ambiguous Python test MRO")
         inherited_metadata = []
         inherited_disabled = False
         for base in node.bases:
@@ -1618,6 +1620,8 @@ def _python_stats(
                 raise SyntaxError("ambiguous local test base class")
             elif isinstance(base, ast.Name):
                 raise SyntaxError("unresolved Python test base class")
+        if len(inherited_metadata) > 1:
+            raise SyntaxError("ambiguous multiple local Python test bases")
         result = (
             canonical_json({
                 "class": own_class_metadata(node),
@@ -1629,77 +1633,157 @@ def _python_stats(
             class_cache[node.name] = result
         return result
 
-    def visit(
-        nodes: Sequence[ast.stmt], prefix: str = "", context: Tuple[str, ...] = (),
-        inherited_skip: bool = False,
-    ):
-        for node in nodes:
-            if isinstance(node, ast.ClassDef):
-                class_metadata, class_disabled = resolved_class_metadata(node)
-                visit(
-                    node.body, prefix + node.name + ".",
-                    context + (class_metadata,),
-                    inherited_skip or class_disabled or module_disabled,
-                )
+    def local_base_name(node: ast.ClassDef) -> Optional[str]:
+        local_bases = []
+        for base in node.bases:
+            if not isinstance(base, ast.Name) or base.id not in class_reference_names:
                 continue
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test"):
+            if class_reference_positions[base.id] >= class_binding_positions[node.name]:
+                raise SyntaxError("local test base used before binding")
+            local_bases.append(class_reference_names[base.id])
+        if len(local_bases) > 1:
+            raise SyntaxError("ambiguous multiple local Python test bases")
+        return local_bases[0] if local_bases else None
+
+    method_cache: Dict[str, Dict[str, Tuple[Any, str]]] = {}
+
+    def runtime_methods(
+        node: ast.ClassDef, trail: Tuple[str, ...] = (),
+    ) -> Dict[str, Tuple[Any, str]]:
+        if node.name in method_cache:
+            return dict(method_cache[node.name])
+        if node.name in trail:
+            raise SyntaxError("cyclic local test method inheritance")
+        base_name = local_base_name(node)
+        methods = (
+            runtime_methods(local_classes[base_name], trail + (node.name,))
+            if base_name is not None else {}
+        )
+        own_slots: Dict[str, Optional[Any]] = {}
+        direct_test_definitions = set()
+        relevant = set(methods)
+        for statement in node.body:
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = statement.name
+                if name.startswith("test"):
+                    if name in direct_test_definitions:
+                        raise _DuplicateCaseError("duplicate Python test runtime identity")
+                    direct_test_definitions.add(name)
+                    own_slots[name] = statement
+                    relevant.add(name)
                 continue
-            assertions = sourcing = properties = 0
-            skips = 1 if (
-                inherited_skip or module_disabled or node.name in function_disabled
-            ) else 0
-            semantic_checks = []
-            local_identity = prefix + node.name
-            identity = module + "::" + local_identity
-            lowered_name = local_identity.lower()
-            for decorator in node.decorator_list:
-                rendered = ast.dump(decorator, include_attributes=False).lower()
-                root_name = decorator.func.id if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name) else ""
-                if root_name in aliases or "skip" in rendered or "disabled" in rendered:
+            if isinstance(statement, ast.ClassDef):
+                if statement.name in relevant or statement.name.startswith("test"):
+                    own_slots[statement.name] = None
+                continue
+            if isinstance(statement, ast.Assign):
+                names = {
+                    name for target in statement.targets for name in target_names(target)
+                    if name in relevant or name.startswith("test")
+                }
+                if names:
+                    if not _bounded_definition_literal(statement.value):
+                        raise SyntaxError("unproven inherited Python test override")
+                    for name in names:
+                        own_slots[name] = None
+                        relevant.add(name)
+                continue
+            if isinstance(statement, ast.AnnAssign):
+                names = {
+                    name for name in target_names(statement.target)
+                    if name in relevant or name.startswith("test")
+                }
+                if names and statement.value is not None:
+                    if not _bounded_definition_literal(statement.value):
+                        raise SyntaxError("unproven inherited Python test override")
+                    for name in names:
+                        own_slots[name] = None
+                        relevant.add(name)
+                continue
+            affected = set(_descendant_binding_names(statement)) & relevant
+            if affected:
+                raise SyntaxError("ambiguous inherited Python test override")
+        for name, method in own_slots.items():
+            if method is None:
+                methods.pop(name, None)
+            else:
+                methods[name] = (method, node.name)
+        method_cache[node.name] = dict(methods)
+        return methods
+
+    def append_case(
+        node: Any, local_identity: str, context: Tuple[str, ...],
+        inherited_skip: bool, declaring_class: Optional[str] = None,
+    ) -> None:
+        assertions = sourcing = properties = 0
+        skips = 1 if (
+            inherited_skip or module_disabled or node.name in function_disabled
+        ) else 0
+        semantic_checks = []
+        identity = module + "::" + local_identity
+        lowered_name = local_identity.lower()
+        for decorator in node.decorator_list:
+            rendered = ast.dump(decorator, include_attributes=False).lower()
+            root_name = decorator.func.id if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name) else ""
+            if root_name in aliases or "skip" in rendered or "disabled" in rendered:
+                skips += 1
+        for child in ast.walk(node):
+            is_assertion = isinstance(child, ast.Assert)
+            if isinstance(child, ast.Call):
+                function = child.func
+                called = ""
+                if isinstance(function, ast.Attribute):
+                    called = function.attr
+                elif isinstance(function, ast.Name):
+                    called = function.id
+                is_assertion = called.startswith("assert") or called in ("expect", "fail")
+                if called in ("skipTest", "xfail"):
                     skips += 1
-            for child in ast.walk(node):
-                is_assertion = isinstance(child, ast.Assert)
-                if isinstance(child, ast.Call):
-                    function = child.func
-                    called = ""
-                    if isinstance(function, ast.Attribute):
-                        called = function.attr
-                    elif isinstance(function, ast.Name):
-                        called = function.id
-                    is_assertion = called.startswith("assert") or called in ("expect", "fail")
-                    if called in ("skipTest", "xfail"):
-                        skips += 1
-                if is_assertion:
-                    assertions += 1
-                    rendered = ast.dump(child, include_attributes=False).lower() + " " + lowered_name
-                    semantic_checks.append(rendered)
-                    if any(term in rendered for term in ("source", "citation", "provenance")):
-                        sourcing += 1
-                    if any(term in rendered for term in ("property", "invariant")):
-                        properties += 1
-            body = copy.deepcopy(node.body)
-            if (
-                body and isinstance(body[0], ast.Expr)
-                and isinstance(body[0].value, ast.Constant)
-                and isinstance(body[0].value.value, str)
-            ):
-                body = body[1:]
-            function_metadata = {
-                "kind": "async" if isinstance(node, ast.AsyncFunctionDef) else "sync",
-                "arguments": normalized(node.args),
-                "decorators": [normalized(item) for item in node.decorator_list],
-                "returns": normalized(node.returns) if node.returns is not None else None,
-                "type_comment": node.type_comment,
-                "module": module_metadata,
-                "enclosing": context,
-            }
-            normalized_body = normalized(ast.Module(body=body, type_ignores=[]))
-            semantic = canonical_json({"metadata": function_metadata, "body": normalized_body})
-            body_hash = hashlib.sha256(semantic.encode("utf-8")).hexdigest()
-            cases.append(_CaseStats(
-                identity, local_identity, body_hash, assertions, skips, sourcing, properties,
-            ))
-    visit(tree.body)
+            if is_assertion:
+                assertions += 1
+                rendered = ast.dump(child, include_attributes=False).lower() + " " + lowered_name
+                semantic_checks.append(rendered)
+                if any(term in rendered for term in ("source", "citation", "provenance")):
+                    sourcing += 1
+                if any(term in rendered for term in ("property", "invariant")):
+                    properties += 1
+        body = copy.deepcopy(node.body)
+        if (
+            body and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            body = body[1:]
+        function_metadata = {
+            "kind": "async" if isinstance(node, ast.AsyncFunctionDef) else "sync",
+            "arguments": normalized(node.args),
+            "decorators": [normalized(item) for item in node.decorator_list],
+            "returns": normalized(node.returns) if node.returns is not None else None,
+            "type_comment": node.type_comment,
+            "module": module_metadata,
+            "enclosing": context,
+            "declaring_class": declaring_class,
+        }
+        normalized_body = normalized(ast.Module(body=body, type_ignores=[]))
+        semantic = canonical_json({"metadata": function_metadata, "body": normalized_body})
+        body_hash = hashlib.sha256(semantic.encode("utf-8")).hexdigest()
+        cases.append(_CaseStats(
+            identity, local_identity, body_hash, assertions, skips, sourcing, properties,
+        ))
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            class_metadata, class_disabled = resolved_class_metadata(node)
+            for name, (method, declaring_class) in runtime_methods(node).items():
+                append_case(
+                    method, node.name + "." + name, (class_metadata,),
+                    class_disabled or module_disabled, declaring_class,
+                )
+        elif (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test")
+        ):
+            append_case(node, node.name, (), module_disabled)
     identities = [item.identity for item in cases]
     if len(identities) != len(set(identities)):
         raise _DuplicateCaseError("duplicate Python test runtime identity")

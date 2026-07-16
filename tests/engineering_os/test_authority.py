@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from engineering_os.authority import validate_authority
 from engineering_os.consumption import ConsumptionBinding, consume_once
@@ -57,6 +58,54 @@ def decide(records, **updates):
 
 
 class AuthorityTests(unittest.TestCase):
+    def test_adapter_lookup_call_and_return_failures_are_contained(self):
+        payload = record()
+        payload.pop("source")
+        candidate, evidence = transported_record("authority", payload)
+
+        class RetrievePropertyFailure:
+            transport_provenance = SealedFakeGitHubTransport.transport_provenance
+
+            @property
+            def retrieve_comment(self):
+                raise RuntimeError("retrieve property failed")
+
+        class ProvenancePropertyFailure:
+            def retrieve_comment(self, *args):
+                return evidence
+
+            @property
+            def transport_provenance(self):
+                raise RuntimeError("provenance property failed")
+
+        class LookupProxyFailure:
+            def __getattr__(self, name):
+                raise RuntimeError("proxy lookup failed: %s" % name)
+
+        class ExplodingEvidence(dict):
+            def __iter__(self):
+                raise RuntimeError("returned evidence iteration failed")
+
+        cases = (
+            ("retrieve_property", RetrievePropertyFailure()),
+            ("provenance_property", ProvenancePropertyFailure()),
+            ("lookup_proxy", LookupProxyFailure()),
+            ("call", SealedFakeGitHubTransport(error=RuntimeError("call failed"))),
+            ("none_return", SealedFakeGitHubTransport(None)),
+            ("list_return", SealedFakeGitHubTransport([])),
+            ("malformed_mapping", SealedFakeGitHubTransport(ExplodingEvidence(evidence))),
+        )
+        for name, verifier in cases:
+            with self.subTest(name=name):
+                try:
+                    result = records_kernel.verify_record_evidence(
+                        candidate, "authority", verifier,
+                        repository="acme/widgets", actor="founder", head_sha=HEAD,
+                    )
+                except Exception as error:
+                    self.fail("adapter failure escaped: %r" % error)
+                self.assertFalse(result)
+
     def test_kernel_retrieves_and_binds_authenticated_github_transport(self):
         payload = record()
         payload.pop("source")
@@ -151,6 +200,70 @@ class AuthorityTests(unittest.TestCase):
                 )
             finally:
                 connection.close()
+
+    def test_consumption_bindings_require_exact_strings_before_open(self):
+        class TruthyValue:
+            def __bool__(self):
+                return True
+
+        valid = {
+            "kind": "authority", "record_id": "record-1",
+            "nonce": "nonce-1", "binding_digest": "1" * 64,
+        }
+        malformed_values = (True, 1, b"value", TruthyValue())
+        cases = []
+        for field in valid:
+            for value in malformed_values:
+                candidate = dict(valid)
+                candidate[field] = value
+                cases.append((field, type(value).__name__, ConsumptionBinding(**candidate)))
+            candidate = dict(valid)
+            candidate[field] = ""
+            cases.append((field, "empty", ConsumptionBinding(**candidate)))
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "ledger.sqlite3")
+            for field, value_type, binding in cases:
+                with self.subTest(field=field, value_type=value_type):
+                    with patch(
+                        "engineering_os.consumption.sqlite3.connect",
+                        side_effect=sqlite3.OperationalError("must not open"),
+                    ) as connect:
+                        try:
+                            result = consume_once(store, [binding])
+                        except Exception as error:
+                            self.fail("malformed binding raised: %r" % error)
+                        self.assertFalse(result)
+                        connect.assert_not_called()
+                    self.assertFalse(Path(store).exists())
+
+    def test_rejected_bindings_do_not_mutate_and_valid_ledger_remains_usable(self):
+        malformed = (
+            ConsumptionBinding(True, "bad-record", "bad-nonce", "1" * 64),
+            ConsumptionBinding("authority", 1, "bad-nonce", "1" * 64),
+            ConsumptionBinding("authority", "bad-record", b"bad-nonce", "1" * 64),
+            ConsumptionBinding("authority", "bad-record", "bad-nonce", 1),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "ledger.sqlite3")
+            first = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+            second = ConsumptionBinding("authority", "record-2", "nonce-2", "2" * 64)
+            self.assertTrue(consume_once(store, [first]))
+            for binding in malformed:
+                with self.subTest(field_values=binding):
+                    try:
+                        self.assertFalse(consume_once(store, [binding]))
+                    except Exception as error:
+                        self.fail("malformed binding raised: %r" % error)
+            connection = sqlite3.connect(store)
+            try:
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM consumed_records").fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+            self.assertTrue(consume_once(store, [second]))
 
     def test_consumption_store_refuses_altered_or_duplicate_capable_schemas(self):
         schemas = {

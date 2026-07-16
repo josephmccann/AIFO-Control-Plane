@@ -107,6 +107,19 @@ def verify_record_evidence(
     identity as authentication.
     """
 
+    try:
+        return _verify_record_evidence(
+            record, record_kind, evidence_verifier,
+            repository=repository, actor=actor, head_sha=head_sha,
+        )
+    except Exception:
+        return False
+
+
+def _verify_record_evidence(
+    record: Mapping[str, Any], record_kind: str, evidence_verifier: Any, *,
+    repository: str, actor: str, head_sha: str,
+) -> bool:
     if (
         not isinstance(record, Mapping) or record_kind not in _KINDS
         or not isinstance(repository, str) or not isinstance(actor, str)

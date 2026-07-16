@@ -36,6 +36,17 @@ class ConsumptionBinding:
     binding_digest: str
 
 
+def _valid_binding(item: object) -> bool:
+    return (
+        type(item) is ConsumptionBinding
+        and type(item.kind) is str and bool(item.kind)
+        and type(item.record_id) is str and bool(item.record_id)
+        and type(item.nonce) is str and bool(item.nonce)
+        and type(item.binding_digest) is str
+        and _DIGEST.fullmatch(item.binding_digest) is not None
+    )
+
+
 def _compact_sql(value: str) -> str:
     return " ".join(value.split()) if isinstance(value, str) else ""
 
@@ -138,12 +149,7 @@ def consume_once(store_path: str, bindings: Sequence[ConsumptionBinding]) -> boo
         not isinstance(store_path, str) or not store_path or store_path == ":memory:"
         or store_path.startswith("file:")
         or not isinstance(bindings, (list, tuple)) or not bindings
-        or any(
-            not isinstance(item, ConsumptionBinding)
-            or not item.kind or not item.record_id or not item.nonce
-            or _DIGEST.fullmatch(item.binding_digest) is None
-            for item in bindings
-        )
+        or any(not _valid_binding(item) for item in bindings)
         or len({item.record_id for item in bindings}) != len(bindings)
         or len({item.nonce for item in bindings}) != len(bindings)
     ):

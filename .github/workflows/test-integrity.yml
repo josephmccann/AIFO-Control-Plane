@@ -1,0 +1,21 @@
+name: Engineering OS Test Integrity
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions: {}
+
+jobs:
+  test-integrity:
+    name: Test Integrity
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@e62b91c07f3011d6bbfb2b2e8145b2ba7ef58581

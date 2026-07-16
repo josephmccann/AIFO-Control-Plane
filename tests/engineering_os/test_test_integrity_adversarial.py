@@ -1,3 +1,4 @@
+import ast
 import copy
 import json
 import os
@@ -406,6 +407,54 @@ class DetectorEvasionTests(unittest.TestCase):
                 for root, text in ((self.base, base), (self.head, head)):
                     (root / "tests/test_service.py").write_text(text, encoding="utf-8")
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_match_descendant_base_binding_fails_closed(self):
+        base = (
+            "class Base:\n    pass\n"
+            "match 1:\n    case 1:\n        Alias = Base\n"
+            "class TestThing(Alias):\n    def test_x(self):\n        assert True\n"
+        )
+        head = base.replace("class Base:\n    pass", "class Base:\n    __test__ = False")
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        # Python 3.9 rejects the syntax at parse time; 3.10+ must reject the
+        # descendant binding through the generic collector.
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_generic_descendant_binding_forms_fail_closed(self):
+        bindings = (
+            "values = [Base for Alias in (Base,)]\n",
+            "values = tuple(Base for Alias in (Base,))\n",
+            "maker = lambda Alias: Base\n",
+            "try:\n    value = Base\nexcept Exception as Alias:\n    pass\n",
+            "with context(Base) as Alias:\n    pass\n",
+        )
+        if hasattr(ast, "TryStar"):
+            bindings += (
+                "try:\n    value = Base\nexcept* Exception as Alias:\n    pass\n",
+            )
+        for binding in bindings:
+            base = (
+                "class Base:\n    pass\n" + binding
+                + "class TestThing(Alias):\n    def test_x(self):\n        assert True\n"
+            )
+            head = base.replace("class Base:\n    pass", "class Base:\n    __test__ = False")
+            with self.subTest(binding=binding):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_future_compound_descendants_use_generic_binding_detection(self):
+        from engineering_os.test_integrity import _descendant_binding_names
+
+        class FutureCompound(ast.stmt):
+            _fields = ("children",)
+
+        node = FutureCompound(children=[ast.Assign(
+            targets=[ast.Name(id="Alias", ctx=ast.Store())],
+            value=ast.Name(id="Base", ctx=ast.Load()),
+        )])
+        self.assertEqual(_descendant_binding_names(node), ("Alias",))
 
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"

@@ -552,6 +552,31 @@ class _DuplicateCaseError(ValueError):
     pass
 
 
+def _descendant_binding_names(node: ast.AST) -> Tuple[str, ...]:
+    """Return every syntactic name binding under any present or future AST node."""
+
+    names = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
+            names.add(child.id)
+        elif isinstance(child, ast.arg):
+            names.add(child.arg)
+        elif isinstance(child, ast.alias):
+            names.add(child.asname or child.name.split(".")[0])
+        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(child.name)
+        elif isinstance(child, ast.ExceptHandler) and child.name:
+            names.add(child.name)
+        elif isinstance(child, (ast.Global, ast.Nonlocal)):
+            names.update(child.names)
+        elif type(child).__name__.startswith("Match"):
+            for field in ("name", "rest"):
+                value = getattr(child, field, None)
+                if isinstance(value, str) and value:
+                    names.add(value)
+    return tuple(sorted(names))
+
+
 class _SafeConstantFolder(ast.NodeTransformer):
     def visit_UnaryOp(self, node):
         node = self.generic_visit(node)
@@ -787,6 +812,17 @@ def _python_stats(text: str, module: str) -> _FileStats:
 
     for statement_index, statement in enumerate(tree.body):
         collect_bindings(statement, statement_index, top_level=True)
+        supported_alias = (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and isinstance(statement.value, ast.Name)
+        )
+        if isinstance(statement, ast.ClassDef) or supported_alias:
+            continue
+        sources = referenced_names(statement)
+        for name in _descendant_binding_names(statement):
+            record_binding(name, "unsupported", statement_index, sources)
 
     participating_names = set(local_classes)
     participating_names.update(

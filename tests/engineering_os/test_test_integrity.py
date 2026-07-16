@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from engineering_os.test_integrity import (
+    CoverageAttestation,
     analyze_test_integrity,
     validate_test_override,
 )
@@ -40,7 +41,7 @@ def _manifest(root):
 
 
 def policy(base, head):
-    return {
+    value = {
         "schema_version": "1.0.0",
         "repository": "acme/widgets",
         "base_sha": BASE_SHA,
@@ -48,6 +49,7 @@ def policy(base, head):
         "evaluated_at": "2026-07-15T12:00:00Z",
         "base_manifest": _manifest(base),
         "head_manifest": _manifest(head),
+        "coverage_attestations": None,
         "founder_identities": ["founder"],
         "mission": {
             "mission_id": "mission-123", "mission_issue": 10,
@@ -62,15 +64,53 @@ def policy(base, head):
             "test_globs": ["tests/**/test_*.py", "tests/**/*.test.js", "tests/**/*.spec.js"],
             "fixture_globs": ["tests/**/fixtures/**"],
             "validation_workflow_globs": [".github/workflows/**"],
-            "test_config_globs": ["pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "package.json", "*vitest*.js", "*jest*.js"],
+            "test_config_globs": [
+                "**/pyproject.toml", "**/pytest.ini", "**/setup.cfg", "**/tox.ini",
+                "**/package.json", "**/jest.config.js", "**/jest.config.ts",
+                "**/jest.config.mjs", "**/jest.config.cjs", "**/jest.config.json",
+                "**/jest.config.yml", "**/jest.config.yaml", "**/vitest.config.js",
+                "**/vitest.config.ts", "**/vitest.config.mjs", "**/vitest.config.cjs",
+                "**/vitest.config.json", "**/vitest.config.yml", "**/vitest.config.yaml",
+            ],
             "coverage_paths": ["coverage.json", "coverage-summary.json", ".eos/coverage.json"],
             "material_coverage_decline": 1.0,
             "assertion_patterns": [r"\bassert\b", r"\bexpect\s*\(", r"\.assert[A-Z]\w*\s*\("],
             "skip_patterns": [r"\bskip(?:If|Unless|Test)?\b", r"\.(?:skip|todo|disabled)\b", r"\bdisabled\b"],
             "max_file_bytes": 1048576,
             "coverage_max_age_seconds": 86400,
+            "max_files": 10000,
+            "max_total_bytes": 67108864,
+            "max_path_bytes": 1024,
+            "max_git_record_bytes": 4096,
+            "max_github_pages": 20,
+            "max_github_items": 2000,
+            "max_github_response_bytes": 8388608,
+            "max_coverage_bytes": 1048576,
         },
     }
+    coverage_paths = value["configuration"]["coverage_paths"]
+    present_base = [path for path in coverage_paths if path in value["base_manifest"]]
+    present_head = [path for path in coverage_paths if path in value["head_manifest"]]
+    if len(present_base) == len(present_head) == 1:
+        def sealed(root, manifest, commit, path, number):
+            document = json.loads((root / path).read_text(encoding="utf-8"))
+            source = {name: evidence for name, evidence in manifest.items() if name not in coverage_paths}
+            return CoverageAttestation(
+                "1.0.0", value["repository"], commit,
+                hashlib.sha256(json.dumps(source, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(),
+                document.get("generated_at", ""), document.get("generated_at", ""),
+                ".github/workflows/coverage.yml",
+                commit, 1000 + number, 2000 + number, hashlib.sha256(("artifact-%d" % number).encode()).hexdigest(),
+                path, manifest[path]["sha256"], "success", "sealed-test-github-actions:v1",
+            )
+        try:
+            value["coverage_attestations"] = {
+                "base": sealed(base, value["base_manifest"], value["base_sha"], present_base[0], 1),
+                "head": sealed(head, value["head_manifest"], value["head_sha"], present_head[0], 2),
+            }
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            value["coverage_attestations"] = None
+    return value
 
 
 def write_coverage(root, configured, commit_sha, percent, *, generated_at="2026-07-15T11:00:00Z"):

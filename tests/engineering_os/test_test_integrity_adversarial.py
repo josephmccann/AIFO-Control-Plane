@@ -60,6 +60,30 @@ class DetectorEvasionTests(unittest.TestCase):
         )
         self.assertIn("TEST_CASE_ASSERTION_DECLINE", codes(self.analyze()))
 
+    def test_same_count_python_semantic_change_requires_override(self):
+        (self.base / "tests/test_service.py").write_text(
+            "def test_value():\n    assert value() == 1\n", encoding="utf-8",
+        )
+        (self.head / "tests/test_service.py").write_text(
+            "def test_value():\n    assert True\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()))
+
+    def test_same_assertion_with_weakened_python_setup_requires_override(self):
+        (self.base / "tests/test_service.py").write_text(
+            "def test_value():\n    value = authoritative()\n    assert value == 1\n", encoding="utf-8",
+        )
+        (self.head / "tests/test_service.py").write_text(
+            "def test_value():\n    value = 1\n    assert value == 1\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()))
+
+    def test_same_count_javascript_semantic_change_requires_override(self):
+        for root, assertion in ((self.base, "expect(value()).toBe(1)"), (self.head, "expect(true).toBe(true)")):
+            path = root / "tests/value.test.js"
+            path.write_text("test('value', () => { %s; });\n" % assertion, encoding="utf-8")
+        self.assertIn("TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()))
+
     def test_behaviorally_unrelated_same_count_replacement_is_not_a_rename(self):
         original = self.head / "tests/test_service.py"
         original.unlink()
@@ -81,6 +105,45 @@ class DetectorEvasionTests(unittest.TestCase):
         )
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_duplicate_python_runtime_identity_is_denied_but_class_scopes_are_distinct(self):
+        duplicate = (
+            "class First:\n"
+            "    def test_value(self):\n        assert True\n"
+            "    def test_value(self):\n        assert True\n"
+        )
+        (self.head / "tests/test_service.py").write_text(duplicate, encoding="utf-8")
+        self.assertIn("TEST_CASE_DUPLICATE", codes(self.analyze()))
+        valid = (
+            "class First:\n    def test_value(self):\n        assert True\n"
+            "class Second:\n    def test_value(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(valid, encoding="utf-8")
+        self.assertNotIn("TEST_CASE_DUPLICATE", codes(self.analyze()))
+
+    def test_javascript_suite_scope_duplicates_and_lookalikes_are_tokenized(self):
+        valid = (
+            "// test('comment', () => { expect(false); });\n"
+            "const text = \"test('string', () => {})\";\n"
+            "describe('one', () => { test('value', () => { expect(1).toBe(1); }); });\n"
+            "describe('two', () => { test('value', () => { expect(2).toBe(2); }); });\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/suites.test.js").write_text(valid, encoding="utf-8")
+        self.assertNotIn("TEST_CASE_DUPLICATE", codes(self.analyze()))
+        (self.head / "tests/suites.test.js").write_text(
+            "describe('one', () => { test('value', () => { expect(1); }); test('value', () => { expect(1); }); });\n",
+            encoding="utf-8",
+        )
+        self.assertIn("TEST_CASE_DUPLICATE", codes(self.analyze()))
+
+    def test_enclosing_javascript_skipped_suite_marks_inner_case_skipped(self):
+        base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
+        head = "describe.skip('suite', () => { test('value', () => { expect(1); }); });\n"
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
     def test_package_test_command_change_is_blocked(self):
         for root, command in ((self.base, "vitest"), (self.head, "echo tests-disabled")):
             (root / "package.json").write_text(
@@ -98,6 +161,17 @@ class DetectorEvasionTests(unittest.TestCase):
         found = codes(self.analyze())
         self.assertIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
         self.assertIn("VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS", found)
+
+    def test_nested_package_and_runner_configs_are_protected(self):
+        for root, command in ((self.base, "vitest"), (self.head, "echo disabled")):
+            package = root / "packages/client/package.json"
+            package.parent.mkdir(parents=True, exist_ok=True)
+            package.write_text(json.dumps({"scripts": {"test": command}}), encoding="utf-8")
+            config = root / "packages/client/vitest.config.yaml"
+            config.write_text("include:\n  - tests/**\n" if root == self.base else "include: []\n", encoding="utf-8")
+        found = codes(self.analyze())
+        self.assertIn("TEST_CONFIGURATION_WEAKENED", found)
+        self.assertTrue(found & {"TEST_CONFIGURATION_CHANGE_AMBIGUOUS", "TEST_CONFIGURATION_WEAKENED"})
 
     def test_nested_yaml_fixture_reduction_is_counted(self):
         for root, cases in ((self.base, 2), (self.head, 1)):
@@ -136,7 +210,42 @@ class DetectorEvasionTests(unittest.TestCase):
         configured = policy(self.base, self.head)
         self.assertTrue(codes(self.analyze(configured)) & {
             "TEST_COVERAGE_EVIDENCE_STALE", "TEST_COVERAGE_EVIDENCE_UNBOUND",
+            "TEST_COVERAGE_ATTESTATION_UNAVAILABLE",
         })
+
+    def test_coverage_file_requires_closed_authenticated_attestation(self):
+        configured = policy(self.base, self.head)
+        from tests.engineering_os.test_test_integrity import write_coverage
+        write_coverage(self.base, configured, configured["base_sha"], 90.0)
+        write_coverage(self.head, configured, configured["head_sha"], 90.0)
+        configured = policy(self.base, self.head)
+        configured["coverage_attestations"] = None
+        self.assertIn("TEST_COVERAGE_ATTESTATION_UNAVAILABLE", codes(self.analyze(configured)))
+
+    def test_aggregate_file_count_total_and_path_caps_fail_closed(self):
+        for index in range(5):
+            (self.head / ("tests/test_extra_%d.py" % index)).write_text(
+                "def test_value_%d():\n    assert True\n" % index, encoding="utf-8",
+            )
+        configured = policy(self.base, self.head)
+        configured["configuration"].update({
+            "max_files": 3, "max_total_bytes": 100000,
+            "max_path_bytes": 20, "max_git_record_bytes": 128,
+            "max_github_pages": 2, "max_github_items": 10,
+            "max_github_response_bytes": 1024, "max_coverage_bytes": 1024,
+        })
+        self.assertIn("TEST_RESOURCE_LIMIT", codes(self.analyze(configured)))
+
+    def test_github_page_item_and_response_caps_are_exact(self):
+        from engineering_os.test_integrity_cli import validate_github_pages
+        for pages, limits in (
+            ([[{}], [{}], [{}]], (2, 10, 1000)),
+            ([[{}, {}, {}]], (2, 2, 1000)),
+            ([[{"body": "x" * 100}]], (2, 10, 20)),
+        ):
+            with self.subTest(limits=limits):
+                with self.assertRaisesRegex(ValueError, "TEST_GITHUB_RESOURCE_LIMIT"):
+                    validate_github_pages(pages, *limits)
 
     def test_large_file_resource_cap_returns_structured_denial(self):
         path = self.head / "tests/test_large.py"

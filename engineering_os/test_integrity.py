@@ -6,6 +6,7 @@ and head revisions can produce findings.
 """
 
 import ast
+import copy
 import hashlib
 import json
 import re
@@ -30,6 +31,7 @@ _TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z")
 _POLICY_FIELDS = frozenset((
     "schema_version", "repository", "base_sha", "head_sha", "evaluated_at",
     "base_manifest", "head_manifest", "founder_identities", "mission",
+    "coverage_attestations",
     "configuration",
 ))
 _CONFIG_FIELDS = frozenset((
@@ -37,6 +39,9 @@ _CONFIG_FIELDS = frozenset((
     "test_config_globs", "coverage_paths", "material_coverage_decline",
     "assertion_patterns", "skip_patterns",
     "max_file_bytes", "coverage_max_age_seconds",
+    "max_files", "max_total_bytes", "max_path_bytes", "max_git_record_bytes",
+    "max_github_pages", "max_github_items", "max_github_response_bytes",
+    "max_coverage_bytes",
 ))
 _MISSION_FIELDS = frozenset((
     "mission_id", "mission_issue", "pull_request", "mission_sha256",
@@ -73,6 +78,25 @@ class IntegrityFinding:
     message: str
     path: str = "$"
     details: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CoverageAttestation:
+    schema_version: str
+    repository: str
+    commit_sha: str
+    source_manifest_sha256: str
+    generated_at: str
+    transport_created_at: str
+    workflow_path: str
+    workflow_sha: str
+    run_id: int
+    artifact_id: int
+    artifact_digest: str
+    coverage_path: str
+    coverage_file_sha256: str
+    conclusion: str
+    transport_provenance: str
 
 
 @dataclass(frozen=True)
@@ -194,6 +218,7 @@ def authenticate_integrity_context(
 @dataclass(frozen=True)
 class _CaseStats:
     identity: str
+    local_identity: str
     body_hash: str
     assertions: int
     skips: int
@@ -207,7 +232,7 @@ class _FileStats:
 
     @property
     def signatures(self):
-        return tuple(item.identity for item in self.cases)
+        return tuple(item.local_identity for item in self.cases)
 
     @property
     def assertions(self):
@@ -242,11 +267,17 @@ def _strings(value: Any, *, nonempty: bool = True) -> Tuple[str, ...]:
     return tuple(value)
 
 
-def _validate_manifest(value: Any) -> Dict[str, Dict[str, str]]:
+def _validate_manifest(
+    value: Any, *, max_files: int = 10000, max_path_bytes: int = 1024,
+) -> Dict[str, Dict[str, str]]:
     if not isinstance(value, Mapping):
         raise ValueError("manifest is not an object")
     result = {}
     for path, evidence in value.items():
+        if len(result) >= max_files:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
+        if isinstance(path, str) and len(path.encode("utf-8")) > max_path_bytes:
+            raise OverflowError("TEST_RESOURCE_LIMIT")
         if (
             not isinstance(path, str) or not path or path.startswith("/")
             or "\\" in path or ".." in path.split("/")
@@ -313,6 +344,14 @@ def _validate_policy(policy: Any) -> Dict[str, Any]:
         "material_coverage_decline": config.get("material_coverage_decline"),
         "max_file_bytes": config.get("max_file_bytes"),
         "coverage_max_age_seconds": config.get("coverage_max_age_seconds"),
+        "max_files": config.get("max_files"),
+        "max_total_bytes": config.get("max_total_bytes"),
+        "max_path_bytes": config.get("max_path_bytes"),
+        "max_git_record_bytes": config.get("max_git_record_bytes"),
+        "max_github_pages": config.get("max_github_pages"),
+        "max_github_items": config.get("max_github_items"),
+        "max_github_response_bytes": config.get("max_github_response_bytes"),
+        "max_coverage_bytes": config.get("max_coverage_bytes"),
     }
     threshold = parsed_config["material_coverage_decline"]
     if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or threshold < 0:
@@ -321,7 +360,12 @@ def _validate_policy(policy: Any) -> Dict[str, Any]:
         isinstance(parsed_config[field], bool)
         or not isinstance(parsed_config[field], int)
         or parsed_config[field] < 1
-        for field in ("max_file_bytes", "coverage_max_age_seconds")
+        for field in (
+            "max_file_bytes", "coverage_max_age_seconds", "max_files",
+            "max_total_bytes", "max_path_bytes", "max_git_record_bytes",
+            "max_github_pages", "max_github_items", "max_github_response_bytes",
+            "max_coverage_bytes",
+        )
     ):
         raise ValueError("resource configuration is invalid")
     # Parse every glob before it can influence a decision. Unsupported syntax
@@ -333,12 +377,25 @@ def _validate_policy(policy: Any) -> Dict[str, Any]:
             path_matches("__eos_probe__/file.py", pattern)
     for pattern in parsed_config["assertion_patterns"] + parsed_config["skip_patterns"]:
         re.compile(pattern)
+    attestations = policy.get("coverage_attestations")
+    if attestations is not None and (
+        not isinstance(attestations, Mapping) or set(attestations) != {"base", "head"}
+        or any(type(attestations.get(key)) is not CoverageAttestation for key in ("base", "head"))
+    ):
+        raise ValueError("coverage attestations are not sealed adapter results")
     return {
         **dict(policy),
-        "base_manifest": _validate_manifest(policy.get("base_manifest")),
-        "head_manifest": _validate_manifest(policy.get("head_manifest")),
+        "base_manifest": _validate_manifest(
+            policy.get("base_manifest"), max_files=parsed_config["max_files"],
+            max_path_bytes=parsed_config["max_path_bytes"],
+        ),
+        "head_manifest": _validate_manifest(
+            policy.get("head_manifest"), max_files=parsed_config["max_files"],
+            max_path_bytes=parsed_config["max_path_bytes"],
+        ),
         "founder_identities": founders,
         "mission": dict(mission),
+        "coverage_attestations": attestations,
         "configuration": parsed_config,
     }
 
@@ -360,7 +417,9 @@ def _file_digests(path: Path, max_file_bytes: int) -> Dict[str, str]:
     return {"sha256": sha256.hexdigest(), "git_blob_sha": blob.hexdigest()}
 
 
-def _scan(root: Path, max_file_bytes: int) -> Dict[str, Dict[str, str]]:
+def _scan(
+    root: Path, config: Mapping[str, Any], usage: Dict[str, int],
+) -> Dict[str, Dict[str, str]]:
     if not root.is_dir() or root.is_symlink():
         raise ValueError("checkout root is unavailable")
     result = {}
@@ -372,7 +431,15 @@ def _scan(root: Path, max_file_bytes: int) -> Dict[str, Dict[str, str]]:
             raise ValueError("checkout contains a symlink")
         if path.is_file():
             relative = path.relative_to(root).as_posix()
-            result[relative] = _file_digests(path, max_file_bytes)
+            if len(relative.encode("utf-8")) > config["max_path_bytes"]:
+                raise OverflowError("TEST_RESOURCE_LIMIT")
+            usage["files"] += 1
+            if usage["files"] > config["max_files"]:
+                raise OverflowError("TEST_RESOURCE_LIMIT")
+            usage["bytes"] += path.stat().st_size
+            if usage["bytes"] > config["max_total_bytes"]:
+                raise OverflowError("TEST_RESOURCE_LIMIT")
+            result[relative] = _file_digests(path, config["max_file_bytes"])
     return result
 
 
@@ -384,7 +451,50 @@ def _source(path: Path) -> str:
     return path.read_bytes().decode("utf-8")
 
 
-def _python_stats(text: str) -> _FileStats:
+class _DuplicateCaseError(ValueError):
+    pass
+
+
+class _SafeConstantFolder(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if (
+            isinstance(node.operand, ast.Constant)
+            and isinstance(node.operand.value, (int, float))
+            and not isinstance(node.operand.value, bool)
+            and isinstance(node.op, (ast.UAdd, ast.USub))
+        ):
+            value = +node.operand.value if isinstance(node.op, ast.UAdd) else -node.operand.value
+            if abs(value) <= 1_000_000_000:
+                return ast.copy_location(ast.Constant(value=value), node)
+        return node
+
+    def visit_BinOp(self, node):
+        node = self.generic_visit(node)
+        if not isinstance(node.left, ast.Constant) or not isinstance(node.right, ast.Constant):
+            return node
+        left, right = node.left.value, node.right.value
+        try:
+            if isinstance(node.op, ast.Add) and type(left) is type(right) and isinstance(left, (str, int, float)):
+                value = left + right
+            elif (
+                isinstance(node.op, (ast.Sub, ast.Mult))
+                and isinstance(left, (int, float)) and not isinstance(left, bool)
+                and isinstance(right, (int, float)) and not isinstance(right, bool)
+            ):
+                value = left - right if isinstance(node.op, ast.Sub) else left * right
+            else:
+                return node
+        except (ArithmeticError, MemoryError, TypeError):
+            return node
+        if len(repr(value).encode("utf-8")) <= 128 and (
+            not isinstance(value, (int, float)) or abs(value) <= 1_000_000_000
+        ):
+            return ast.copy_location(ast.Constant(value=value), node)
+        return node
+
+
+def _python_stats(text: str, module: str) -> _FileStats:
     tree = ast.parse(text)
     aliases = {"skip", "skipIf", "skipUnless"}
     for node in ast.walk(tree):
@@ -403,8 +513,9 @@ def _python_stats(text: str) -> _FileStats:
                 continue
             assertions = skips = sourcing = properties = 0
             semantic_checks = []
-            identity = prefix + node.name
-            lowered_name = identity.lower()
+            local_identity = prefix + node.name
+            identity = module + "::" + local_identity
+            lowered_name = local_identity.lower()
             for decorator in node.decorator_list:
                 rendered = ast.dump(decorator, include_attributes=False).lower()
                 root_name = decorator.func.id if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name) else ""
@@ -430,99 +541,205 @@ def _python_stats(text: str) -> _FileStats:
                         sourcing += 1
                     if any(term in rendered for term in ("property", "invariant")):
                         properties += 1
-            normalized_body = canonical_json(sorted(semantic_checks))
+            body = copy.deepcopy(node.body)
+            if (
+                body and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                body = body[1:]
+            folded = [_SafeConstantFolder().visit(statement) for statement in body]
+            normalized_body = ast.dump(
+                ast.Module(body=folded, type_ignores=[]), include_attributes=False,
+            )
             body_hash = hashlib.sha256(normalized_body.encode("utf-8")).hexdigest()
             cases.append(_CaseStats(
-                identity, body_hash, assertions, skips, sourcing, properties,
+                identity, local_identity, body_hash, assertions, skips, sourcing, properties,
             ))
     visit(tree.body)
+    identities = [item.identity for item in cases]
+    if len(identities) != len(set(identities)):
+        raise _DuplicateCaseError("duplicate Python test runtime identity")
     return _FileStats(tuple(sorted(cases, key=lambda item: item.identity)))
 
 
-def _javascript_stats(text: str) -> _FileStats:
-    sanitized = list(text)
-    stack = []
+@dataclass(frozen=True)
+class _JSToken:
+    kind: str
+    value: str
+
+
+def _javascript_tokens(text: str) -> Tuple[_JSToken, ...]:
+    tokens = []
     index = 0
     while index < len(text):
         char = text[index]
+        if char.isspace():
+            index += 1
+            continue
+        if text.startswith("//", index):
+            end = text.find("\n", index + 2)
+            index = len(text) if end < 0 else end + 1
+            continue
+        if text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end < 0:
+                raise SyntaxError("unterminated JavaScript comment")
+            index = end + 2
+            continue
         if char in ("'", '"', "`"):
             quote = char
+            start = index
             index += 1
             while index < len(text):
                 if text[index] == "\\":
-                    sanitized[index] = " "
                     index += 2
                     continue
                 if text[index] == quote:
                     break
                 if quote != "`" and text[index] in "\r\n":
                     raise SyntaxError("unterminated JavaScript string")
-                sanitized[index] = " "
                 index += 1
             if index >= len(text):
                 raise SyntaxError("unterminated JavaScript string")
-        elif text.startswith("//", index):
-            end = text.find("\n", index)
-            end = len(text) if end < 0 else end
-            for cursor in range(index, end):
-                sanitized[cursor] = " "
-            index = end
+            index += 1
+            tokens.append(_JSToken("string", text[start:index]))
             continue
-        elif text.startswith("/*", index):
-            end = text.find("*/", index + 2)
-            if end < 0:
-                raise SyntaxError("unterminated JavaScript comment")
-            for cursor in range(index, end + 2):
-                sanitized[cursor] = " "
-            index = end + 2
+        identifier = re.match(r"[A-Za-z_$][A-Za-z0-9_$]*", text[index:])
+        if identifier:
+            value = identifier.group(0)
+            tokens.append(_JSToken("identifier", value))
+            index += len(value)
             continue
-        elif char in "({[":
-            stack.append(char)
-        elif char in ")}]":
-            pairs = {")": "(", "}": "{", "]": "["}
-            if not stack or stack.pop() != pairs[char]:
-                raise SyntaxError("unbalanced JavaScript")
+        if text.startswith("=>", index):
+            tokens.append(_JSToken("symbol", "=>"))
+            index += 2
+            continue
+        tokens.append(_JSToken("symbol", char))
         index += 1
+    stack = []
+    pairs = {")": "(", "}": "{", "]": "["}
+    for token in tokens:
+        if token.value in "({[":
+            stack.append(token.value)
+        elif token.value in ")}]":
+            if not stack or stack.pop() != pairs[token.value]:
+                raise SyntaxError("unbalanced JavaScript")
     if stack:
         raise SyntaxError("truncated JavaScript")
-    clean = "".join(sanitized)
-    aliases = {
-        match.group(1) for match in re.finditer(
-            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:test|it)\.(?:skip|todo|disabled)\b",
-            clean,
-        )
-    }
-    matches = list(re.finditer(
-        r"\b(test|it)(?:\.(skip|todo|disabled))?\s*\(\s*(['\"])(.*?)\3", text,
-    ))
-    cases = []
-    for match in matches:
-        start = match.start()
-        opening = clean.find("(", start)
+    return tuple(tokens)
+
+
+def _javascript_stats(text: str, module: str) -> _FileStats:
+    tokens = _javascript_tokens(text)
+    delimiter_pairs = {"(": ")", "{": "}", "[": "]"}
+
+    def closing(opening: int) -> int:
+        target = delimiter_pairs.get(tokens[opening].value)
+        if target is None:
+            raise SyntaxError("JavaScript delimiter expected")
         depth = 0
-        end = None
-        for cursor in range(opening, len(clean)):
-            if clean[cursor] == "(":
+        for cursor in range(opening, len(tokens)):
+            if tokens[cursor].value == tokens[opening].value:
                 depth += 1
-            elif clean[cursor] == ")":
+            elif tokens[cursor].value == target:
                 depth -= 1
                 if depth == 0:
-                    end = cursor + 1
-                    break
-        if end is None:
-            raise SyntaxError("truncated JavaScript test")
-        body = clean[start:end]
-        assertions = len(re.findall(r"\b(?:expect|assert)\s*\(", body))
-        lowered = body.lower() + " " + match.group(4).lower()
-        cases.append(_CaseStats(
-            match.group(4), hashlib.sha256(re.sub(r"\s+", "", body).encode("utf-8")).hexdigest(),
-            assertions, 1 if match.group(2) else 0,
-            assertions if any(term in lowered for term in ("source", "citation", "provenance")) else 0,
-            assertions if any(term in lowered for term in ("property", "invariant")) else 0,
-        ))
-    for alias in aliases:
-        if re.search(r"\b%s\s*\(" % re.escape(alias), clean):
-            cases.append(_CaseStats(alias, content_sha256(alias), 0, 1, 0, 0))
+                    return cursor
+        raise SyntaxError("truncated JavaScript expression")
+
+    aliases = {}
+    for index in range(len(tokens) - 5):
+        values = [item.value for item in tokens[index:index + 6]]
+        if (
+            values[0] in ("const", "let", "var")
+            and tokens[index + 1].kind == "identifier"
+            and values[2] == "=" and values[3] in ("test", "it")
+            and values[4] == "." and values[5] in ("skip", "todo", "disabled")
+        ):
+            aliases[values[1]] = values[5]
+
+    cases = []
+    test_names = {"test", "it"}
+    suite_names = {"describe", "suite", "context"}
+    modifiers = {"skip", "todo", "disabled", "only"}
+
+    def static_title(token: _JSToken) -> str:
+        if token.kind != "string" or token.value[0] == "`":
+            raise SyntaxError("static JavaScript test title required")
+        return token.value[1:-1]
+
+    def visit(start: int, stop: int, suites: Tuple[str, ...], inherited_skip: bool) -> None:
+        index = start
+        while index < stop:
+            token = tokens[index]
+            if token.kind != "identifier" or (index and tokens[index - 1].value == "."):
+                index += 1
+                continue
+            name = token.value
+            is_alias = name in aliases
+            if name not in test_names | suite_names and not is_alias:
+                index += 1
+                continue
+            modifier = aliases.get(name)
+            cursor = index + 1
+            if not is_alias and cursor < stop and tokens[cursor].value == ".":
+                if cursor + 1 >= stop or tokens[cursor + 1].kind != "identifier":
+                    raise SyntaxError("malformed JavaScript test modifier")
+                modifier = tokens[cursor + 1].value
+                if modifier not in modifiers:
+                    raise SyntaxError("unsupported JavaScript test modifier")
+                cursor += 2
+            if cursor >= stop or tokens[cursor].value != "(":
+                index += 1
+                continue
+            call_end = closing(cursor)
+            if call_end > stop or cursor + 1 >= call_end:
+                raise SyntaxError("malformed JavaScript test declaration")
+            case_title = static_title(tokens[cursor + 1])
+            arrow = next((position for position in range(cursor + 2, call_end) if tokens[position].value == "=>"), None)
+            if arrow is None:
+                raise SyntaxError("ambiguous JavaScript test callback")
+            body_open = arrow + 1
+            if body_open >= call_end:
+                raise SyntaxError("missing JavaScript test callback")
+            body_close = call_end
+            if tokens[body_open].value == "{":
+                body_close = closing(body_open)
+                if body_close >= call_end:
+                    raise SyntaxError("JavaScript callback escapes declaration")
+                body_start = body_open + 1
+            else:
+                body_start = body_open
+            skipped = inherited_skip or modifier in ("skip", "todo", "disabled")
+            if name in suite_names:
+                if tokens[body_open].value != "{":
+                    raise SyntaxError("suite callback must be a block")
+                visit(body_start, body_close, suites + (case_title,), skipped)
+            else:
+                local_identity = " > ".join(suites + (case_title,))
+                identity = module + "::" + local_identity
+                body_tokens = tokens[body_start:body_close]
+                assertions = sum(
+                    1 for position, item in enumerate(body_tokens[:-1])
+                    if item.kind == "identifier" and item.value in ("expect", "assert")
+                    and body_tokens[position + 1].value == "("
+                )
+                normalized = canonical_json([(item.kind, item.value) for item in body_tokens])
+                lowered = normalized.lower() + " " + local_identity.lower()
+                cases.append(_CaseStats(
+                    identity, local_identity,
+                    hashlib.sha256(normalized.encode("utf-8")).hexdigest(), assertions,
+                    1 if skipped else 0,
+                    assertions if any(term in lowered for term in ("source", "citation", "provenance")) else 0,
+                    assertions if any(term in lowered for term in ("property", "invariant")) else 0,
+                ))
+            index = call_end + 1
+
+    visit(0, len(tokens), (), False)
+    identities = [item.identity for item in cases]
+    if len(identities) != len(set(identities)):
+        raise _DuplicateCaseError("duplicate JavaScript test runtime identity")
     return _FileStats(tuple(sorted(cases, key=lambda item: item.identity)))
 
 
@@ -533,7 +750,14 @@ def _test_stats(
     for relative in sorted(paths):
         try:
             text = _source(root / relative)
-            result[relative] = _python_stats(text) if relative.endswith(".py") else _javascript_stats(text)
+            result[relative] = (
+                _python_stats(text, relative) if relative.endswith(".py")
+                else _javascript_stats(text, relative)
+            )
+        except _DuplicateCaseError:
+            findings.append(IntegrityFinding(
+                "TEST_CASE_DUPLICATE", "A runtime test identity is declared more than once.", relative,
+            ))
         except UnicodeDecodeError:
             findings.append(IntegrityFinding(
                 "TEST_FILE_UNREADABLE", "Test file is not valid UTF-8.", relative,
@@ -595,6 +819,52 @@ def _coverage(
     return float(number)
 
 
+def _verify_coverage_attestation(
+    attestation: Any, path: Path, *, repository: str, commit_sha: str,
+    source_manifest_sha256: str, coverage_path: str,
+    manifest: Mapping[str, Mapping[str, str]], evaluated_at: str,
+    max_age_seconds: int, max_coverage_bytes: int,
+) -> None:
+    if attestation is None:
+        raise PermissionError("coverage transport attestation is unavailable")
+    if type(attestation) is not CoverageAttestation:
+        raise ValueError("coverage transport attestation is not sealed")
+    if path.stat().st_size > max_coverage_bytes:
+        raise OverflowError("TEST_RESOURCE_LIMIT")
+    if (
+        attestation.schema_version != "1.0.0"
+        or attestation.repository != repository
+        or attestation.commit_sha != commit_sha
+        or attestation.source_manifest_sha256 != source_manifest_sha256
+        or attestation.coverage_path != coverage_path
+        or attestation.coverage_file_sha256 != manifest[coverage_path]["sha256"]
+        or attestation.workflow_path != ".github/workflows/coverage.yml"
+        or _SHA40.fullmatch(attestation.workflow_sha or "") is None
+        or not isinstance(attestation.run_id, int) or isinstance(attestation.run_id, bool)
+        or attestation.run_id < 1
+        or not isinstance(attestation.artifact_id, int) or isinstance(attestation.artifact_id, bool)
+        or attestation.artifact_id < 1
+        or _SHA256.fullmatch(attestation.artifact_digest or "") is None
+        or attestation.conclusion != "success"
+        or not isinstance(attestation.transport_provenance, str)
+        or not attestation.transport_provenance
+    ):
+        raise LookupError("coverage transport attestation is not bound")
+    document = json.loads(_source(path))
+    if document.get("generated_at") != attestation.generated_at:
+        raise LookupError("coverage generation timestamp is not bound")
+    generated = _timestamp(attestation.generated_at)
+    transported = _timestamp(attestation.transport_created_at)
+    evaluated = _timestamp(evaluated_at)
+    age = (evaluated - generated).total_seconds()
+    if (
+        age < 0 or age > max_age_seconds or generated > transported
+        or (transported - generated).total_seconds() > max_age_seconds
+        or transported > evaluated
+    ):
+        raise TimeoutError("coverage transport attestation is stale")
+
+
 def _weakened(base: str, head: str) -> bool:
     markers = (
         "|| true", "continue-on-error: true", "--passwithnotests",
@@ -627,6 +897,18 @@ def _invalid_report(policy: Any, code: str, message: str) -> IntegrityReport:
     )
 
 
+def _rename_projection(stats: Optional[_FileStats]) -> Tuple[Tuple[Any, ...], ...]:
+    if stats is None:
+        return ()
+    return tuple(sorted(
+        (
+            item.local_identity, item.body_hash, item.assertions, item.skips,
+            item.sourcing_assertions, item.property_assertions,
+        )
+        for item in stats.cases
+    ))
+
+
 def analyze_test_integrity(
     base_root: Any, head_root: Any, policy: Mapping[str, Any],
 ) -> IntegrityReport:
@@ -643,6 +925,8 @@ def analyze_test_integrity(
         )
     try:
         checked = _validate_policy(policy)
+    except (OverflowError, MemoryError):
+        return _invalid_report(policy, "TEST_RESOURCE_LIMIT", "Policy evidence exceeds deterministic resource limits.")
     except (PathInputError, TypeError, ValueError, re.error):
         return _invalid_report(policy, "TEST_INTEGRITY_POLICY_INVALID", "Test-integrity policy is invalid.")
     try:
@@ -650,8 +934,9 @@ def analyze_test_integrity(
         head = Path(head_root).resolve(strict=True)
         if base == head:
             raise ValueError("base and head roots must differ")
-        cap = checked["configuration"]["max_file_bytes"]
-        actual_base, actual_head = _scan(base, cap), _scan(head, cap)
+        usage = {"files": 0, "bytes": 0}
+        actual_base = _scan(base, checked["configuration"], usage)
+        actual_head = _scan(head, checked["configuration"], usage)
     except (OverflowError, MemoryError):
         return _invalid_report(checked, "TEST_RESOURCE_LIMIT", "Checkout exceeds deterministic resource limits.")
     except (OSError, TypeError, ValueError, UnicodeError):
@@ -676,7 +961,10 @@ def analyze_test_integrity(
         old = base_stats.get(path)
         if old is None:
             continue
-        exact = [candidate for candidate in added if head_stats.get(candidate) == old]
+        exact = [
+            candidate for candidate in added
+            if _rename_projection(head_stats.get(candidate)) == _rename_projection(old)
+        ]
         if len(exact) == 1:
             continue
         if len(exact) > 1:
@@ -719,6 +1007,12 @@ def analyze_test_integrity(
         after_cases = {item.identity: item for item in head_stats.get(path, _FileStats()).cases}
         for identity in sorted(set(before_cases) & set(after_cases)):
             before, after = before_cases[identity], after_cases[identity]
+            if after.body_hash != before.body_hash:
+                findings.append(IntegrityFinding(
+                    "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS",
+                    "Executable test behavior changed without proof that coverage was preserved.",
+                    path, {"case": identity},
+                ))
             if after.assertions < before.assertions:
                 findings.append(IntegrityFinding(
                     "TEST_CASE_ASSERTION_DECLINE", "Assertions declined within a test case.",
@@ -793,7 +1087,7 @@ def analyze_test_integrity(
         try:
             before_text, after_text = _source(base / path), _source(head / path)
             weakened = _weakened(before_text, after_text)
-            if path == "package.json":
+            if path == "package.json" or path.endswith("/package.json"):
                 before_package, after_package = json.loads(before_text), json.loads(after_text)
                 before_command = before_package.get("scripts", {}).get("test") if isinstance(before_package, Mapping) else None
                 after_command = after_package.get("scripts", {}).get("test") if isinstance(after_package, Mapping) else None
@@ -872,6 +1166,25 @@ def analyze_test_integrity(
                     evaluated_at=checked["evaluated_at"],
                     max_age_seconds=config["coverage_max_age_seconds"],
                 )
+                attestations = checked["coverage_attestations"]
+                if attestations is None:
+                    raise PermissionError("coverage transport attestation is unavailable")
+                _verify_coverage_attestation(
+                    attestations["base"], base / present_base[0],
+                    repository=checked["repository"], commit_sha=checked["base_sha"],
+                    source_manifest_sha256=source_base, coverage_path=present_base[0],
+                    manifest=checked["base_manifest"], evaluated_at=checked["evaluated_at"],
+                    max_age_seconds=config["coverage_max_age_seconds"],
+                    max_coverage_bytes=config["max_coverage_bytes"],
+                )
+                _verify_coverage_attestation(
+                    attestations["head"], head / present_head[0],
+                    repository=checked["repository"], commit_sha=checked["head_sha"],
+                    source_manifest_sha256=source_head, coverage_path=present_head[0],
+                    manifest=checked["head_manifest"], evaluated_at=checked["evaluated_at"],
+                    max_age_seconds=config["coverage_max_age_seconds"],
+                    max_coverage_bytes=config["max_coverage_bytes"],
+                )
                 coverage_delta = round(after - before, 6)
                 if coverage_delta < -float(config["material_coverage_decline"]):
                     findings.append(IntegrityFinding(
@@ -881,6 +1194,15 @@ def analyze_test_integrity(
             except TimeoutError:
                 findings.append(IntegrityFinding(
                     "TEST_COVERAGE_EVIDENCE_STALE", "Coverage evidence is stale or future-dated.",
+                ))
+            except PermissionError:
+                findings.append(IntegrityFinding(
+                    "TEST_COVERAGE_ATTESTATION_UNAVAILABLE",
+                    "Authenticated GitHub coverage transport evidence is unavailable.",
+                ))
+            except OverflowError:
+                findings.append(IntegrityFinding(
+                    "TEST_RESOURCE_LIMIT", "Coverage evidence exceeds deterministic resource limits.",
                 ))
             except LookupError:
                 findings.append(IntegrityFinding(

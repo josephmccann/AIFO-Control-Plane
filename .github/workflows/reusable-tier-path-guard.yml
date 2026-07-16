@@ -1,0 +1,63 @@
+name: Reusable tier and path guard
+
+on:
+  workflow_call:
+    inputs:
+      mission_json:
+        description: Authenticated mission declaration JSON
+        required: true
+        type: string
+      active_missions_json:
+        description: Authenticated active mission projections
+        required: false
+        default: "[]"
+        type: string
+      coordination_records_json:
+        description: Authenticated founder coordination records
+        required: false
+        default: "[]"
+        type: string
+
+permissions: {}
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Materialize authenticated inputs and base policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MISSION_JSON: ${{ inputs.mission_json }}
+          ACTIVE_MISSIONS_JSON: ${{ inputs.active_missions_json }}
+          COORDINATION_RECORDS_JSON: ${{ inputs.coordination_records_json }}
+        run: |
+          test -n "$BASE_SHA"
+          git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
+          printf '%s' "$MISSION_JSON" | jq -e . > "$RUNNER_TEMP/mission.json"
+          printf '%s' "$ACTIVE_MISSIONS_JSON" | jq -e . > "$RUNNER_TEMP/active-missions.json"
+          printf '%s' "$COORDINATION_RECORDS_JSON" | jq -e . > "$RUNNER_TEMP/coordination-records.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${{ github.event.pull_request.number }}/files" \
+            | jq '[add[] | .filename]' > "$RUNNER_TEMP/changed-files.json"
+      - name: Enforce tier from base policy
+        run: |
+          scripts/engineering-os/validate-tier \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy "$RUNNER_TEMP/base-policy.json" \
+            --changed-files "$RUNNER_TEMP/changed-files.json"
+      - name: Enforce paths and semantic ownership from base policy
+        run: |
+          scripts/engineering-os/validate-paths \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy "$RUNNER_TEMP/base-policy.json" \
+            --changed-files "$RUNNER_TEMP/changed-files.json" \
+            --active-missions "$RUNNER_TEMP/active-missions.json" \
+            --coordination-records "$RUNNER_TEMP/coordination-records.json"

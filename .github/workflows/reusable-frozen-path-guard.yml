@@ -1,0 +1,83 @@
+name: Reusable frozen path guard
+
+on:
+  workflow_call:
+    inputs:
+      mission_json:
+        description: Authenticated mission declaration JSON
+        required: true
+        type: string
+      exceptions_json:
+        description: Authenticated founder exception records
+        required: false
+        default: "[]"
+        type: string
+      observations_json:
+        description: Frozen artifact pin observations
+        required: false
+        default: "{}"
+        type: string
+      release_conditions_json:
+        description: Satisfied release condition identifiers
+        required: false
+        default: "[]"
+        type: string
+      consumed_exceptions_json:
+        description: Previously consumed one-shot exception identifiers
+        required: false
+        default: "[]"
+        type: string
+
+permissions: {}
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Materialize authenticated inputs and base declarations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MISSION_JSON: ${{ inputs.mission_json }}
+          EXCEPTIONS_JSON: ${{ inputs.exceptions_json }}
+          OBSERVATIONS_JSON: ${{ inputs.observations_json }}
+          RELEASE_CONDITIONS_JSON: ${{ inputs.release_conditions_json }}
+          CONSUMED_EXCEPTIONS_JSON: ${{ inputs.consumed_exceptions_json }}
+        run: |
+          test -n "$BASE_SHA"
+          git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
+          if ! git show "$BASE_SHA:.aifo/frozen-declarations.json" > "$RUNNER_TEMP/frozen-declarations.json"; then
+            printf '[]\n' > "$RUNNER_TEMP/frozen-declarations.json"
+          fi
+          printf '%s' "$MISSION_JSON" | jq -e . > "$RUNNER_TEMP/mission.json"
+          printf '%s' "$EXCEPTIONS_JSON" | jq -e . > "$RUNNER_TEMP/exceptions.json"
+          printf '%s' "$OBSERVATIONS_JSON" | jq -e . > "$RUNNER_TEMP/observations.json"
+          printf '%s' "$RELEASE_CONDITIONS_JSON" | jq -e . > "$RUNNER_TEMP/release-conditions.json"
+          printf '%s' "$CONSUMED_EXCEPTIONS_JSON" | jq -e . > "$RUNNER_TEMP/consumed-exceptions.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${{ github.event.pull_request.number }}/files" \
+            | jq '[add[] | .filename]' > "$RUNNER_TEMP/changed-files.json"
+      - name: Enforce frozen declarations from base revision
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          scripts/engineering-os/validate-frozen-artifacts \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --changed-files "$RUNNER_TEMP/changed-files.json" \
+            --declarations "$RUNNER_TEMP/frozen-declarations.json" \
+            --exceptions "$RUNNER_TEMP/exceptions.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --pull-request "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --observations "$RUNNER_TEMP/observations.json" \
+            --release-conditions "$RUNNER_TEMP/release-conditions.json" \
+            --consumed-exceptions "$RUNNER_TEMP/consumed-exceptions.json"

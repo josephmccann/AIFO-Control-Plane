@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "authority_id": "authority-write-1",
+  "repository": "acme/widgets",
+  "paths": ["src/reporting/render.py"],
+  "capabilities": ["write"],
+  "issuer": "founder",
+  "subject": "producer-a",
+  "mission_id": "mission-123",
+  "pull_request": 42,
+  "head_sha": "2222222222222222222222222222222222222222",
+  "starts_at": "2026-07-15T00:00:00Z",
+  "expires_at": "2026-07-16T00:00:00Z",
+  "status": "active"
+}

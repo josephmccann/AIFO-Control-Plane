@@ -5,7 +5,7 @@ import unittest
 from engineering_os.canonical import canonical_json, content_sha256
 from engineering_os.schema import DOCUMENT_KINDS, validate_document
 
-from .helpers import load_fixture
+from tests.engineering_os.helpers import load_fixture
 
 
 class CanonicalTests(unittest.TestCase):

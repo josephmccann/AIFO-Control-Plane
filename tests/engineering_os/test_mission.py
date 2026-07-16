@@ -6,7 +6,7 @@ import unittest
 from engineering_os.canonical import content_sha256
 from engineering_os.mission import MissionParseError, parse_issue_body, validate_ready
 
-from .helpers import ROOT, load_fixture
+from tests.engineering_os.helpers import ROOT, load_fixture
 
 
 class MissionTests(unittest.TestCase):

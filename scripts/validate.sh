@@ -9,6 +9,15 @@ TF_ROOTS=(
 )
 MISSING_LINTERS=()
 
+echo "Running Engineering OS tests."
+python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v
+
+echo "Checking Engineering OS Python syntax."
+python3 -m py_compile "$ROOT_DIR"/engineering_os/*.py
+
+echo "Checking shell syntax."
+bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/engineering-os/* "$ROOT_DIR"/tests/*.sh
+
 if ! command -v terraform >/dev/null 2>&1; then
   echo "Terraform is required for validation." >&2
   exit 1
@@ -25,12 +34,9 @@ for tf_dir in "${TF_ROOTS[@]}"; do
   terraform -chdir="$tf_dir" validate -no-color
 done
 
-echo "Checking shell syntax."
-bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/tests/*.sh
-
 if command -v shellcheck >/dev/null 2>&1; then
   echo "Running shellcheck."
-  shellcheck "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/tests/*.sh
+  shellcheck "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/engineering-os/* "$ROOT_DIR"/tests/*.sh
 else
   MISSING_LINTERS+=("shellcheck")
 fi

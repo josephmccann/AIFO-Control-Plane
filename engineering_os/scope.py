@@ -1,11 +1,12 @@
 """POSIX path scope and semantic mission conflict enforcement."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import re
 from typing import Any, Iterable, List, Mapping, Sequence, Tuple
 
 from .errors import Violation
-from .records import VerifiedRecordEnvelope, verify_record_envelope
+from .records import verify_record_evidence
 from .schema import validate_document
 
 
@@ -57,49 +58,266 @@ def normalize_paths(values: Sequence[str], *, allow_glob: bool = False) -> Tuple
     return tuple(normalize_path(value, allow_glob=allow_glob) for value in values)
 
 
-def path_matches(path: str, pattern: str) -> bool:
-    """Apply segment-aware git-style glob matching everywhere in the package."""
-
-    return re.fullmatch(_glob_regex(pattern), path) is not None
+_UNIVERSE_INTERVALS = ((1, 46), (48, 91), (93, 0x10FFFF))
 
 
-def _glob_regex(pattern: str) -> str:
-    translated = []
-    index = 0
-    while index < len(pattern):
-        char = pattern[index]
-        if char == "*":
-            if index + 1 < len(pattern) and pattern[index + 1] == "*":
-                index += 2
-                if index < len(pattern) and pattern[index] == "/":
-                    translated.append("(?:[^/]+/)*")
-                    index += 1
-                else:
-                    translated.append(".*")
-                continue
-            translated.append("[^/]*")
-        elif char == "?":
-            translated.append("[^/]")
-        elif char == "[":
-            end = pattern.find("]", index + 1)
-            if end < 0 or "/" in pattern[index + 1:end]:
-                raise PathInputError("invalid glob character class")
-            body = pattern[index + 1:end]
-            if not body:
-                raise PathInputError("empty glob character class")
-            if body[0] == "!":
-                body = "^" + body[1:]
-            translated.append("[" + body.replace("\\", "\\\\") + "]")
-            index = end
+def _merge_intervals(intervals: Sequence[Tuple[int, int]]) -> Tuple[Tuple[int, int], ...]:
+    merged = []
+    for start, end in sorted(intervals):
+        if start > end:
+            raise PathInputError("glob character range is reversed")
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
         else:
-            translated.append(re.escape(char))
-        index += 1
-    result = "".join(translated)
-    try:
-        re.compile(result)
-    except re.error as error:
-        raise PathInputError("invalid glob expression") from error
-    return result
+            merged.append((start, end))
+    return tuple(merged)
+
+
+def _subtract_intervals(
+    universe: Sequence[Tuple[int, int]], excluded: Sequence[Tuple[int, int]],
+) -> Tuple[Tuple[int, int], ...]:
+    remaining = []
+    for lower, upper in universe:
+        cursor = lower
+        for start, end in excluded:
+            if end < cursor or start > upper:
+                continue
+            if start > cursor:
+                remaining.append((cursor, min(start - 1, upper)))
+            cursor = max(cursor, end + 1)
+            if cursor > upper:
+                break
+        if cursor <= upper:
+            remaining.append((cursor, upper))
+    return tuple(remaining)
+
+
+@dataclass(frozen=True)
+class _CharacterSet:
+    intervals: Tuple[Tuple[int, int], ...]
+
+    def contains(self, character: str) -> bool:
+        codepoint = ord(character)
+        return any(start <= codepoint <= end for start, end in self.intervals)
+
+    def intersects(self, other: "_CharacterSet") -> bool:
+        left = right = 0
+        while left < len(self.intervals) and right < len(other.intervals):
+            first, second = self.intervals[left], other.intervals[right]
+            if max(first[0], second[0]) <= min(first[1], second[1]):
+                return True
+            if first[1] < second[1]:
+                left += 1
+            else:
+                right += 1
+        return False
+
+
+_ANY_CHARACTER = _CharacterSet(_UNIVERSE_INTERVALS)
+
+
+@dataclass(frozen=True)
+class _SegmentToken:
+    star: bool
+    characters: _CharacterSet = _ANY_CHARACTER
+
+
+@dataclass(frozen=True)
+class _SegmentPattern:
+    tokens: Tuple[_SegmentToken, ...]
+
+    def matches(self, value: str) -> bool:
+        states = self._epsilon_closure({0})
+        for character in value:
+            next_states = set()
+            for index in states:
+                if index >= len(self.tokens):
+                    continue
+                token = self.tokens[index]
+                if token.star:
+                    next_states.add(index)
+                elif token.characters.contains(character):
+                    next_states.add(index + 1)
+            states = self._epsilon_closure(next_states)
+        return len(self.tokens) in self._epsilon_closure(states)
+
+    def intersects(self, other: "_SegmentPattern") -> bool:
+        pending = [(0, 0)]
+        visited = set()
+        while pending:
+            left, right = pending.pop()
+            if (left, right) in visited:
+                continue
+            visited.add((left, right))
+            if left == len(self.tokens) and right == len(other.tokens):
+                return True
+            if left < len(self.tokens) and self.tokens[left].star:
+                pending.append((left + 1, right))
+            if right < len(other.tokens) and other.tokens[right].star:
+                pending.append((left, right + 1))
+            if left >= len(self.tokens) or right >= len(other.tokens):
+                continue
+            first, second = self.tokens[left], other.tokens[right]
+            if first.characters.intersects(second.characters):
+                pending.append((
+                    left if first.star else left + 1,
+                    right if second.star else right + 1,
+                ))
+        return False
+
+    def _epsilon_closure(self, states: set) -> set:
+        closure = set(states)
+        pending = list(states)
+        while pending:
+            index = pending.pop()
+            if index < len(self.tokens) and self.tokens[index].star and index + 1 not in closure:
+                closure.add(index + 1)
+                pending.append(index + 1)
+        return closure
+
+
+@dataclass(frozen=True)
+class ParsedGlob:
+    normalized: str
+    segments: Tuple[Any, ...]
+
+    def matches(self, path: str) -> bool:
+        concrete = normalize_path(path).split("/")
+        states = self._recursive_closure({0})
+        for segment in concrete:
+            next_states = set()
+            for index in states:
+                if index >= len(self.segments):
+                    continue
+                pattern = self.segments[index]
+                if pattern is None:
+                    next_states.add(index)
+                elif pattern.matches(segment):
+                    next_states.add(index + 1)
+            states = self._recursive_closure(next_states)
+        return len(self.segments) in self._recursive_closure(states)
+
+    def intersects(self, other: "ParsedGlob") -> bool:
+        pending = [(0, 0)]
+        visited = set()
+        while pending:
+            left, right = pending.pop()
+            if (left, right) in visited:
+                continue
+            visited.add((left, right))
+            if left == len(self.segments) and right == len(other.segments):
+                return True
+            left_recursive = left < len(self.segments) and self.segments[left] is None
+            right_recursive = right < len(other.segments) and other.segments[right] is None
+            if left_recursive:
+                pending.append((left + 1, right))
+            if right_recursive:
+                pending.append((left, right + 1))
+            if left >= len(self.segments) or right >= len(other.segments):
+                continue
+            if (
+                left_recursive or right_recursive
+                or self.segments[left].intersects(other.segments[right])
+            ):
+                pending.append((
+                    left if left_recursive else left + 1,
+                    right if right_recursive else right + 1,
+                ))
+        return False
+
+    def _recursive_closure(self, states: set) -> set:
+        closure = set(states)
+        pending = list(states)
+        while pending:
+            index = pending.pop()
+            if index < len(self.segments) and self.segments[index] is None and index + 1 not in closure:
+                closure.add(index + 1)
+                pending.append(index + 1)
+        return closure
+
+
+def _parse_character_class(segment: str, index: int) -> Tuple[_SegmentToken, int]:
+    end = segment.find("]", index + 1)
+    if end < 0:
+        raise PathInputError("unterminated glob character class")
+    body = segment[index + 1:end]
+    negated = body.startswith("!")
+    if negated:
+        body = body[1:]
+    if not body or body.startswith("^"):
+        raise PathInputError("empty or unsupported glob character class")
+    intervals = []
+    cursor = 0
+    while cursor < len(body):
+        character = body[cursor]
+        if character in "[]/\\\x00" or character == "-":
+            raise PathInputError("unsupported glob character class member")
+        start = end_codepoint = ord(character)
+        if cursor + 1 < len(body) and body[cursor + 1] == "-":
+            if cursor + 2 >= len(body):
+                raise PathInputError("unterminated glob character range")
+            range_end = body[cursor + 2]
+            if range_end in "[]/\\\x00-" or ord(range_end) < start:
+                raise PathInputError("invalid glob character range")
+            end_codepoint = ord(range_end)
+            if any(start <= excluded <= end_codepoint for excluded in (0, 47, 92)):
+                raise PathInputError("glob range includes an invalid path character")
+            cursor += 2
+        intervals.append((start, end_codepoint))
+        cursor += 1
+    normalized = _merge_intervals(intervals)
+    if negated:
+        normalized = _subtract_intervals(_UNIVERSE_INTERVALS, normalized)
+    if not normalized:
+        raise PathInputError("glob character class matches no valid character")
+    return _SegmentToken(False, _CharacterSet(normalized)), end + 1
+
+
+def _parse_segment(segment: str) -> _SegmentPattern:
+    tokens = []
+    index = 0
+    while index < len(segment):
+        character = segment[index]
+        if character == "*":
+            tokens.append(_SegmentToken(True))
+            index += 1
+        elif character == "?":
+            tokens.append(_SegmentToken(False, _ANY_CHARACTER))
+            index += 1
+        elif character == "[":
+            token, index = _parse_character_class(segment, index)
+            tokens.append(token)
+        else:
+            tokens.append(_SegmentToken(False, _CharacterSet(((ord(character), ord(character)),))))
+            index += 1
+    return _SegmentPattern(tuple(tokens))
+
+
+def parse_glob(pattern: str) -> ParsedGlob:
+    """Parse the one supported glob grammar used for matching and intersection."""
+
+    normalized = normalize_path(pattern, allow_glob=True)
+    parsed = []
+    for segment in normalized.split("/"):
+        if segment == "**":
+            parsed.append(None)
+            continue
+        if "**" in segment:
+            raise PathInputError("recursive wildcard must occupy a complete path segment")
+        parsed.append(_parse_segment(segment))
+    return ParsedGlob(normalized, tuple(parsed))
+
+
+def path_matches(path: str, pattern: str) -> bool:
+    """Match using the same parsed glob automaton used for intersection."""
+
+    return parse_glob(pattern).matches(path)
+
+
+def patterns_overlap(left: str, right: str) -> bool:
+    """Conservatively determine intersection using the shared parsed grammar."""
+
+    return parse_glob(left).intersects(parse_glob(right))
 
 
 def _policy_patterns(policy: Mapping[str, Any]) -> Tuple[Tuple[str, ...], Tuple[Mapping[str, Any], ...]]:
@@ -107,7 +325,7 @@ def _policy_patterns(policy: Mapping[str, Any]) -> Tuple[Tuple[str, ...], Tuple[
         raise PathInputError("policy must be an object")
     tier_two = normalize_paths(policy.get("tier_2_paths", []), allow_glob=True)
     for pattern in tier_two:
-        _glob_regex(pattern)
+        parse_glob(pattern)
     domains = policy.get("semantic_domains", [])
     if not isinstance(domains, list):
         raise PathInputError("semantic domains must be an array")
@@ -117,7 +335,7 @@ def _policy_patterns(policy: Mapping[str, Any]) -> Tuple[Tuple[str, ...], Tuple[
             raise PathInputError("semantic domains must be objects")
         patterns = normalize_paths(domain.get("paths", []), allow_glob=True)
         for pattern in patterns:
-            _glob_regex(pattern)
+            parse_glob(pattern)
         if not patterns:
             raise PathInputError("semantic domain paths must not be empty")
         if not isinstance(domain.get("conflict_group"), str) or not domain.get("conflict_group"):
@@ -150,7 +368,7 @@ def validate_scope(
         allowed = normalize_paths(mission.get("allowed_paths", []), allow_glob=True)
         prohibited = normalize_paths(mission.get("prohibited_paths", []), allow_glob=True)
         for pattern in allowed + prohibited:
-            _glob_regex(pattern)
+            parse_glob(pattern)
     except (AttributeError, PathInputError, TypeError):
         return [Violation("SCOPE_PATH_INVALID", "mission or changed path is invalid", "$.paths")]
     try:
@@ -180,111 +398,12 @@ def validate_scope(
     return violations
 
 
-def _segment_tokens(pattern: str) -> Tuple[Tuple[str, str], ...]:
-    tokens = []
-    index = 0
-    while index < len(pattern):
-        char = pattern[index]
-        if char == "*":
-            tokens.append(("star", ""))
-        elif char == "?":
-            tokens.append(("any", ""))
-        elif char == "[":
-            end = pattern.find("]", index + 1)
-            if end < 0:
-                raise PathInputError("invalid glob character class")
-            expression = pattern[index:end + 1]
-            try:
-                re.compile(expression)
-            except re.error as error:
-                raise PathInputError("invalid glob character class") from error
-            tokens.append(("class", expression))
-            index = end
-        else:
-            tokens.append(("literal", char))
-        index += 1
-    return tuple(tokens)
-
-
-def _token_intersects(left: Tuple[str, str], right: Tuple[str, str], alphabet: set) -> bool:
-    if left[0] in ("star", "any") or right[0] in ("star", "any"):
-        return True
-    if left[0] == "literal" and right[0] == "literal":
-        return left[1] == right[1]
-    if left[0] == "literal":
-        return re.fullmatch(right[1], left[1]) is not None
-    if right[0] == "literal":
-        return re.fullmatch(left[1], right[1]) is not None
-    return any(
-        re.fullmatch(left[1], char) is not None
-        and re.fullmatch(right[1], char) is not None
-        for char in alphabet
-    )
-
-
-def _segments_overlap(left: str, right: str) -> bool:
-    left_tokens, right_tokens = _segment_tokens(left), _segment_tokens(right)
-    alphabet = {
-        *(chr(value) for value in range(1, 128) if chr(value) not in "/\\"),
-        *(char for char in left + right if char not in "*?[]!-/\\"),
-        "\u0100",
-    }
-    pending = [(0, 0)]
-    visited = set()
-    while pending:
-        left_index, right_index = pending.pop()
-        if (left_index, right_index) in visited:
-            continue
-        visited.add((left_index, right_index))
-        if left_index == len(left_tokens) and right_index == len(right_tokens):
-            return True
-        if left_index < len(left_tokens) and left_tokens[left_index][0] == "star":
-            pending.append((left_index + 1, right_index))
-        if right_index < len(right_tokens) and right_tokens[right_index][0] == "star":
-            pending.append((left_index, right_index + 1))
-        if left_index >= len(left_tokens) or right_index >= len(right_tokens):
-            continue
-        left_token, right_token = left_tokens[left_index], right_tokens[right_index]
-        if not _token_intersects(left_token, right_token, alphabet):
-            continue
-        pending.append((
-            left_index if left_token[0] == "star" else left_index + 1,
-            right_index if right_token[0] == "star" else right_index + 1,
-        ))
-    return False
-
-
 def _patterns_overlap(left: str, right: str) -> bool:
-    left_segments, right_segments = left.split("/"), right.split("/")
-    pending = [(0, 0)]
-    visited = set()
-    while pending:
-        left_index, right_index = pending.pop()
-        if (left_index, right_index) in visited:
-            continue
-        visited.add((left_index, right_index))
-        if left_index == len(left_segments) and right_index == len(right_segments):
-            return True
-        left_recursive = left_index < len(left_segments) and left_segments[left_index] == "**"
-        right_recursive = right_index < len(right_segments) and right_segments[right_index] == "**"
-        if left_recursive:
-            pending.append((left_index + 1, right_index))
-        if right_recursive:
-            pending.append((left_index, right_index + 1))
-        if left_index >= len(left_segments) or right_index >= len(right_segments):
-            continue
-        if left_recursive or right_recursive or _segments_overlap(
-            left_segments[left_index], right_segments[right_index],
-        ):
-            pending.append((
-                left_index if left_recursive else left_index + 1,
-                right_index if right_recursive else right_index + 1,
-            ))
-    return False
+    return patterns_overlap(left, right)
 
 
 def _paths_overlap(left: Sequence[str], right: Sequence[str]) -> bool:
-    return any(_patterns_overlap(first, second) for first in left for second in right)
+    return any(patterns_overlap(first, second) for first in left for second in right)
 
 
 def _time(value: str) -> datetime:
@@ -299,7 +418,7 @@ def _coordinated(
     mission_id: str, current_paths: Sequence[str], other_id: str, other_paths: Sequence[str],
     records: Iterable[Mapping[str, Any]], policy: Mapping[str, Any], *,
     repository: str, pull_request: int, head_sha: str, now: str,
-    verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    evidence_verifier: Any,
 ) -> bool:
     expected_ids = {mission_id, other_id}
     try:
@@ -326,7 +445,7 @@ def _coordinated(
             left = normalize_paths(scopes.get(mission_id, []), allow_glob=True)
             right = normalize_paths(scopes.get(other_id, []), allow_glob=True)
             for pattern in left + right:
-                _glob_regex(pattern)
+                parse_glob(pattern)
         except (PathInputError, TypeError, ValueError):
             continue
         issuer = record.get("issuer")
@@ -339,9 +458,9 @@ def _coordinated(
             and record.get("head_sha") == head_sha
             and issuer in founders
             and starts <= current < expires
-            and verify_record_envelope(
-                record, "coordination", verified_envelopes,
-                repository=repository, actor=issuer,
+            and verify_record_evidence(
+                record, "coordination", evidence_verifier,
+                repository=repository, actor=issuer, head_sha=head_sha,
             )
             and set(left) == set(current_paths) and len(left) == len(current_paths)
             and set(right) == set(other_paths) and len(right) == len(other_paths)
@@ -355,7 +474,7 @@ def detect_mission_conflicts(
     active_missions: Sequence[Mapping[str, Any]], *,
     coordination_records: Iterable[Mapping[str, Any]] = (),
     repository: str = "", pull_request: int = 0, head_sha: str = "", now: str = "",
-    verified_envelopes: Sequence[VerifiedRecordEnvelope] = (),
+    evidence_verifier: Any = None,
 ) -> List[Violation]:
     """Deny active path or semantic overlap absent an exact founder coordination record."""
 
@@ -390,7 +509,7 @@ def detect_mission_conflicts(
         try:
             other_paths = normalize_paths(other.get("paths", []), allow_glob=True)
             for pattern in other_paths:
-                _glob_regex(pattern)
+                parse_glob(pattern)
         except PathInputError:
             return [Violation("MISSION_CONFLICT_INPUT_INVALID", "active mission paths are invalid")]
         if not other_paths:
@@ -410,7 +529,7 @@ def detect_mission_conflicts(
         if _coordinated(
             mission_id, current_paths, other_id, other_paths, coordination_records, policy,
             repository=repository, pull_request=pull_request, head_sha=head_sha,
-            now=now, verified_envelopes=verified_envelopes,
+            now=now, evidence_verifier=evidence_verifier,
         ):
             continue
         if path_conflict:

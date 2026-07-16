@@ -15,12 +15,14 @@ no-rename diff. The CLI accepts no caller-authored Git tree,
 authenticated-source, release, reservation, consumption-snapshot, or ledger
 evidence.
 
-Exception, release, and reservation records use the same canonical GitHub
-comment envelope as authority and coordination: record kind, canonical payload
-digest, and exact comment metadata are inseparable. A one-shot exception also
-requires one exact envelope-verified release, one envelope-verified durable
-reservation, and an atomic SQLite consume of its identifier and nonce before
-allow is returned. Unique constraints deny both sequential replay and races.
+Exception, release, and reservation records use the same independently
+retrieved canonical GitHub evidence as authority and coordination: exact issue
+or pull-request and comment identities, record kind, canonical payload and body
+digests, actor, timestamps, head SHA, and transport provenance are inseparable.
+A one-shot exception also requires one exact verifier-authenticated release,
+one verifier-authenticated durable reservation, and an atomic SQLite consume of
+its identifier and nonce before allow is returned. Exact schema attestation and
+unique constraints deny altered ledgers, sequential replay, and races.
 An exception authorizes only the frozen write; it does not grant deployment,
 methodology, customer-data, merge, or other authority.
 

@@ -7,7 +7,7 @@ from typing import Any, Dict, Mapping, Sequence
 
 from .canonical import content_sha256
 from .consumption import ConsumptionBinding, consume_once
-from .records import VerifiedRecordEnvelope, verify_record_envelope
+from .records import verify_record_evidence
 from .schema import validate_document
 from .scope import PathInputError, normalize_paths
 
@@ -43,7 +43,7 @@ def validate_authority(
     mission: Mapping[str, Any], policy: Mapping[str, Any], changed_files: Sequence[str],
     authority_records: Sequence[Mapping[str, Any]], *, action: str,
     pull_request: int, head_sha: str, now: str, subject: str,
-    verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    evidence_verifier: Any = None,
     consumption_store: str = "",
 ) -> AuthorityDecision:
     """Require one exact authority record for every action other than read."""
@@ -54,8 +54,6 @@ def validate_authority(
         return _deny("AUTHORITY_POLICY_INVALID")
     if (
         not isinstance(authority_records, (list, tuple))
-        or not isinstance(verified_envelopes, (list, tuple))
-        or any(not isinstance(item, VerifiedRecordEnvelope) for item in verified_envelopes)
         or not isinstance(consumption_store, str)
     ):
         return _deny("AUTHORITY_INPUT_INVALID")
@@ -140,9 +138,10 @@ def validate_authority(
             (current < starts, "AUTHORITY_NOT_STARTED"),
             (current >= expires, "AUTHORITY_EXPIRED"),
             (
-                not verify_record_envelope(
-                    record, "authority", verified_envelopes,
+                not verify_record_evidence(
+                    record, "authority", evidence_verifier,
                     repository=mission.get("repository"), actor=record.get("issuer"),
+                    head_sha=head_sha,
                 ),
                 "AUTHORITY_SOURCE_UNAUTHENTICATED",
             ),

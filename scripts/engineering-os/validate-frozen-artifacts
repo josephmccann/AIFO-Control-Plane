@@ -33,7 +33,7 @@ else:
         load(args.declarations), exceptions,
         repository=args.repository, pull_request=args.pull_request,
         head_sha=args.head_sha, now=args.now, action=args.action,
-        git_evidence=evidence, verified_envelopes=[],
+        git_evidence=evidence, evidence_verifier=None,
         release_records=[], durable_reservations=[],
         consumption_store="",
     )

@@ -1,15 +1,16 @@
 import copy
 from concurrent.futures import ThreadPoolExecutor
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
 from engineering_os.authority import validate_authority
-from engineering_os.records import (
-    authenticate_github_record_comment, RecordEnvelopeError, record_comment_body,
-    VerifiedRecordEnvelope, verify_record_envelope,
-)
+from engineering_os.consumption import ConsumptionBinding, consume_once
+import engineering_os.records as records_kernel
+from engineering_os.records import record_comment_body
+from tests.engineering_os.fake_github import SealedFakeGitHubTransport, transported_record
 from tests.engineering_os.test_risk import mission, policy
 
 
@@ -22,21 +23,13 @@ def record():
     return json.loads((AUTHORITY / "valid/write.json").read_text(encoding="utf-8"))
 
 
-def authority_envelope():
-    candidate = record()
-    source = candidate.pop("source")
-    comment = {
-        "id": source["comment_id"],
-        "html_url": source["url"],
-        "issue_url": "https://api.github.com/repos/acme/widgets/issues/%d" % source["issue_number"],
-        "user": {"login": source["actor"]},
-        "created_at": source["created_at"],
-        "body": record_comment_body("authority", candidate),
-    }
-    authenticated, envelope = authenticate_github_record_comment(comment, "acme/widgets")
-    if authenticated != record():
-        raise AssertionError("authority fixture is not its canonical GitHub record")
-    return envelope
+def authority_transport():
+    payload = record()
+    payload.pop("source")
+    candidate, evidence = transported_record("authority", payload)
+    if candidate != record():
+        raise AssertionError("authority fixture is not its canonical transported record")
+    return SealedFakeGitHubTransport(evidence)
 
 
 def decide(records, **updates):
@@ -54,7 +47,7 @@ def decide(records, **updates):
         "head_sha": HEAD,
         "now": "2026-07-15T12:00:00Z",
         "subject": "producer-a",
-        "verified_envelopes": [authority_envelope()],
+        "evidence_verifier": authority_transport(),
         "consumption_store": consumption_store,
     }
     context.update(updates)
@@ -64,6 +57,162 @@ def decide(records, **updates):
 
 
 class AuthorityTests(unittest.TestCase):
+    def test_kernel_retrieves_and_binds_authenticated_github_transport(self):
+        payload = record()
+        payload.pop("source")
+        candidate, evidence = transported_record("authority", payload)
+        transport = SealedFakeGitHubTransport(evidence)
+        verify = getattr(
+            records_kernel, "verify_record_evidence", lambda *args, **kwargs: False,
+        )
+        self.assertTrue(verify(
+            candidate, "authority", transport,
+            repository="acme/widgets", actor="founder", head_sha=HEAD,
+        ))
+        self.assertEqual(
+            transport.requests, [("acme/widgets", "pull_request", 42, 9001)],
+        )
+
+        mutations = {
+            "author": ("actor", "outsider"),
+            "comment_id": ("comment_id", 9002),
+            "timestamp": ("created_at", "2026-07-15T00:00:01Z"),
+            "repository": ("repository", "acme/other"),
+            "head": ("head_sha", "3" * 40),
+            "edited": ("updated_at", "2026-07-15T00:01:00Z"),
+            "provenance": ("transport_provenance", "caller-asserted"),
+            "subject_kind": ("subject_kind", "issue"),
+        }
+        for name, (field, value) in mutations.items():
+            with self.subTest(name=name):
+                altered = copy.deepcopy(evidence)
+                altered[field] = value
+                self.assertFalse(verify(
+                    candidate, "authority", SealedFakeGitHubTransport(altered),
+                    repository="acme/widgets", actor="founder", head_sha=HEAD,
+                ))
+
+        wrong_content = copy.deepcopy(evidence)
+        wrong_content["body"] += " "
+        wrong_kind = copy.deepcopy(evidence)
+        wrong_kind["body"] = record_comment_body("coordination", payload)
+        for name, verifier in (
+            ("content", SealedFakeGitHubTransport(wrong_content)),
+            ("record_kind", SealedFakeGitHubTransport(wrong_kind)),
+            ("unavailable", SealedFakeGitHubTransport(None)),
+            ("error", SealedFakeGitHubTransport(error=RuntimeError("offline"))),
+            ("raw_mapping", {"evidence": evidence}),
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(verify(
+                    candidate, "authority", verifier,
+                    repository="acme/widgets", actor="founder", head_sha=HEAD,
+                ))
+
+        replayed = copy.deepcopy(candidate)
+        replayed["paths"] = ["src/reporting/other.py"]
+        self.assertFalse(verify(
+            replayed, "authority", SealedFakeGitHubTransport(evidence),
+            repository="acme/widgets", actor="founder", head_sha=HEAD,
+        ))
+
+    def test_consumption_store_initializes_and_attests_exact_schema_idempotently(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "ledger.sqlite3")
+            first = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+            second = ConsumptionBinding("authority", "record-2", "nonce-2", "2" * 64)
+            self.assertTrue(consume_once(store, [first]))
+            self.assertTrue(consume_once(store, [second]))
+            connection = sqlite3.connect(store)
+            try:
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+                columns = connection.execute(
+                    "PRAGMA table_info(consumed_records)"
+                ).fetchall()
+                self.assertEqual(
+                    [(row[1], row[2], row[3], row[5]) for row in columns],
+                    [
+                        ("kind", "TEXT", 1, 0),
+                        ("record_id", "TEXT", 1, 1),
+                        ("nonce", "TEXT", 1, 0),
+                        ("binding_digest", "TEXT", 1, 0),
+                    ],
+                )
+                indexes = connection.execute(
+                    "PRAGMA index_list(consumed_records)"
+                ).fetchall()
+                self.assertIn(
+                    ("consumed_records_nonce_uq", 1, "c", 0),
+                    [(row[1], row[2], row[3], row[4]) for row in indexes],
+                )
+                self.assertIn(
+                    ("consumed_records_binding_idx", 0, "c", 0),
+                    [(row[1], row[2], row[3], row[4]) for row in indexes],
+                )
+            finally:
+                connection.close()
+
+    def test_consumption_store_refuses_altered_or_duplicate_capable_schemas(self):
+        schemas = {
+            "missing_constraints": (
+                "CREATE TABLE consumed_records (kind TEXT NOT NULL, record_id TEXT NOT NULL, "
+                "nonce TEXT NOT NULL, binding_digest TEXT NOT NULL)"
+            ),
+            "partial": (
+                "CREATE TABLE consumed_records (record_id TEXT PRIMARY KEY, nonce TEXT UNIQUE)"
+            ),
+            "wrong_types": (
+                "CREATE TABLE consumed_records (kind BLOB NOT NULL, record_id TEXT PRIMARY KEY, "
+                "nonce TEXT UNIQUE, binding_digest TEXT NOT NULL)"
+            ),
+        }
+        for name, statement in schemas.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                store = str(Path(directory) / "ledger.sqlite3")
+                connection = sqlite3.connect(store)
+                connection.execute(statement)
+                connection.execute("PRAGMA user_version = 1")
+                if name == "missing_constraints":
+                    row = ("authority", "duplicate", "duplicate", "0" * 64)
+                    connection.execute("INSERT INTO consumed_records VALUES (?, ?, ?, ?)", row)
+                    connection.execute("INSERT INTO consumed_records VALUES (?, ?, ?, ?)", row)
+                connection.commit()
+                connection.close()
+                self.assertFalse(consume_once(store, [ConsumptionBinding(
+                    "authority", "record-new", "nonce-new", "a" * 64,
+                )]))
+
+    def test_consumption_store_refuses_wrong_version_extra_objects_and_altered_indexes(self):
+        for mutation in ("wrong_version", "extra_table", "altered_indexes"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                store = str(Path(directory) / "ledger.sqlite3")
+                seed = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+                self.assertTrue(consume_once(store, [seed]))
+                connection = sqlite3.connect(store)
+                if mutation == "wrong_version":
+                    connection.execute("PRAGMA user_version = 2")
+                elif mutation == "extra_table":
+                    connection.execute("CREATE TABLE attacker (value TEXT)")
+                else:
+                    connection.execute("DROP INDEX IF EXISTS consumed_records_nonce_uq")
+                    connection.execute(
+                        "CREATE INDEX consumed_records_nonce_uq ON consumed_records(nonce)"
+                    )
+                connection.commit()
+                connection.close()
+                self.assertFalse(consume_once(store, [ConsumptionBinding(
+                    "authority", "record-2", "nonce-2", "2" * 64,
+                )]))
+
+    def test_multi_record_consumption_rolls_back_all_rows_on_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "ledger.sqlite3")
+            used = ConsumptionBinding("authority", "record-used", "nonce-used", "1" * 64)
+            fresh = ConsumptionBinding("authority", "record-fresh", "nonce-fresh", "2" * 64)
+            self.assertTrue(consume_once(store, [used]))
+            self.assertFalse(consume_once(store, [fresh, used]))
+            self.assertTrue(consume_once(store, [fresh]))
+
     def test_payload_mutation_cannot_reuse_an_old_authenticated_source(self):
         candidate = record()
         candidate["paths"] = ["src/reporting/other.py"]
@@ -71,35 +220,29 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), policy(), ["src/reporting/other.py"], [candidate],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            verified_envelopes=[authority_envelope()],
+            evidence_verifier=authority_transport(),
             consumption_store=str(Path(tempfile.gettempdir()) / "unused-authority.sqlite3"),
         )
         self.assertEqual(decision.code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
 
-    def test_envelope_metadata_uses_exact_json_types(self):
+    def test_transport_locator_uses_exact_json_types(self):
         payload = record()
         payload.pop("source")
-        candidate, envelope = authenticate_github_record_comment({
-            "id": 9001,
-            "html_url": "https://github.com/acme/widgets/issues/1#issuecomment-9001",
-            "issue_url": "https://api.github.com/repos/acme/widgets/issues/1",
-            "user": {"login": "founder"},
-            "created_at": "2026-07-15T00:00:00Z",
-            "body": record_comment_body("authority", payload),
-        }, "acme/widgets")
-        candidate["source"]["issue_number"] = True
-        self.assertFalse(verify_record_envelope(
-            candidate, "authority", [envelope],
-            repository="acme/widgets", actor="founder",
+        candidate, evidence = transported_record("authority", payload)
+        candidate["source"]["subject_number"] = True
+        self.assertFalse(records_kernel.verify_record_evidence(
+            candidate, "authority", SealedFakeGitHubTransport(evidence),
+            repository="acme/widgets", actor="founder", head_sha=HEAD,
         ))
 
-    def test_callers_cannot_mint_verified_envelopes(self):
-        with self.assertRaises(RecordEnvelopeError):
-            VerifiedRecordEnvelope(
-                "authority", "a" * 64, "acme/widgets", 1, 2,
-                "https://github.com/acme/widgets/issues/1#issuecomment-2",
-                "founder", "2026-07-15T00:00:00Z",
-            )
+    def test_raw_evidence_mapping_is_not_an_authenticator(self):
+        payload = record()
+        payload.pop("source")
+        candidate, evidence = transported_record("authority", payload)
+        self.assertFalse(records_kernel.verify_record_evidence(
+            candidate, "authority", evidence,
+            repository="acme/widgets", actor="founder", head_sha=HEAD,
+        ))
 
     def test_authority_is_consumed_once_sequentially(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -126,7 +269,7 @@ class AuthorityTests(unittest.TestCase):
 
     def test_authority_requires_authenticated_source_and_rejects_replay(self):
         candidate = record()
-        self.assertEqual(decide([candidate], verified_envelopes=[]).code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
+        self.assertEqual(decide([candidate], evidence_verifier=None).code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
         with tempfile.TemporaryDirectory() as directory:
             store = str(Path(directory) / "consumed.sqlite3")
             self.assertTrue(decide([candidate], consumption_store=store).allowed)
@@ -167,7 +310,7 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), wrong_base, ["src/reporting/render.py"], [record()],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            verified_envelopes=[authority_envelope()],
+            evidence_verifier=authority_transport(),
             consumption_store=str(Path(tempfile.gettempdir()) / "wrong-base.sqlite3"),
         )
         self.assertEqual(base_denied.code, "AUTHORITY_POLICY_REPOSITORY_MISMATCH")
@@ -188,7 +331,7 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), no_founders, ["src/reporting/render.py"], [record()],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            verified_envelopes=[authority_envelope()],
+            evidence_verifier=authority_transport(),
             consumption_store=str(Path(tempfile.gettempdir()) / "no-founders.sqlite3"),
         )
         self.assertEqual(denied.code, "AUTHORITY_POLICY_INVALID")
@@ -215,7 +358,7 @@ class AuthorityTests(unittest.TestCase):
             declared_mission, base_policy, ["src/reporting/render.py"], [deploy],
             action="deploy", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
-            verified_envelopes=[authority_envelope()],
+            evidence_verifier=authority_transport(),
             consumption_store=str(Path(tempfile.gettempdir()) / "disabled.sqlite3"),
         )
         self.assertEqual(disabled.code, "AUTHORITY_POLICY_CAPABILITY_DISABLED")
@@ -224,12 +367,12 @@ class AuthorityTests(unittest.TestCase):
         self.assertEqual(validate_authority(
             mission("Tier 1"), policy(), ["src/reporting/render.py"], None,
             action="write", pull_request=42, head_sha=HEAD, now="2026-07-15T12:00:00Z",
-            subject="producer-a", verified_envelopes=[], consumption_store="",
+            subject="producer-a", evidence_verifier=None, consumption_store="",
         ).code, "AUTHORITY_INPUT_INVALID")
         self.assertEqual(validate_authority(
             mission("Tier 1"), policy(), ["src/reporting/render.py"], [record()],
             action="write", pull_request=True, head_sha=HEAD, now="2026-07-15T12:00:00Z",
-            subject="producer-a", verified_envelopes=[authority_envelope()],
+            subject="producer-a", evidence_verifier=authority_transport(),
             consumption_store="",
         ).code, "AUTHORITY_INPUT_INVALID")
 

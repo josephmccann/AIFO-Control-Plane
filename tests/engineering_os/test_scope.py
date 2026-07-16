@@ -4,8 +4,9 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from engineering_os.records import authenticate_github_record_comment, record_comment_body
+import engineering_os.scope as scope_kernel
 from engineering_os.scope import detect_mission_conflicts, validate_scope
+from tests.engineering_os.fake_github import SealedFakeGitHubTransport, transported_record
 from tests.engineering_os.test_risk import mission, policy
 
 
@@ -18,17 +19,12 @@ def active(name):
 
 
 def github_record(record_kind, payload, *, comment_id=9001, issue_number=10, actor="founder"):
-    comment = {
-        "id": comment_id,
-        "html_url": "https://github.com/acme/widgets/issues/%d#issuecomment-%d" % (
-            issue_number, comment_id,
-        ),
-        "issue_url": "https://api.github.com/repos/acme/widgets/issues/%d" % issue_number,
-        "user": {"login": actor},
-        "created_at": "2026-07-15T10:00:00Z",
-        "body": record_comment_body(record_kind, payload),
-    }
-    return authenticate_github_record_comment(comment, "acme/widgets")
+    record, evidence = transported_record(
+        record_kind, payload, subject_kind="issue", subject_number=issue_number,
+        comment_id=comment_id, actor=actor, created_at="2026-07-15T10:00:00Z",
+        head_sha="2" * 40,
+    )
+    return record, SealedFakeGitHubTransport(evidence)
 
 
 class ScopeTests(unittest.TestCase):
@@ -57,6 +53,46 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("SCOPE_PATH_NOT_ALLOWED", {item.code for item in nested})
         self.mission["allowed_paths"] = ["src/reporting/**"]
         self.assertEqual(validate_scope(self.mission, policy(), ["src/reporting/deep/render.py"]), [])
+
+    def test_every_matching_pattern_intersects_its_concrete_path(self):
+        intersects = getattr(
+            scope_kernel, "patterns_overlap", scope_kernel._patterns_overlap,
+        )
+        cases = (
+            ("src/**", "src/deep/render.py"),
+            ("tests/**/reporting/**", "tests/reporting/report.py"),
+            ("tests/**/reporting/**", "tests/unit/reporting/report.py"),
+            ("src/[!a-c]*/?.py", "src/delta/x.py"),
+            ("src/[a-c][0-9].py", "src/b7.py"),
+        )
+        for pattern, concrete in cases:
+            with self.subTest(pattern=pattern, concrete=concrete):
+                self.assertTrue(scope_kernel.path_matches(concrete, pattern))
+                self.assertTrue(intersects(pattern, concrete))
+
+    def test_glob_intersection_uses_the_same_negated_classes_as_matching(self):
+        intersects = getattr(
+            scope_kernel, "patterns_overlap", scope_kernel._patterns_overlap,
+        )
+        self.assertTrue(intersects("src/[!a-c].py", "src/d.py"))
+        self.assertFalse(intersects("src/[!a-c].py", "src/b.py"))
+        self.assertFalse(intersects("src/[a-c].py", "src/[d-f].py"))
+        self.assertTrue(intersects("src/[!a-c].py", "src/[d-f].py"))
+
+    def test_unsupported_recursive_and_character_class_forms_fail_closed(self):
+        unsupported = (
+            "src/foo**bar/file.py", "src/**bar/file.py", "src/foo***/file.py",
+            "src/[z-a]/file.py", "src/[]/file.py", "src/[!]/file.py",
+            "src/[abc/file.py", "src/[a/b]/file.py",
+        )
+        for pattern in unsupported:
+            with self.subTest(pattern=pattern):
+                candidate = dict(self.mission)
+                candidate["allowed_paths"] = [pattern]
+                codes = {item.code for item in validate_scope(
+                    candidate, policy(), ["src/reporting/render.py"],
+                )}
+                self.assertIn("SCOPE_PATH_INVALID", codes)
 
     def test_tier_one_cannot_touch_a_tier_two_path(self):
         self.mission["allowed_paths"].append(".github/**")
@@ -132,14 +168,14 @@ class ScopeTests(unittest.TestCase):
             "mission-123": ["src/reporting/other.py"],
             "mission-other": ["src/reporting/**"],
         }
-        legitimate, envelope = github_record("coordination", legitimate_payload)
+        legitimate, transport = github_record("coordination", legitimate_payload)
         fabricated = dict(fabricated_payload)
         fabricated["source"] = legitimate["source"]
         conflicts = detect_mission_conflicts(
             self.mission, policy(), ["src/reporting/render.py"],
             active("conflicting/path-overlap.json"), coordination_records=[fabricated],
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
+            now="2026-07-15T12:00:00Z", evidence_verifier=transport,
         )
         self.assertIn("MISSION_PATH_CONFLICT", {item.code for item in conflicts})
 
@@ -160,13 +196,13 @@ class ScopeTests(unittest.TestCase):
                 "mission-other": ["src/reporting/**"],
             },
         }
-        authenticated, envelope = github_record("coordination", payload)
+        authenticated, transport = github_record("coordination", payload)
         records = [authenticated]
         conflicts = detect_mission_conflicts(
             self.mission, policy(), ["src/reporting/render.py"],
             active("conflicting/path-overlap.json"), coordination_records=records,
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
+            now="2026-07-15T12:00:00Z", evidence_verifier=transport,
         )
         self.assertEqual(conflicts, [])
         records[0]["scopes"]["mission-123"] = ["src/reporting/other.py"]
@@ -174,7 +210,7 @@ class ScopeTests(unittest.TestCase):
             self.mission, policy(), ["src/reporting/render.py"],
             active("conflicting/path-overlap.json"), coordination_records=records,
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
+            now="2026-07-15T12:00:00Z", evidence_verifier=transport,
         ))
 
     def test_coordination_rejects_wrong_founder_or_missing_authenticated_source(self):
@@ -186,12 +222,12 @@ class ScopeTests(unittest.TestCase):
             "expires_at": "2026-07-16T00:00:00Z", "nonce": "nonce",
             "scopes": {"mission-123": ["src/reporting/render.py"], "mission-other": ["src/reporting/**"]},
         }
-        authenticated, envelope = github_record("coordination", payload, actor="outsider")
+        authenticated, transport = github_record("coordination", payload, actor="outsider")
         conflicts = detect_mission_conflicts(
             self.mission, policy(), ["src/reporting/render.py"],
             active("conflicting/path-overlap.json"), coordination_records=[authenticated],
             repository="acme/widgets", pull_request=42, head_sha="2" * 40,
-            now="2026-07-15T12:00:00Z", verified_envelopes=[envelope],
+            now="2026-07-15T12:00:00Z", evidence_verifier=transport,
         )
         self.assertIn("MISSION_PATH_CONFLICT", {item.code for item in conflicts})
 

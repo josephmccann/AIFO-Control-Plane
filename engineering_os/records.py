@@ -1,6 +1,6 @@
-"""Canonical GitHub record envelopes for scoped Engineering OS authority."""
+"""Canonical records bound to independently retrieved GitHub transport evidence."""
 
-from dataclasses import dataclass
+import hashlib
 import json
 import re
 from typing import Any, Dict, Mapping, Sequence, Tuple
@@ -12,202 +12,186 @@ _KINDS = frozenset((
     "authority", "coordination", "frozen_exception", "frozen_release",
     "frozen_reservation",
 ))
-_ENVELOPE_FIELDS = frozenset((
+_SOURCE_FIELDS = frozenset((
     "provider", "record_kind", "payload_sha256", "repository",
-    "issue_number", "comment_id", "url", "actor", "created_at",
+    "subject_kind", "subject_number", "comment_id", "url", "actor",
+    "created_at", "content_sha256", "head_sha", "transport_provenance",
+))
+_EVIDENCE_FIELDS = frozenset((
+    "repository", "subject_kind", "subject_number", "comment_id", "url",
+    "actor", "created_at", "updated_at", "body", "head_sha",
+    "transport_provenance",
 ))
 _TIMESTAMP = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z"
 )
-_ENVELOPE_PROOF = object()
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_GIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
-class RecordEnvelopeError(ValueError):
-    """GitHub comment evidence is not an exact canonical record envelope."""
-
-
-@dataclass(frozen=True, init=False)
-class VerifiedRecordEnvelope:
-    """Envelope derived by an adapter from authenticated GitHub API evidence."""
-
-    record_kind: str
-    payload_sha256: str
-    repository: str
-    issue_number: int
-    comment_id: int
-    url: str
-    actor: str
-    created_at: str
-
-    def __init__(
-        self, record_kind: str, payload_sha256: str, repository: str,
-        issue_number: int, comment_id: int, url: str, actor: str,
-        created_at: str, *, _proof: object = None,
-    ) -> None:
-        if _proof is not _ENVELOPE_PROOF:
-            raise RecordEnvelopeError(
-                "verified envelopes are created only from GitHub API evidence"
-            )
-        for name, value in (
-            ("record_kind", record_kind), ("payload_sha256", payload_sha256),
-            ("repository", repository), ("issue_number", issue_number),
-            ("comment_id", comment_id), ("url", url), ("actor", actor),
-            ("created_at", created_at),
-        ):
-            object.__setattr__(self, name, value)
-
-    def source(self) -> Dict[str, Any]:
-        return {
-            "provider": "github",
-            "record_kind": self.record_kind,
-            "payload_sha256": self.payload_sha256,
-            "repository": self.repository,
-            "issue_number": self.issue_number,
-            "comment_id": self.comment_id,
-            "url": self.url,
-            "actor": self.actor,
-            "created_at": self.created_at,
-        }
+class RecordEvidenceError(ValueError):
+    """A canonical record or independently retrieved source is invalid."""
 
 
 def _strict_object(pairs: Sequence[Tuple[str, Any]]) -> Dict[str, Any]:
     value: Dict[str, Any] = {}
     for key, item in pairs:
         if key in value:
-            raise RecordEnvelopeError("duplicate JSON key")
+            raise RecordEvidenceError("duplicate JSON key")
         value[key] = item
     return value
 
 
 def record_comment_body(record_kind: str, payload: Mapping[str, Any]) -> str:
-    """Return the only accepted canonical GitHub comment representation."""
+    """Return the only canonical GitHub comment body accepted by the kernel."""
 
     if record_kind not in _KINDS or not isinstance(payload, Mapping):
-        raise RecordEnvelopeError("record kind or payload is invalid")
+        raise RecordEvidenceError("record kind or payload is invalid")
     if "source" in payload:
-        raise RecordEnvelopeError("record payload must not contain its envelope")
+        raise RecordEvidenceError("record payload must not contain source claims")
     try:
         return canonical_json({"record_kind": record_kind, "payload": dict(payload)})
     except (TypeError, ValueError) as error:
-        raise RecordEnvelopeError("record payload is not canonical JSON") from error
+        raise RecordEvidenceError("record payload is not canonical JSON") from error
 
 
-def authenticate_github_record_comment(
-    comment: Mapping[str, Any], repository: str,
-) -> Tuple[Dict[str, Any], VerifiedRecordEnvelope]:
-    """Derive a verified record and envelope from authenticated GitHub API JSON.
+def _exact_url(
+    repository: str, subject_kind: str, subject_number: int, comment_id: int,
+) -> str:
+    route = "pull" if subject_kind == "pull_request" else "issues"
+    return "https://github.com/%s/%s/%d#issuecomment-%d" % (
+        repository, route, subject_number, comment_id,
+    )
 
-    Transport authentication belongs to the GitHub adapter. This function
-    closes and binds the API response fields and exact canonical comment body.
+
+def _source_locator(source: Any) -> Tuple[str, str, int, int]:
+    if not isinstance(source, Mapping) or set(source) != _SOURCE_FIELDS:
+        raise RecordEvidenceError("record source claims are not closed")
+    repository = source.get("repository")
+    subject_kind = source.get("subject_kind")
+    subject_number = source.get("subject_number")
+    comment_id = source.get("comment_id")
+    if (
+        source.get("provider") != "github"
+        or not isinstance(repository, str) or re.fullmatch(r"[^/]+/[^/]+", repository) is None
+        or subject_kind not in ("issue", "pull_request")
+        or not isinstance(subject_number, int) or isinstance(subject_number, bool) or subject_number < 1
+        or not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id < 1
+        or source.get("url") != _exact_url(
+            repository, subject_kind, subject_number, comment_id,
+        )
+        or not isinstance(source.get("actor"), str) or not source.get("actor")
+        or not isinstance(source.get("created_at"), str)
+        or _TIMESTAMP.fullmatch(source.get("created_at")) is None
+        or not isinstance(source.get("payload_sha256"), str)
+        or _SHA256.fullmatch(source.get("payload_sha256")) is None
+        or not isinstance(source.get("content_sha256"), str)
+        or _SHA256.fullmatch(source.get("content_sha256")) is None
+        or not isinstance(source.get("head_sha"), str)
+        or _GIT_SHA.fullmatch(source.get("head_sha")) is None
+        or not isinstance(source.get("transport_provenance"), str)
+        or not source.get("transport_provenance")
+    ):
+        raise RecordEvidenceError("record source claims are invalid")
+    return repository, subject_kind, subject_number, comment_id
+
+
+def verify_record_evidence(
+    record: Mapping[str, Any], record_kind: str, evidence_verifier: Any, *,
+    repository: str, actor: str, head_sha: str,
+) -> bool:
+    """Retrieve GitHub evidence and bind it to an exact canonical record.
+
+    The verifier is the adapter-owned trust boundary. The kernel passes only an
+    exact locator and accepts no caller-supplied evidence mapping or constructor
+    identity as authentication.
     """
 
-    if not isinstance(comment, Mapping) or not isinstance(repository, str):
-        raise RecordEnvelopeError("GitHub comment evidence is invalid")
-    try:
-        comment_id = comment["id"]
-        url = comment["html_url"]
-        issue_url = comment["issue_url"]
-        actor = comment["user"]["login"]
-        created_at = comment["created_at"]
-        body = comment["body"]
-    except (KeyError, TypeError):
-        raise RecordEnvelopeError("GitHub comment evidence is incomplete")
-    repository_pattern = re.escape(repository)
-    issue_match = re.fullmatch(
-        r"https://api\.github\.com/repos/" + repository_pattern + r"/issues/([1-9]\d*)",
-        issue_url if isinstance(issue_url, str) else "",
-    )
     if (
-        not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id < 1
-        or issue_match is None
-        or not isinstance(actor, str) or not actor
-        or not isinstance(created_at, str) or _TIMESTAMP.fullmatch(created_at) is None
+        not isinstance(record, Mapping) or record_kind not in _KINDS
+        or not isinstance(repository, str) or not isinstance(actor, str)
+        or not isinstance(head_sha, str) or _GIT_SHA.fullmatch(head_sha) is None
+        or isinstance(evidence_verifier, Mapping)
+    ):
+        return False
+    retrieve = getattr(evidence_verifier, "retrieve_comment", None)
+    provenance = getattr(evidence_verifier, "transport_provenance", None)
+    if not callable(retrieve) or not isinstance(provenance, str) or not provenance:
+        return False
+    try:
+        source = record.get("source")
+        locator = _source_locator(source)
+        if locator[0] != repository:
+            return False
+        evidence = retrieve(*locator)
+    except Exception:
+        return False
+    if not isinstance(evidence, Mapping) or set(evidence) != _EVIDENCE_FIELDS:
+        return False
+    evidence_repository = evidence.get("repository")
+    subject_kind = evidence.get("subject_kind")
+    subject_number = evidence.get("subject_number")
+    comment_id = evidence.get("comment_id")
+    body = evidence.get("body")
+    if (
+        evidence_repository != repository
+        or subject_kind != locator[1]
+        or subject_number != locator[2] or isinstance(subject_number, bool)
+        or comment_id != locator[3] or isinstance(comment_id, bool)
+        or evidence.get("url") != _exact_url(
+            repository, subject_kind, subject_number, comment_id,
+        )
+        or evidence.get("actor") != actor
+        or not isinstance(evidence.get("created_at"), str)
+        or _TIMESTAMP.fullmatch(evidence.get("created_at")) is None
+        or evidence.get("updated_at") != evidence.get("created_at")
+        or evidence.get("head_sha") != head_sha
+        or evidence.get("transport_provenance") != provenance
         or not isinstance(body, str)
     ):
-        raise RecordEnvelopeError("GitHub comment metadata is invalid")
-    issue_number = int(issue_match.group(1))
-    expected_url = "https://github.com/%s/issues/%d#issuecomment-%d" % (
-        repository, issue_number, comment_id,
-    )
-    if url != expected_url:
-        raise RecordEnvelopeError("GitHub comment URL is not exact")
+        return False
     try:
         document = json.loads(
             body, object_pairs_hook=_strict_object,
             parse_constant=lambda value: (_ for _ in ()).throw(
-                RecordEnvelopeError("non-finite JSON number")
+                RecordEvidenceError("non-finite JSON number")
             ),
         )
-    except (json.JSONDecodeError, TypeError, ValueError) as error:
-        raise RecordEnvelopeError("GitHub record body is invalid JSON") from error
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return False
     if (
         not isinstance(document, Mapping)
         or set(document) != {"record_kind", "payload"}
-        or document.get("record_kind") not in _KINDS
+        or document.get("record_kind") != record_kind
         or not isinstance(document.get("payload"), Mapping)
-        or body != record_comment_body(document["record_kind"], document["payload"])
-    ):
-        raise RecordEnvelopeError("GitHub record body is not canonical")
-    payload = dict(document["payload"])
-    envelope = VerifiedRecordEnvelope(
-        document["record_kind"], content_sha256(payload), repository,
-        issue_number, comment_id, url, actor, created_at, _proof=_ENVELOPE_PROOF,
-    )
-    record = dict(payload)
-    record["source"] = envelope.source()
-    return record, envelope
-
-
-def verify_record_envelope(
-    record: Mapping[str, Any], record_kind: str,
-    verified_envelopes: Sequence[VerifiedRecordEnvelope], *,
-    repository: str, actor: str,
-) -> bool:
-    """Verify an exact payload against adapter-derived GitHub envelopes."""
-
-    if (
-        not isinstance(record, Mapping) or record_kind not in _KINDS
-        or not isinstance(verified_envelopes, (list, tuple))
-        or any(not isinstance(item, VerifiedRecordEnvelope) for item in verified_envelopes)
-        or not isinstance(repository, str) or not isinstance(actor, str)
-    ):
-        return False
-    source = record.get("source")
-    if not isinstance(source, Mapping) or set(source) != _ENVELOPE_FIELDS:
-        return False
-    issue_number = source.get("issue_number")
-    comment_id = source.get("comment_id")
-    if (
-        not isinstance(issue_number, int) or isinstance(issue_number, bool) or issue_number < 1
-        or not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id < 1
-        or not isinstance(source.get("payload_sha256"), str)
-        or re.fullmatch(r"[0-9a-f]{64}", source.get("payload_sha256")) is None
-        or not isinstance(source.get("repository"), str)
-        or not isinstance(source.get("actor"), str) or not source.get("actor")
-        or not isinstance(source.get("created_at"), str)
-        or _TIMESTAMP.fullmatch(source.get("created_at")) is None
-        or source.get("url") != "https://github.com/%s/issues/%d#issuecomment-%d" % (
-            source.get("repository"), issue_number, comment_id,
-        )
     ):
         return False
     payload = dict(record)
-    del payload["source"]
+    payload.pop("source", None)
     try:
-        digest = content_sha256(payload)
+        canonical_body = record_comment_body(record_kind, document["payload"])
+        payload_digest = content_sha256(payload)
+        evidence_payload_digest = content_sha256(document["payload"])
+        body_digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
     except (TypeError, ValueError):
         return False
-    expected = VerifiedRecordEnvelope(
-        record_kind, digest, repository, issue_number,
-        comment_id, source.get("url"), actor,
-        source.get("created_at"), _proof=_ENVELOPE_PROOF,
-    )
+    expected_source = {
+        "provider": "github",
+        "record_kind": record_kind,
+        "payload_sha256": payload_digest,
+        "repository": repository,
+        "subject_kind": subject_kind,
+        "subject_number": subject_number,
+        "comment_id": comment_id,
+        "url": evidence.get("url"),
+        "actor": actor,
+        "created_at": evidence.get("created_at"),
+        "content_sha256": body_digest,
+        "head_sha": head_sha,
+        "transport_provenance": provenance,
+    }
     return (
-        source.get("provider") == "github"
-        and source.get("record_kind") == record_kind
-        and source.get("payload_sha256") == digest
-        and source.get("repository") == repository
-        and source.get("actor") == actor
-        and source == expected.source()
-        and any(item == expected for item in verified_envelopes)
+        body == canonical_body
+        and payload_digest == evidence_payload_digest
+        and dict(source) == expected_source
     )

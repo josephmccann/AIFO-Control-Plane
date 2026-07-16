@@ -10,7 +10,7 @@ from typing import Any, Dict, Mapping, Sequence
 
 from .canonical import content_sha256
 from .consumption import ConsumptionBinding, consume_once
-from .records import VerifiedRecordEnvelope, verify_record_envelope
+from .records import verify_record_evidence
 from .schema import validate_document
 from .scope import PathInputError, normalize_paths, path_matches
 
@@ -209,7 +209,7 @@ def _release_allowed(
     declaration: Mapping[str, Any], records: Sequence[Mapping[str, Any]], *,
     mission_id: str, repository: str, pull_request: int, head_sha: str,
     current: datetime, founders: set,
-    verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    evidence_verifier: Any,
 ) -> bool:
     for record in records:
         if not isinstance(record, Mapping) or set(record) != _RELEASE_FIELDS:
@@ -227,9 +227,9 @@ def _release_allowed(
             and record.get("pull_request") == pull_request
             and record.get("head_sha") == head_sha
             and issuer in founders and current < expires
-            and verify_record_envelope(
-                record, "frozen_release", verified_envelopes,
-                repository=repository, actor=issuer,
+            and verify_record_evidence(
+                record, "frozen_release", evidence_verifier,
+                repository=repository, actor=issuer, head_sha=head_sha,
             )
         ):
             return True
@@ -239,7 +239,7 @@ def _release_allowed(
 def _reserved(
     exception: Mapping[str, Any], reservations: Sequence[Mapping[str, Any]], *,
     mission_id: str, repository: str, pull_request: int, head_sha: str,
-    current: datetime, verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    current: datetime, evidence_verifier: Any,
 ) -> bool:
     matches = []
     for reservation in reservations:
@@ -260,9 +260,10 @@ def _reserved(
             and reservation.get("status") == "reserved"
             and created <= current < expires
             and isinstance(reservation.get("source"), Mapping)
-            and verify_record_envelope(
-                reservation, "frozen_reservation", verified_envelopes,
+            and verify_record_evidence(
+                reservation, "frozen_reservation", evidence_verifier,
                 repository=repository, actor=reservation.get("source", {}).get("actor"),
+                head_sha=head_sha,
             )
         ):
             matches.append(reservation)
@@ -274,7 +275,7 @@ def validate_frozen_changes(
     declarations: Sequence[Mapping[str, Any]], exceptions: Sequence[Mapping[str, Any]], *,
     repository: str, pull_request: int, head_sha: str, now: str, action: str,
     git_evidence: Mapping[str, Any],
-    verified_envelopes: Sequence[VerifiedRecordEnvelope],
+    evidence_verifier: Any,
     release_records: Sequence[Mapping[str, Any]],
     durable_reservations: Sequence[Mapping[str, Any]],
     consumption_store: str = "",
@@ -286,12 +287,10 @@ def validate_frozen_changes(
     if not isinstance(policy, Mapping) or validate_document("repository-policy", dict(policy)):
         return _decision(False, "FROZEN_POLICY_INVALID")
     collections = (
-        declarations, exceptions, verified_envelopes, release_records,
-        durable_reservations,
+        declarations, exceptions, release_records, durable_reservations,
     )
     if (
         any(not isinstance(value, (list, tuple)) for value in collections)
-        or any(not isinstance(item, VerifiedRecordEnvelope) for item in verified_envelopes)
         or not isinstance(consumption_store, str)
         or not isinstance(repository, str) or policy.get("repository") != repository
         or mission.get("repository") != repository
@@ -401,9 +400,9 @@ def validate_frozen_changes(
                 (exception.get("release_condition") != declaration.get("release_condition"), "FROZEN_RELEASE_CONDITION_MISMATCH"),
                 (exception.get("one_shot") is not declaration.get("one_shot"), "FROZEN_EXCEPTION_ONE_SHOT_MISMATCH"),
                 (
-                    not verify_record_envelope(
-                        exception, "frozen_exception", verified_envelopes,
-                        repository=repository, actor=issuer,
+                    not verify_record_evidence(
+                        exception, "frozen_exception", evidence_verifier,
+                        repository=repository, actor=issuer, head_sha=head_sha,
                     ),
                     "FROZEN_EXCEPTION_SOURCE_UNAUTHENTICATED",
                 ),
@@ -412,7 +411,7 @@ def validate_frozen_changes(
                         declaration, release_records,
                         mission_id=mission["mission_id"], repository=repository,
                         pull_request=pull_request, head_sha=head_sha, current=current,
-                        founders=founders, verified_envelopes=verified_envelopes,
+                        founders=founders, evidence_verifier=evidence_verifier,
                     ),
                     "FROZEN_RELEASE_CONDITION_UNMET",
                 ),
@@ -422,7 +421,7 @@ def validate_frozen_changes(
                         mission_id=mission["mission_id"], repository=repository,
                         pull_request=pull_request, head_sha=head_sha,
                         current=current,
-                        verified_envelopes=verified_envelopes,
+                        evidence_verifier=evidence_verifier,
                     ),
                     "FROZEN_EXCEPTION_RESERVATION_REQUIRED",
                 ),

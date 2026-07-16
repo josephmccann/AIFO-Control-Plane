@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from engineering_os.frozen import validate_frozen_changes
-from engineering_os.records import authenticate_github_record_comment, record_comment_body
+from tests.engineering_os.fake_github import SealedFakeGitHubTransport, transported_record
 from tests.engineering_os.test_risk import mission, policy
 
 
@@ -31,15 +31,10 @@ def declaration():
 
 
 def github_record(record_kind, payload, comment_id):
-    comment = {
-        "id": comment_id,
-        "html_url": "https://github.com/acme/widgets/issues/123#issuecomment-%d" % comment_id,
-        "issue_url": "https://api.github.com/repos/acme/widgets/issues/123",
-        "user": {"login": "founder"},
-        "created_at": "2026-07-15T00:00:00Z",
-        "body": record_comment_body(record_kind, payload),
-    }
-    return authenticate_github_record_comment(comment, "acme/widgets")
+    return transported_record(
+        record_kind, payload, subject_kind="pull_request", subject_number=42,
+        comment_id=comment_id, head_sha=HEAD,
+    )
 
 
 def exception():
@@ -68,7 +63,7 @@ def exception():
     return github_record("frozen_exception", payload, 9002)[0]
 
 
-def exception_envelope():
+def exception_evidence():
     item = exception()
     item.pop("source")
     return github_record("frozen_exception", item, 9002)[1]
@@ -98,7 +93,7 @@ def release_record():
     return github_record("frozen_release", payload, 9003)[0]
 
 
-def release_envelope():
+def release_evidence():
     item = release_record()
     item.pop("source")
     return github_record("frozen_release", item, 9003)[1]
@@ -116,7 +111,7 @@ def reservation():
     return github_record("frozen_reservation", payload, 9004)[0]
 
 
-def reservation_envelope():
+def reservation_evidence():
     item = reservation()
     item.pop("source")
     return github_record("frozen_reservation", item, 9004)[1]
@@ -137,9 +132,9 @@ def decide(exceptions=(), **updates):
         "now": "2026-07-15T12:00:00Z",
         "action": "write",
         "git_evidence": git_evidence(),
-        "verified_envelopes": [
-            exception_envelope(), release_envelope(), reservation_envelope(),
-        ],
+        "evidence_verifier": SealedFakeGitHubTransport([
+            exception_evidence(), release_evidence(), reservation_evidence(),
+        ]),
         "release_records": [release_record()],
         "durable_reservations": [reservation()],
         "consumption_store": consumption_store,
@@ -158,7 +153,7 @@ class FrozenTests(unittest.TestCase):
         forged_reservation["source"] = exception()["source"]
         result = decide(
             [exception()],
-            verified_envelopes=[exception_envelope()],
+            evidence_verifier=SealedFakeGitHubTransport([exception_evidence()]),
             release_records=[forged_release],
             durable_reservations=[forged_reservation],
         )
@@ -247,7 +242,7 @@ class FrozenTests(unittest.TestCase):
             mission("Tier 2"), policy(), ["src/engine/model.py"], [malformed], [],
             repository="acme/widgets", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", action="write",
-            git_evidence=git_evidence(), verified_envelopes=[],
+            git_evidence=git_evidence(), evidence_verifier=None,
             release_records=[], durable_reservations=[],
             consumption_store="",
         )
@@ -274,7 +269,7 @@ class FrozenTests(unittest.TestCase):
     def test_exception_requires_exact_base_policy_founder_and_authenticated_source(self):
         outsider = exception(); outsider["issuer"] = "outsider"; outsider["source"]["actor"] = "outsider"
         self.assertEqual(decide([outsider]).code, "FROZEN_EXCEPTION_ISSUER_DENIED")
-        self.assertEqual(decide([exception()], verified_envelopes=[]).code, "FROZEN_EXCEPTION_SOURCE_UNAUTHENTICATED")
+        self.assertEqual(decide([exception()], evidence_verifier=None).code, "FROZEN_EXCEPTION_SOURCE_UNAUTHENTICATED")
 
     def test_stale_expired_or_wrong_sha_exception_is_denied(self):
         stale = exception(); stale["status"] = "revoked"
@@ -303,8 +298,8 @@ class FrozenTests(unittest.TestCase):
         incomplete_reservation = reservation(); incomplete_reservation.pop("expires_at")
         self.assertEqual(decide([exception()], durable_reservations=[incomplete_reservation]).code, "FROZEN_EXCEPTION_RESERVATION_REQUIRED")
         self.assertEqual(decide(
-            [exception()], verified_envelopes=[exception()["source"]],
-        ).code, "FROZEN_INPUT_INVALID")
+            [exception()], evidence_verifier=exception()["source"],
+        ).code, "FROZEN_EXCEPTION_SOURCE_UNAUTHENTICATED")
         candidate = exception(); candidate["one_shot"] = False
         self.assertEqual(decide([candidate]).code, "FROZEN_EXCEPTION_ONE_SHOT_MISMATCH")
 
@@ -317,7 +312,7 @@ class FrozenTests(unittest.TestCase):
                 changed_files=["src/other.py"],
                 head_files={"src/engine/model.py": CONTENT_HASH, "src/other.py": "d" * 64},
                 base_files={"src/engine/model.py": CONTENT_HASH},
-            ), verified_envelopes=[], release_records=[],
+            ), evidence_verifier=None, release_records=[],
             durable_reservations=[], consumption_store="",
         )
         self.assertEqual((result.allowed, result.code), (True, "FROZEN_PATHS_UNTOUCHED"))
@@ -326,7 +321,7 @@ class FrozenTests(unittest.TestCase):
             mission("Tier 1"), policy(), ["src/other.py"], [malformed], [],
             repository="acme/widgets", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", action="write",
-            git_evidence=git_evidence(), verified_envelopes=[], release_records=[],
+            git_evidence=git_evidence(), evidence_verifier=None, release_records=[],
             durable_reservations=[], consumption_store="",
         )
         self.assertEqual(denied.code, "FROZEN_DECLARATION_INVALID")
@@ -335,7 +330,7 @@ class FrozenTests(unittest.TestCase):
             mission("Tier 1"), policy(), ["src/other.py"], [incomplete], [],
             repository="acme/widgets", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", action="write",
-            git_evidence=git_evidence(), verified_envelopes=[], release_records=[],
+            git_evidence=git_evidence(), evidence_verifier=None, release_records=[],
             durable_reservations=[], consumption_store="",
         )
         self.assertEqual(denied.code, "FROZEN_DECLARATION_INVALID")
@@ -343,7 +338,7 @@ class FrozenTests(unittest.TestCase):
     def test_malformed_structures_boolean_pr_and_unknown_action_fail_stably(self):
         base = dict(
             repository="acme/widgets", head_sha=HEAD, now="2026-07-15T12:00:00Z",
-            git_evidence=git_evidence(), verified_envelopes=[], release_records=[],
+            git_evidence=git_evidence(), evidence_verifier=None, release_records=[],
             durable_reservations=[], consumption_store="",
         )
         for field, value in (("declarations", None), ("exceptions", None)):

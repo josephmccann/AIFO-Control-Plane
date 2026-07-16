@@ -355,6 +355,58 @@ class DetectorEvasionTests(unittest.TestCase):
                     (root / "tests/test_service.py").write_text(text, encoding="utf-8")
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_python_named_expression_and_unsupported_base_shapes_fail_closed(self):
+        base_expressions = (
+            "(Alias := Base)",
+            "identity(Base)",
+            "(Base if enabled else Other)",
+            "registry[Base]",
+        )
+        for expression in base_expressions:
+            base = (
+                "class Base:\n    pass\n"
+                "class TestThing(%s):\n    def test_x(self):\n        assert True\n" % expression
+            )
+            head = base.replace("class Base:\n    pass", "class Base:\n    __test__ = False")
+            with self.subTest(expression=expression):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_nested_class_collection_structures_fail_closed(self):
+        structures = (
+            (
+                "class TestOuter:\n"
+                "    class Base:\n        pass\n"
+                "    class TestInner(Base):\n"
+                "        def test_x(self):\n            assert True\n",
+                "    class Base:\n        __test__ = False",
+                "    class Base:\n        pass",
+            ),
+            (
+                "class Container:\n"
+                "    class Base:\n        pass\n"
+                "    class Middle(Base):\n        pass\n"
+                "    class TestInner(Middle):\n"
+                "        def test_x(self):\n            assert True\n",
+                "    class Base:\n        __test__ = False",
+                "    class Base:\n        pass",
+            ),
+            (
+                "class Container:\n"
+                "    class TestInner(external.Base):\n"
+                "        def test_x(self):\n            assert True\n",
+                "external.Base",
+                "external.Base",
+            ),
+        )
+        for base, replacement, original in structures:
+            head = base.replace(original, replacement)
+            with self.subTest(base=base):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
         heads = (

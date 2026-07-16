@@ -593,6 +593,16 @@ class _SafeConstantFolder(ast.NodeTransformer):
 
 def _python_stats(text: str, module: str) -> _FileStats:
     tree = ast.parse(text)
+    top_level_classes = {
+        id(statement) for statement in tree.body if isinstance(statement, ast.ClassDef)
+    }
+    for candidate in ast.walk(tree):
+        if not isinstance(candidate, ast.ClassDef):
+            continue
+        if id(candidate) not in top_level_classes:
+            raise SyntaxError("nested Python test collection class")
+        if any(not isinstance(base, (ast.Name, ast.Attribute)) for base in candidate.bases):
+            raise SyntaxError("unsupported Python test base expression")
     aliases = {"skip", "skipIf", "skipUnless"}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):

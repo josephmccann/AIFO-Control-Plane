@@ -1,5 +1,9 @@
 import unittest
 from pathlib import Path
+import json
+import os
+import subprocess
+import tempfile
 
 from engineering_os.audit import normalize_audit_event
 from engineering_os.canonical import content_sha256
@@ -178,6 +182,17 @@ class EvidenceTests(unittest.TestCase):
         )
         self.assertIn("path: base", workflow)
         self.assertIn("path: head", workflow)
+        trusted = workflow.split(
+            "- name: Validate source integrity with immutable kernel", 1
+        )[1]
+        for field in ("BASE_SHA", "HEAD_SHA", "PULL_REQUEST"):
+            self.assertIn(f"{field}:", trusted)
+        self.assertIn('--base-sha "$BASE_SHA"', trusted)
+        self.assertIn('--head-sha "$HEAD_SHA"', trusted)
+        self.assertIn('--pull-request "$PULL_REQUEST"', trusted)
+        self.assertNotIn('--base-sha "${{ inputs.base_sha }}"', trusted)
+        self.assertNotIn('--head-sha "${{ inputs.head_sha }}"', trusted)
+        self.assertNotIn('--pull-request "${{ inputs.pull_request }}"', trusted)
         producer = workflow.split("producer-evidence:", 1)[1].split(
             "\n  manifest:", 1
         )[0]
@@ -236,6 +251,45 @@ class EvidenceTests(unittest.TestCase):
                 base_sha="1" * 40,
                 head_sha="3" * 40,
             )
+
+    def test_package_five_cli_wrappers_are_executable_and_deterministic(self):
+        for name in (
+            "validate-audit", "validate-approval", "generate-evidence",
+            "generate-metrics", "validate-evidence-bundle",
+        ):
+            self.assertTrue(os.access(
+                ROOT / "scripts/engineering-os" / name, os.X_OK,
+            ))
+        denied = subprocess.run(
+            [str(ROOT / "scripts/engineering-os/validate-approval")],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(denied.returncode, 1)
+        self.assertEqual(
+            json.loads(denied.stdout)["code"],
+            "APPROVAL_AUTHENTICATED_ADAPTER_REQUIRED",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audit_path = root / "audit.json"
+            audit_path.write_text(
+                json.dumps(self.audit()), encoding="utf-8",
+            )
+            validated = subprocess.run(
+                [
+                    str(ROOT / "scripts/engineering-os/validate-audit"),
+                    str(audit_path),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(validated.returncode, 0, validated.stderr)
+            self.assertEqual(json.loads(validated.stdout)["code"], "AUDIT_CHAIN_VALID")
 
     def test_package_five_documents_name_trust_and_quota_boundaries(self):
         adversary = (

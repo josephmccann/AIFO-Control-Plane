@@ -118,6 +118,9 @@ jobs:
 
       - name: Validate source integrity with immutable kernel
         env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
           GH_TOKEN: ${{ github.token }}
           EVALUATED_AT: ${{ github.event.pull_request.updated_at }}
         run: |
@@ -126,15 +129,19 @@ jobs:
           kernel/scripts/engineering-os/validate-test-integrity \
             --base-root "$GITHUB_WORKSPACE/base" \
             --head-root "$GITHUB_WORKSPACE/head" \
-            --base-sha "${{ inputs.base_sha }}" \
-            --head-sha "${{ inputs.head_sha }}" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --base-policy "$GITHUB_WORKSPACE/base/.aifo/engineering-os-policy.json" \
-            --pull-request "${{ inputs.pull_request }}" \
+            --pull-request "$PULL_REQUEST" \
             --evaluated-at "$EVALUATED_AT" \
             --output "$RUNNER_TEMP/eos-validated/test-integrity-report.json"
 
       - name: Validate producer artifact boundary with immutable kernel
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
           set -euo pipefail
           kernel/scripts/engineering-os/validate-evidence-bundle \
@@ -142,9 +149,9 @@ jobs:
             producer \
             "$RUNNER_TEMP/eos-validated/producer-bundle.json" \
             --repository "$GITHUB_REPOSITORY" \
-            --pull-request "${{ inputs.pull_request }}" \
-            --base-sha "${{ inputs.base_sha }}" \
-            --head-sha "${{ inputs.head_sha }}"
+            --pull-request "$PULL_REQUEST" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
 
       - name: Retain validated evidence boundary
         uses: actions/upload-artifact@v4

@@ -75,18 +75,23 @@ def project_metrics(
         ):
             raise ValueError("metric event is invalid")
         occurred = _time(event.get("occurred_at"))
-        if occurred < start or occurred >= end:
-            continue
         mission_id = event.get("mission_id")
         if not isinstance(mission_id, str) or not mission_id:
             raise ValueError("metric event mission is invalid")
         event_type = event["type"]
         details = event["details"]
+        in_period = start <= occurred < end
         if event_type == "mission.ready":
+            if occurred >= end:
+                continue
             if mission_id in lifecycle_starts:
                 raise ValueError("duplicate mission lifecycle start")
             lifecycle_starts[mission_id] = occurred
+            if not in_period:
+                continue
         elif event_type == "mission.closed":
+            if not in_period:
+                continue
             if mission_id not in lifecycle_starts or mission_id in lifecycle_seconds:
                 raise ValueError("mission lifecycle is incomplete")
             if occurred < lifecycle_starts[mission_id]:
@@ -94,6 +99,8 @@ def project_metrics(
             lifecycle_seconds[mission_id] = int(
                 (occurred - lifecycle_starts[mission_id]).total_seconds()
             )
+        elif not in_period:
+            continue
         elif event_type.startswith("finding."):
             findings[event_type.split(".", 1)[1]] += 1
         elif event_type == "mission.parked":

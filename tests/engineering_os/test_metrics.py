@@ -133,6 +133,28 @@ class MetricsTests(unittest.TestCase):
                 period_end="2026-07-16T00:00:00Z",
             )
 
+    def test_lifecycle_can_start_before_period_and_close_inside_it(self):
+        metrics = project_metrics(
+            [
+                {
+                    "mission_id": "mission-7",
+                    "type": "mission.ready",
+                    "occurred_at": "2026-07-14T23:00:00Z",
+                    "details": {},
+                },
+                {
+                    "mission_id": "mission-7",
+                    "type": "mission.closed",
+                    "occurred_at": "2026-07-15T01:00:00Z",
+                    "details": {},
+                },
+            ],
+            [],
+            period_start="2026-07-15T00:00:00Z",
+            period_end="2026-07-16T00:00:00Z",
+        )
+        self.assertEqual(metrics["lifecycle_seconds"]["mission-7"], 7200)
+
 
 if __name__ == "__main__":
     unittest.main()

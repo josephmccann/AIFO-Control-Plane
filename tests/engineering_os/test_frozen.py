@@ -146,6 +146,28 @@ def decide(exceptions=(), **updates):
 
 
 class FrozenTests(unittest.TestCase):
+    def test_frozen_contains_malformed_consumption_store_paths(self):
+        class StringSubclass(str):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            malformed = (
+                StringSubclass(str(root / "subclass.sqlite3")),
+                str(root / "nul.sqlite3") + "\x00",
+                str(root / "surrogate.sqlite3") + "\ud800",
+                str(root / ("x" * 10000)),
+            )
+            for store in malformed:
+                with self.subTest(store_type=type(store).__name__, length=len(store)):
+                    try:
+                        result = decide([exception()], consumption_store=store)
+                    except Exception as error:
+                        self.fail("frozen store path escaped: %r" % error)
+                    self.assertEqual(result.code, "FROZEN_EXCEPTION_CONSUMED")
+            valid_store = str(root / "valid.sqlite3")
+            self.assertTrue(decide([exception()], consumption_store=valid_store).allowed)
+
     def test_forged_release_and_reservation_cannot_reuse_exception_source(self):
         forged_release = release_record()
         forged_release["source"] = exception()["source"]

@@ -59,6 +59,112 @@ def decide(records, **updates):
 
 
 class AuthorityTests(unittest.TestCase):
+    def test_consumption_store_rejects_malformed_paths_without_creation(self):
+        class StringSubclass(str):
+            pass
+
+        binding = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            malformed = (
+                ("path_object", root / "path-object.sqlite3"),
+                ("bytes", bytes(str(root / "bytes.sqlite3"), "utf-8")),
+                ("integer", 1),
+                ("string_subclass", StringSubclass(str(root / "subclass.sqlite3"))),
+                ("nul", str(root / "nul.sqlite3") + "\x00"),
+                ("high_surrogate", str(root / "surrogate.sqlite3") + "\ud800"),
+                ("low_surrogate", str(root / "surrogate.sqlite3") + "\udcff"),
+            )
+            for name, store in malformed:
+                with self.subTest(name=name):
+                    before = set(root.iterdir())
+                    try:
+                        result = consume_once(store, [binding])
+                    except Exception as error:
+                        self.fail("malformed store path escaped: %r" % error)
+                    self.assertFalse(result)
+                    self.assertEqual(set(root.iterdir()), before)
+
+            unicode_store = str(root / "ledger-😀.sqlite3")
+            self.assertTrue(consume_once(unicode_store, [binding]))
+            self.assertTrue(consume_once(unicode_store, [ConsumptionBinding(
+                "authority", "record-2", "nonce-2", "2" * 64,
+            )]))
+
+    def test_consumption_store_contains_path_and_cleanup_errors(self):
+        binding = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+        failures = (OSError("os"), ValueError("value"), UnicodeError("unicode"), OverflowError("overflow"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for operation in ("abspath", "isdir", "connect"):
+                for error in failures:
+                    with self.subTest(operation=operation, error=type(error).__name__):
+                        store = str(root / ("%s-%s.sqlite3" % (
+                            operation, type(error).__name__,
+                        )))
+                        target = {
+                            "abspath": "engineering_os.consumption.os.path.abspath",
+                            "isdir": "engineering_os.consumption.os.path.isdir",
+                            "connect": "engineering_os.consumption.sqlite3.connect",
+                        }[operation]
+                        with patch(target, side_effect=error):
+                            try:
+                                result = consume_once(store, [binding])
+                            except Exception as escaped:
+                                self.fail("path operation escaped: %r" % escaped)
+                        self.assertFalse(result)
+                        self.assertFalse(Path(store).exists())
+
+            real_connect = sqlite3.connect
+
+            class CloseFailureConnection:
+                def __init__(self, connection, error):
+                    self.connection = connection
+                    self.error = error
+
+                def __getattr__(self, name):
+                    return getattr(self.connection, name)
+
+                def close(self):
+                    self.connection.close()
+                    raise self.error
+
+            for index, error in enumerate(failures):
+                with self.subTest(operation="close", error=type(error).__name__):
+                    store = str(root / ("close-%d.sqlite3" % index))
+                    proxy = CloseFailureConnection(real_connect(store), error)
+                    with patch("engineering_os.consumption.sqlite3.connect", return_value=proxy):
+                        try:
+                            result = consume_once(store, [binding])
+                        except Exception as escaped:
+                            self.fail("cleanup escaped: %r" % escaped)
+                    self.assertTrue(result)
+                    self.assertTrue(consume_once(store, [ConsumptionBinding(
+                        "authority", "record-2", "nonce-2", "2" * 64,
+                    )]))
+
+    def test_authority_contains_malformed_consumption_store_paths(self):
+        class StringSubclass(str):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            malformed = (
+                StringSubclass(str(root / "subclass.sqlite3")),
+                str(root / "nul.sqlite3") + "\x00",
+                str(root / "surrogate.sqlite3") + "\ud800",
+                str(root / ("x" * 10000)),
+            )
+            for store in malformed:
+                with self.subTest(store_type=type(store).__name__, length=len(store)):
+                    try:
+                        result = decide([record()], consumption_store=store)
+                    except Exception as error:
+                        self.fail("authority store path escaped: %r" % error)
+                    self.assertEqual(result.code, "AUTHORITY_REPLAYED")
+            valid_store = str(root / "valid.sqlite3")
+            self.assertTrue(decide([record()], consumption_store=valid_store).allowed)
+
     def test_transport_evidence_keys_are_exact_before_hash_or_equality(self):
         class StringKeySubclass(str):
             pass

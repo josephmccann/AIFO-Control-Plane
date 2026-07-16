@@ -14,7 +14,7 @@ import math
 import os
 import re
 from collections import Counter
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
@@ -300,11 +300,13 @@ class _CaseStats:
     skips: int
     sourcing_assertions: int
     property_assertions: int
+    focused: bool = False
 
 
 @dataclass(frozen=True)
 class _FileStats:
     cases: Tuple[_CaseStats, ...] = ()
+    focus_declarations: int = 0
 
     @property
     def signatures(self):
@@ -317,6 +319,10 @@ class _FileStats:
     @property
     def skips(self):
         return sum(item.skips for item in self.cases)
+
+    @property
+    def focuses(self):
+        return sum(1 for item in self.cases if item.focused)
 
     @property
     def sourcing_assertions(self):
@@ -826,6 +832,65 @@ def _python_stats(
             raise SyntaxError("shadowed Python collection framework import")
     statement_positions = {id(statement): index for index, statement in enumerate(tree.body)}
 
+    def validate_module_declarations() -> None:
+        module_test_flag_seen = False
+        resolvable_classes = set()
+        bound_names = set()
+        for statement in tree.body:
+            if isinstance(statement, ast.ClassDef):
+                resolvable_classes.add(statement.name)
+                bound_names.add(statement.name)
+                continue
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                bound_names.add(statement.name)
+                continue
+            if isinstance(statement, (ast.Import, ast.ImportFrom)):
+                bound_names.update(
+                    item.asname or item.name.split(".")[0]
+                    for item in statement.names
+                )
+                continue
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = (
+                statement.targets if isinstance(statement, ast.Assign)
+                else [statement.target]
+            )
+            if any(
+                isinstance(target, ast.Name) and target.id == "__test__"
+                for target in targets
+            ):
+                if (
+                    module_test_flag_seen
+                    or len(targets) != 1
+                    or not isinstance(targets[0], ast.Name)
+                    or not isinstance(statement.value, ast.Constant)
+                    or not isinstance(statement.value.value, bool)
+                ):
+                    raise SyntaxError("invalid module Python collection flag")
+                module_test_flag_seen = True
+            if (
+                len(targets) == 1
+                and isinstance(targets[0], ast.Name)
+                and isinstance(statement.value, ast.Name)
+            ):
+                target = targets[0].id
+                source = statement.value.id
+                if (
+                    target in {"pytest", "unittest"}
+                    or target in bound_names
+                    or source not in resolvable_classes
+                ):
+                    raise SyntaxError("unresolved module Python class alias")
+                resolvable_classes.add(target)
+                bound_names.add(target)
+            else:
+                bound_names.update(
+                    target.id for target in targets if isinstance(target, ast.Name)
+                )
+
+    validate_module_declarations()
+
     def exact_module_import_before(name: str, position: int) -> bool:
         bindings = []
         for statement in tree.body[:position]:
@@ -902,6 +967,7 @@ def _python_stats(
 
     def safe_parametrize(
         decorator: ast.Call, position: int, function: Optional[Any],
+        bound_receiver: Optional[str],
     ) -> bool:
         if (
             function is None
@@ -929,6 +995,8 @@ def _python_stats(
                 list(function.args.args) + list(function.args.kwonlyargs)
             )
         }
+        if bound_receiver is not None:
+            parameters.discard(bound_receiver)
         positional = list(function.args.posonlyargs) + list(function.args.args)
         defaulted = {
             item.arg for item in positional[-len(function.args.defaults):]
@@ -990,6 +1058,7 @@ def _python_stats(
 
     def safe_collection_decorator(
         decorator: ast.AST, position: int, function: Optional[Any] = None,
+        bound_receiver: Optional[str] = None,
     ) -> bool:
         if not isinstance(decorator, ast.Call):
             return False
@@ -1021,7 +1090,9 @@ def _python_stats(
                 and _bounded_definition_literal(decorator.args[1])
             )
         if name == ("pytest", "mark", "parametrize"):
-            return safe_parametrize(decorator, position, function)
+            return safe_parametrize(
+                decorator, position, function, bound_receiver,
+            )
         return False
 
     def safe_init_subclass_body(node: Any) -> bool:
@@ -1040,7 +1111,7 @@ def _python_stats(
                     else [statement.target]
                 )
                 if (
-                    not targets
+                    len(targets) != 1
                     or not all(
                         isinstance(target, ast.Attribute)
                         and isinstance(target.value, ast.Name)
@@ -1070,7 +1141,7 @@ def _python_stats(
         return True
 
     def safe_function_definition(
-        node: Any, position: int,
+        node: Any, position: int, *, bound_method: bool = False,
     ) -> bool:
         arguments = node.args
         annotated = (
@@ -1081,6 +1152,13 @@ def _python_stats(
             annotated.append(arguments.vararg)
         if arguments.kwarg is not None:
             annotated.append(arguments.kwarg)
+        positional_receivers = list(arguments.posonlyargs) + list(arguments.args)
+        if bound_method and not positional_receivers:
+            return False
+        bound_receiver = (
+            positional_receivers[0].arg
+            if bound_method and positional_receivers else None
+        )
         parametrized = set()
         for decorator in node.decorator_list:
             if (
@@ -1101,7 +1179,9 @@ def _python_stats(
                 or safe_init_subclass_body(node)
             )
             and all(
-                safe_collection_decorator(item, position, node)
+                safe_collection_decorator(
+                    item, position, node, bound_receiver,
+                )
                 for item in node.decorator_list
             )
             and all(static_definition_value(item) for item in arguments.defaults)
@@ -1149,6 +1229,7 @@ def _python_stats(
 
     def validate_definitions(
         body: Sequence[ast.stmt], owner_position: Optional[int] = None,
+        *, class_body: bool = False,
     ) -> None:
         for statement in body:
             position = (
@@ -1167,9 +1248,11 @@ def _python_stats(
                 ):
                     raise SyntaxError("unproven Python class definition execution")
                 validate_direct_class_flags(statement.body)
-                validate_definitions(statement.body, position)
+                validate_definitions(statement.body, position, class_body=True)
             elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if position is None or not safe_function_definition(statement, position):
+                if position is None or not safe_function_definition(
+                    statement, position, bound_method=class_body,
+                ):
                     raise SyntaxError("unproven Python function definition execution")
             elif isinstance(statement, ast.AnnAssign):
                 if not safe_annotation(statement.annotation):
@@ -1878,8 +1961,10 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
 
     def visit(
         start: int, stop: int, suites: Tuple[str, ...], inherited_skip: bool,
+        inherited_focus: bool = False,
         suite_semantics: Tuple[Tuple[str, Optional[str]], ...] = (),
     ) -> None:
+        nonlocal any_focus, focus_declarations
         index = start
         while index < stop:
             token = tokens[index]
@@ -1916,11 +2001,15 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
             else:
                 body_start = body_open
             skipped = inherited_skip or modifier in ("skip", "todo", "disabled")
+            focused = inherited_focus or modifier == "only"
+            if modifier == "only":
+                any_focus = True
+                focus_declarations += 1
             if root in suite_names:
                 if tokens[body_open].value != "{":
                     raise SyntaxError("suite callback must be a block")
                 visit(
-                    body_start, body_close, suites + (case_title,), skipped,
+                    body_start, body_close, suites + (case_title,), skipped, focused,
                     suite_semantics + ((case_title, modifier),),
                 )
             else:
@@ -1944,14 +2033,27 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                     1 if skipped else 0,
                     assertions if any(term in lowered for term in ("source", "citation", "provenance")) else 0,
                     assertions if any(term in lowered for term in ("property", "invariant")) else 0,
+                    focused,
                 ))
+                case_focus[identity] = focused
             index = call_end + 1
 
+    any_focus = False
+    focus_declarations = 0
+    case_focus = {}
     visit(0, len(tokens), (), False)
+    if any_focus:
+        cases = [
+            item if case_focus.get(item.identity, False)
+            else replace(item, skips=max(1, item.skips))
+            for item in cases
+        ]
     identities = [item.identity for item in cases]
     if len(identities) != len(set(identities)):
         raise _DuplicateCaseError("duplicate JavaScript test runtime identity")
-    return _FileStats(tuple(sorted(cases, key=lambda item: item.identity)))
+    return _FileStats(
+        tuple(sorted(cases, key=lambda item: item.identity)), focus_declarations,
+    )
 
 
 def _test_stats(
@@ -2130,7 +2232,7 @@ def _rename_projection(stats: Optional[_FileStats]) -> Tuple[Tuple[Any, ...], ..
     return tuple(sorted(
         (
             item.local_identity, item.body_hash, item.assertions, item.skips,
-            item.sourcing_assertions, item.property_assertions,
+            item.sourcing_assertions, item.property_assertions, item.focused,
         )
         for item in stats.cases
     ))
@@ -2255,6 +2357,12 @@ def _analyze_test_integrity(
                     "TEST_CASE_SKIP_ADDED", "A test case became skipped or disabled.",
                     path, {"case": identity},
                 ))
+            if after.focused and not before.focused:
+                findings.append(IntegrityFinding(
+                    "TEST_CASE_FOCUS_ADDED",
+                    "A test case became focused and may exclude peer tests.",
+                    path, {"case": identity},
+                ))
             if after.sourcing_assertions < before.sourcing_assertions:
                 findings.append(IntegrityFinding(
                     "TEST_CASE_SOURCING_ASSERTION_REMOVED", "Sourcing assertions declined within a test case.",
@@ -2271,12 +2379,23 @@ def _analyze_test_integrity(
     head_assertions = totals(head_stats, "assertions")
     base_skips = totals(base_stats, "skips")
     head_skips = totals(head_stats, "skips")
+    base_focuses = totals(base_stats, "focuses")
+    head_focuses = totals(head_stats, "focuses")
+    base_focus_declarations = totals(base_stats, "focus_declarations")
+    head_focus_declarations = totals(head_stats, "focus_declarations")
     base_sourcing = totals(base_stats, "sourcing_assertions")
     head_sourcing = totals(head_stats, "sourcing_assertions")
     base_properties = totals(base_stats, "property_assertions")
     head_properties = totals(head_stats, "property_assertions")
     if head_skips > base_skips:
         findings.append(IntegrityFinding("TEST_SKIP_ADDED", "New skipped or disabled tests were detected."))
+    if (
+        head_focuses > base_focuses
+        or head_focus_declarations > base_focus_declarations
+    ):
+        findings.append(IntegrityFinding(
+            "TEST_FOCUS_ADDED", "Focused tests or suites were introduced.",
+        ))
     if head_assertions < base_assertions:
         findings.append(IntegrityFinding("TEST_ASSERTION_DECLINE", "Assertion count declined."))
     if head_sourcing < base_sourcing:
@@ -2456,6 +2575,8 @@ def _analyze_test_integrity(
         "test_cases": sum(head_signatures.values()) - sum(base_signatures.values()),
         "assertions": head_assertions - base_assertions,
         "skips": head_skips - base_skips,
+        "focused_tests": head_focuses - base_focuses,
+        "focus_declarations": head_focus_declarations - base_focus_declarations,
         "sourcing_assertions": head_sourcing - base_sourcing,
         "property_assertions": head_properties - base_properties,
         "fixture_cases": head_fixture_cases - base_fixture_cases,

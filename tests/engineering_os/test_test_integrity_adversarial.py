@@ -996,6 +996,117 @@ class DetectorEvasionTests(unittest.TestCase):
                     (root / "tests/test_service.py").write_text(source, encoding="utf-8")
                 self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_javascript_only_focus_skips_nonfocused_cases(self):
+        base = "test('existing', () => { expect(1); });\n"
+        head = base + "test.only('focused', () => { expect(2); });\n"
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/focus.test.js").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_javascript_new_only_case_is_never_harmless_addition(self):
+        (self.head / "tests/focus.test.js").write_text(
+            "test.only('focused', () => { expect(1); });\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_FOCUS_ADDED", codes(self.analyze()))
+
+    def test_javascript_empty_focused_suite_is_not_harmless(self):
+        (self.head / "tests/focus.test.js").write_text(
+            "describe.only('focused', () => {});\n", encoding="utf-8",
+        )
+        self.assertIn("TEST_FOCUS_ADDED", codes(self.analyze()))
+
+    def test_javascript_only_computed_alias_and_suite_forms_inherit_focus(self):
+        focused = (
+            "it['only']('focused', () => { expect(2); });\n",
+            "const focused = test.only; focused('focused', () => { expect(2); });\n",
+            "describe.only('focused suite', () => { test('inside', () => { expect(2); }); });\n",
+            "suite['only']('focused suite', () => { it('inside', () => { expect(2); }); });\n",
+            "const focused = context['only']; focused('focused suite', () => { test('inside', () => { expect(2); }); });\n",
+        )
+        outside = "test('outside', () => { expect(1); });\n"
+        for declaration in focused:
+            with self.subTest(declaration=declaration):
+                for root, text in ((self.base, outside), (self.head, outside + declaration)):
+                    (root / "tests/focus.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
+    def test_python_module_test_flag_requires_bool_and_controls_all_cases(self):
+        base = "__test__ = True\ndef test_x():\n    assert True\n"
+        head = "__test__ = False\ndef test_x():\n    assert True\n"
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+        invalid = ("0", "None", "''", "enabled")
+        for value in invalid:
+            source = "enabled = False\n__test__ = %s\ndef test_x():\n    assert True\n" % value
+            with self.subTest(value=value):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_module_name_alias_requires_prior_local_class(self):
+        denied = (
+            "ALIAS = missing\n",
+            "unittest = missing\n",
+            "Alias = Later\nclass Later:\n    pass\n",
+            "class Base:\n    pass\nAlias = Base\nAlias = Base\n",
+        )
+        for binding in denied:
+            source = binding + "def test_x():\n    assert True\n"
+            with self.subTest(binding=binding):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        source = (
+            "class Base:\n    pass\nAlias = Base\nOther = Alias\n"
+            "class TestThing(Other):\n"
+            "    def test_x(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_parametrize_rejects_bound_method_receiver(self):
+        receivers = ("self", "instance")
+        for receiver in receivers:
+            source = (
+                "import pytest\nclass TestThing:\n"
+                "    @pytest.mark.parametrize('%s', [1])\n" % receiver
+                + "    def test_x(%s):\n        assert %s\n" % (receiver, receiver)
+            )
+            with self.subTest(receiver=receiver):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        no_receiver = (
+            "import pytest\nclass TestThing:\n"
+            "    @pytest.mark.parametrize('value', [1])\n"
+            "    def test_x(*, value):\n        assert value\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(no_receiver, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        source = (
+            "import pytest\nclass TestThing:\n"
+            "    @pytest.mark.parametrize('value', [1, 2])\n"
+            "    def test_x(self, value):\n        assert value\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_init_subclass_chained_flag_assignment_fails_closed(self):
+        source = (
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        cls.__test__ = cls.__unittest_skip__ = False\n"
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_python_known_safe_definition_metadata_remains_parseable(self):
         sources = (
             (

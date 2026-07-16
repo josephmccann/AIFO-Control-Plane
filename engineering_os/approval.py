@@ -66,6 +66,7 @@ def validate_approval(
         or not isinstance(mission_id, str) or not mission_id
         or action not in (
             "merge", "deploy", "cutover", "cloud_mutation", "spend", "exception",
+            "airtable_write",
         )
         or not isinstance(repository, str)
         or re.fullmatch(r"[^/]+/[^/]+", repository) is None
@@ -110,7 +111,7 @@ def validate_approval(
         (current >= expires_at, "APPROVAL_EXPIRED"),
         (latest_commit > approved_at, "APPROVAL_STALE_HEAD"),
         (
-            action == "merge" and (
+            action in ("merge", "airtable_write") and (
                 approval.get("deployment_authorized") is not False
                 or approval.get("cutover_authorized") is not False
             ),

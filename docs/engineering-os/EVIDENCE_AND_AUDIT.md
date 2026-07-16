@@ -24,3 +24,5 @@ Founder approval is an authenticated GitHub record bound independently to one
 mission, action, repository, pull request, head SHA, environment, merge method,
 validity interval, and issuer. It is atomically single-use. Merge approval keeps
 deployment and cutover false; those actions require separate approvals.
+Airtable-write approval also keeps deployment and cutover false and binds the
+exact target plus canonical projected-record-set hash in its environment.

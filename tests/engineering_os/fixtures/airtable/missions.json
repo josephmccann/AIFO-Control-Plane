@@ -1,0 +1,68 @@
+[
+  {
+    "mission": {
+      "schema_version": "1.0.0",
+      "mission_id": "mission-7",
+      "repository": "acme/widgets",
+      "title": "Mirror mission reporting",
+      "objective": "Report status without exposing customer ACME, token-secret, or financial values.",
+      "acceptance_criteria": [
+        "Dry-run output is deterministic",
+        "Airtable cannot drive GitHub state"
+      ],
+      "allowed_paths": [
+        "engineering_os/**",
+        "tests/engineering_os/**"
+      ],
+      "prohibited_paths": [
+        "terraform/**"
+      ],
+      "dependencies": [],
+      "founder_decisions": [
+        "Keep Airtable reporting-only"
+      ],
+      "risk_tier": "Tier 2",
+      "capabilities": [
+        "read",
+        "write"
+      ],
+      "budgets": {
+        "model_cost_usd": 5.0,
+        "model_tokens": 50000,
+        "wall_clock_minutes": 60,
+        "remediation_cycles": 2,
+        "concurrent_agents": 1,
+        "ci_reruns": 2
+      },
+      "validation_commands": [
+        "python3 -m unittest tests.engineering_os.test_airtable -v"
+      ],
+      "rollback": {
+        "class": "clean_revert",
+        "plan": "Revert the reporting-only package."
+      },
+      "assignments": {
+        "producer": {
+          "identity": "codex",
+          "model_family": "openai"
+        },
+        "adversary": {
+          "identity": "claude",
+          "model_family": "anthropic"
+        }
+      },
+      "eos": {
+        "version": "1.0.0",
+        "constitution_sha256": "a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e"
+      }
+    },
+    "projection": {
+      "schema_version": "1.0.0",
+      "mission_id": "mission-7",
+      "state": "In Progress",
+      "remediation_cycles": 1,
+      "last_event_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "head_sha": "2222222222222222222222222222222222222222"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "schema_version": "1.0.0",
+    "source": "github",
+    "direction": "github_to_airtable",
+    "upsert_key": "acme/widgets#mission-7",
+    "mission_id": "mission-7",
+    "repository": "acme/widgets",
+    "state": "In Progress",
+    "risk_tier": "Tier 2",
+    "head_sha": "2222222222222222222222222222222222222222",
+    "projected_at": "2026-07-16T12:00:00Z"
+  }
+]

@@ -11,7 +11,7 @@
     "approval_id": {"type": "string", "minLength": 1},
     "status": {"const": "approved"},
     "mission_id": {"type": "string", "minLength": 1},
-    "action": {"enum": ["merge", "deploy", "cutover", "cloud_mutation", "spend", "exception"]},
+    "action": {"enum": ["merge", "deploy", "cutover", "cloud_mutation", "spend", "exception", "airtable_write"]},
     "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
     "pull_request": {"type": "integer", "minimum": 1},
     "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},

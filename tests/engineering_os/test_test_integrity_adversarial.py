@@ -107,6 +107,89 @@ class DetectorEvasionTests(unittest.TestCase):
         )
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_javascript_escaped_titles_fail_closed_before_identity(self):
+        collisions = (
+            r"test('a', () => { expect(1); }); test('\x61', () => { expect(1); });" "\n",
+            r"test('a', () => { expect(1); }); test('\u0061', () => { expect(1); });" "\n",
+        )
+        escaped = (
+            r"test('\x61', () => { expect(1); });" "\n",
+            r"test('\u0061', () => { expect(1); });" "\n",
+            r"test('\u{61}', () => { expect(1); });" "\n",
+            r"test('\141', () => { expect(1); });" "\n",
+            "test('a\\\nb', () => { expect(1); });\n",
+            "test('a\u2028b', () => { expect(1); });\n",
+            r"test('\uD800', () => { expect(1); });" "\n",
+            "test(`plain`, () => { expect(1); });\n",
+            "test(`a${value}`, () => { expect(1); });\n",
+            "test('computed' + ' title', () => { expect(1); });\n",
+        )
+        for source in collisions + escaped:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/title.test.js").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+        plain = "test('plain title', () => { expect(1); });\n"
+        for root in (self.base, self.head):
+            (root / "tests/title.test.js").write_text(plain, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        self.assertNotIn("TEST_CASE_DUPLICATE", codes(self.analyze()))
+
+    def test_javascript_callback_free_todo_is_one_skipped_case(self):
+        base = "test('pending', () => { expect(1); });\n"
+        head = "test.todo('pending');\n"
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/todo.test.js").write_text(text, encoding="utf-8")
+        report = self.analyze()
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(report))
+        self.assertIn("TEST_CASE_SKIP_ADDED", codes(report))
+        self.assertEqual(report.deltas["skips"], 1)
+        self.assertEqual(report.deltas["test_cases"], 0)
+
+    def test_javascript_callback_free_todo_supports_exact_references(self):
+        sources = (
+            "test.todo('pending'); it.todo('other');\n",
+            "test['todo']('pending'); it['to' + 'do']('other');\n",
+            "const pending = test.todo; pending('pending');\n",
+            "const pending = test['to' + 'do']; pending('pending');\n",
+            "const spec = test; spec['todo']('pending');\n",
+            "describe('suite', () => { test.todo('pending'); });\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/todo.test.js").write_text(source, encoding="utf-8")
+                report = self.analyze()
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(report))
+                self.assertNotIn("TEST_CASE_DUPLICATE", codes(report))
+
+    def test_javascript_callback_free_non_todo_and_suite_todo_fail_closed(self):
+        sources = (
+            "test('pending');\n",
+            "test.skip('pending');\n",
+            "test.disabled('pending');\n",
+            "test.only('pending');\n",
+            "it('pending');\n",
+            "describe.todo('pending');\n",
+            "describe.todo();\n",
+            "describe.todo('pending',);\n",
+            "suite['todo']('pending');\n",
+            "const pending = describe.todo; pending('pending');\n",
+            "test.todo('pending', 1);\n",
+            "test.todo('pending',);\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/todo.test.js").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+        callback = "test.todo('pending', () => { expect(1); });\n"
+        for root in (self.base, self.head):
+            (root / "tests/todo.test.js").write_text(callback, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_duplicate_python_runtime_identity_is_denied_but_class_scopes_are_distinct(self):
         duplicate = (
             "class First:\n"

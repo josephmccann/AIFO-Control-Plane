@@ -1824,7 +1824,7 @@ def _javascript_tokens(text: str) -> Tuple[_JSToken, ...]:
                     continue
                 if text[index] == quote:
                     break
-                if quote != "`" and text[index] in "\r\n":
+                if quote != "`" and text[index] in "\r\n\u2028\u2029":
                     raise SyntaxError("unterminated JavaScript string")
                 index += 1
             if index >= len(text):
@@ -2041,7 +2041,10 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
     def static_title(token: _JSToken) -> str:
         if token.kind != "string" or token.value[0] == "`":
             raise SyntaxError("static JavaScript test title required")
-        return token.value[1:-1]
+        value = token.value[1:-1]
+        if "\\" in value:
+            raise SyntaxError("escaped JavaScript test title")
+        return value
 
     def visit(
         start: int, stop: int, suites: Tuple[str, ...], inherited_skip: bool,
@@ -2070,20 +2073,31 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
             if call_end > stop or cursor + 1 >= call_end:
                 raise SyntaxError("malformed JavaScript test declaration")
             case_title = static_title(tokens[cursor + 1])
+            callback_free_todo = (
+                root in test_names and modifier == "todo"
+                and cursor + 2 == call_end
+            )
+            if not callback_free_todo and (
+                cursor + 2 >= call_end or tokens[cursor + 2].value != ","
+            ):
+                raise SyntaxError("ambiguous JavaScript test title")
             arrow = next((position for position in range(cursor + 2, call_end) if tokens[position].value == "=>"), None)
             if arrow is None:
-                raise SyntaxError("ambiguous JavaScript test callback")
-            body_open = arrow + 1
-            if body_open >= call_end:
-                raise SyntaxError("missing JavaScript test callback")
-            body_close = call_end
-            if tokens[body_open].value == "{":
-                body_close = closing(body_open)
-                if body_close >= call_end:
-                    raise SyntaxError("JavaScript callback escapes declaration")
-                body_start = body_open + 1
+                if not callback_free_todo:
+                    raise SyntaxError("ambiguous JavaScript test callback")
+                body_open = body_start = body_close = call_end
             else:
-                body_start = body_open
+                body_open = arrow + 1
+                if body_open >= call_end:
+                    raise SyntaxError("missing JavaScript test callback")
+                body_close = call_end
+                if tokens[body_open].value == "{":
+                    body_close = closing(body_open)
+                    if body_close >= call_end:
+                        raise SyntaxError("JavaScript callback escapes declaration")
+                    body_start = body_open + 1
+                else:
+                    body_start = body_open
             skipped = inherited_skip or modifier in ("skip", "todo", "disabled")
             focused = inherited_focus or modifier == "only"
             if modifier == "only":
@@ -2108,6 +2122,7 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                 normalized = canonical_json({
                     "suite_semantics": suite_semantics,
                     "case_modifier": modifier,
+                    "callback": "absent" if callback_free_todo else "present",
                     "body": [(item.kind, item.value) for item in body_tokens],
                 })
                 lowered = normalized.lower() + " " + local_identity.lower()

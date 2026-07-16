@@ -254,6 +254,22 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(text, encoding="utf-8")
         self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
 
+    def test_python_local_base_alias_preserves_inherited_collection_state(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n    pass\n"
+            "Alias = Base\n"
+            "class TestThing(Alias):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        head = base.replace(
+            "class Base(unittest.TestCase):",
+            "@unittest.skip('disabled')\nclass Base(unittest.TestCase):",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
         heads = (

@@ -652,6 +652,25 @@ def _python_stats(text: str, module: str) -> _FileStats:
         statement.name: statement for statement in tree.body
         if isinstance(statement, ast.ClassDef)
     }
+    class_reference_names = {name: name for name in local_classes}
+    assignments_by_name: Dict[str, list] = {}
+    for statement in tree.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                assignments_by_name.setdefault(target.id, []).append(statement.value)
+    changed = True
+    while changed:
+        changed = False
+        for name, values in assignments_by_name.items():
+            if name in class_reference_names or len(values) != 1:
+                continue
+            value = values[0]
+            if isinstance(value, ast.Name) and value.id in class_reference_names:
+                class_reference_names[name] = class_reference_names[value.id]
+                changed = True
     class_cache: Dict[str, Tuple[str, bool]] = {}
 
     def own_class_metadata(node: ast.ClassDef) -> str:
@@ -694,12 +713,15 @@ def _python_stats(text: str, module: str) -> _FileStats:
         inherited_metadata = []
         inherited_disabled = False
         for base in node.bases:
-            if isinstance(base, ast.Name) and base.id in local_classes:
+            if isinstance(base, ast.Name) and base.id in class_reference_names:
+                resolved_name = class_reference_names[base.id]
                 base_metadata, base_disabled = resolved_class_metadata(
-                    local_classes[base.id], trail + (node.name,),
+                    local_classes[resolved_name], trail + (node.name,),
                 )
-                inherited_metadata.append((base.id, base_metadata))
+                inherited_metadata.append((base.id, resolved_name, base_metadata))
                 inherited_disabled = inherited_disabled or base_disabled
+            elif isinstance(base, ast.Name) and base.id in assignments_by_name:
+                raise SyntaxError("ambiguous local test base class")
         result = (
             canonical_json({
                 "class": own_class_metadata(node),

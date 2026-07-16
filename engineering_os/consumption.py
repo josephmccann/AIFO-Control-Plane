@@ -36,15 +36,23 @@ class ConsumptionBinding:
     binding_digest: str
 
 
-def _valid_binding(item: object) -> bool:
-    return (
-        type(item) is ConsumptionBinding
-        and type(item.kind) is str and bool(item.kind)
-        and type(item.record_id) is str and bool(item.record_id)
-        and type(item.nonce) is str and bool(item.nonce)
-        and type(item.binding_digest) is str
-        and _DIGEST.fullmatch(item.binding_digest) is not None
-    )
+def _binding_values(item: object):
+    if type(item) is not ConsumptionBinding:
+        return None
+    try:
+        values = (item.kind, item.record_id, item.nonce, item.binding_digest)
+    except Exception:
+        return None
+    kind, record_id, nonce, binding_digest = values
+    if (
+        type(kind) is not str or not kind
+        or type(record_id) is not str or not record_id
+        or type(nonce) is not str or not nonce
+        or type(binding_digest) is not str
+        or _DIGEST.fullmatch(binding_digest) is None
+    ):
+        return None
+    return values
 
 
 def _compact_sql(value: str) -> str:
@@ -149,9 +157,17 @@ def consume_once(store_path: str, bindings: Sequence[ConsumptionBinding]) -> boo
         not isinstance(store_path, str) or not store_path or store_path == ":memory:"
         or store_path.startswith("file:")
         or not isinstance(bindings, (list, tuple)) or not bindings
-        or any(not _valid_binding(item) for item in bindings)
-        or len({item.record_id for item in bindings}) != len(bindings)
-        or len({item.nonce for item in bindings}) != len(bindings)
+    ):
+        return False
+    values = []
+    for item in bindings:
+        binding = _binding_values(item)
+        if binding is None:
+            return False
+        values.append(binding)
+    if (
+        len({item[1] for item in values}) != len(values)
+        or len({item[2] for item in values}) != len(values)
     ):
         return False
     parent = os.path.dirname(os.path.abspath(store_path))
@@ -166,10 +182,7 @@ def consume_once(store_path: str, bindings: Sequence[ConsumptionBinding]) -> boo
         connection.executemany(
             "INSERT INTO consumed_records(kind, record_id, nonce, binding_digest) "
             "VALUES (?, ?, ?, ?)",
-            [
-                (item.kind, item.record_id, item.nonce, item.binding_digest)
-                for item in bindings
-            ],
+            values,
         )
         connection.execute("COMMIT")
         return True

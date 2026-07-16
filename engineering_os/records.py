@@ -129,7 +129,7 @@ def _verify_record_evidence(
         return False
     retrieve = getattr(evidence_verifier, "retrieve_comment", None)
     provenance = getattr(evidence_verifier, "transport_provenance", None)
-    if not callable(retrieve) or not isinstance(provenance, str) or not provenance:
+    if not callable(retrieve) or type(provenance) is not str or not provenance:
         return False
     try:
         source = record.get("source")
@@ -145,22 +145,36 @@ def _verify_record_evidence(
     subject_kind = evidence.get("subject_kind")
     subject_number = evidence.get("subject_number")
     comment_id = evidence.get("comment_id")
+    evidence_url = evidence.get("url")
+    evidence_actor = evidence.get("actor")
+    created_at = evidence.get("created_at")
+    updated_at = evidence.get("updated_at")
     body = evidence.get("body")
+    evidence_head_sha = evidence.get("head_sha")
+    evidence_provenance = evidence.get("transport_provenance")
+    if (
+        any(type(value) is not str for value in (
+            evidence_repository, subject_kind, evidence_url, evidence_actor,
+            created_at, updated_at, body, evidence_head_sha,
+            evidence_provenance,
+        ))
+        or type(subject_number) is not int
+        or type(comment_id) is not int
+    ):
+        return False
     if (
         evidence_repository != repository
         or subject_kind != locator[1]
-        or subject_number != locator[2] or isinstance(subject_number, bool)
-        or comment_id != locator[3] or isinstance(comment_id, bool)
-        or evidence.get("url") != _exact_url(
+        or subject_number != locator[2]
+        or comment_id != locator[3]
+        or evidence_url != _exact_url(
             repository, subject_kind, subject_number, comment_id,
         )
-        or evidence.get("actor") != actor
-        or not isinstance(evidence.get("created_at"), str)
-        or _TIMESTAMP.fullmatch(evidence.get("created_at")) is None
-        or evidence.get("updated_at") != evidence.get("created_at")
-        or evidence.get("head_sha") != head_sha
-        or evidence.get("transport_provenance") != provenance
-        or not isinstance(body, str)
+        or evidence_actor != actor
+        or _TIMESTAMP.fullmatch(created_at) is None
+        or updated_at != created_at
+        or evidence_head_sha != head_sha
+        or evidence_provenance != provenance
     ):
         return False
     try:
@@ -196,9 +210,9 @@ def _verify_record_evidence(
         "subject_kind": subject_kind,
         "subject_number": subject_number,
         "comment_id": comment_id,
-        "url": evidence.get("url"),
+        "url": evidence_url,
         "actor": actor,
-        "created_at": evidence.get("created_at"),
+        "created_at": created_at,
         "content_sha256": body_digest,
         "head_sha": head_sha,
         "transport_provenance": provenance,

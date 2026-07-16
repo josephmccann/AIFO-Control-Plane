@@ -58,6 +58,97 @@ def decide(records, **updates):
 
 
 class AuthorityTests(unittest.TestCase):
+    def test_evidence_fields_and_adapter_provenance_require_exact_primitives(self):
+        class EqualString(str):
+            def __eq__(self, other):
+                return True
+
+            def __ne__(self, other):
+                return False
+
+            __hash__ = str.__hash__
+
+        class EqualInteger(int):
+            def __eq__(self, other):
+                return True
+
+            def __ne__(self, other):
+                return False
+
+            __hash__ = int.__hash__
+
+        class EqualObject:
+            def __eq__(self, other):
+                return True
+
+            def __ne__(self, other):
+                return False
+
+        class ProxyValue:
+            def __eq__(self, other):
+                raise RuntimeError("proxy equality must not run")
+
+            def __ne__(self, other):
+                raise RuntimeError("proxy inequality must not run")
+
+        payload = record()
+        payload.pop("source")
+        candidate, original = transported_record("authority", payload)
+        string_fields = (
+            "repository", "subject_kind", "url", "actor", "created_at",
+            "updated_at", "body", "head_sha", "transport_provenance",
+        )
+        cases = [
+            (field, "string_subclass", EqualString(original[field]), None)
+            for field in string_fields
+        ]
+        cases.extend(
+            (field, "integer_subclass", EqualInteger(original[field]), None)
+            for field in ("subject_number", "comment_id")
+        )
+        cases.extend(
+            (field, "bool", True, None)
+            for field in ("subject_number", "comment_id")
+        )
+        cases.extend(
+            (field, "custom_equality", EqualObject(), None)
+            for field in string_fields + ("subject_number", "comment_id")
+        )
+        cases.extend(
+            (field, "proxy", ProxyValue(), None)
+            for field in string_fields + ("subject_number", "comment_id")
+        )
+        cases.append((
+            "adapter_transport_provenance", "string_subclass", None,
+            EqualString(SealedFakeGitHubTransport.transport_provenance),
+        ))
+        cases.append((
+            "adapter_transport_provenance", "custom_equality", None,
+            EqualObject(),
+        ))
+        cases.append((
+            "adapter_transport_provenance", "proxy", None, ProxyValue(),
+        ))
+
+        for field, value_type, value, adapter_provenance in cases:
+            with self.subTest(field=field, value_type=value_type):
+                evidence = copy.deepcopy(original)
+                if value is not None:
+                    evidence[field] = value
+                transport = SealedFakeGitHubTransport(evidence)
+                if adapter_provenance is not None:
+                    transport.transport_provenance = adapter_provenance
+                    evidence["transport_provenance"] = adapter_provenance
+                    transport._evidence = evidence
+                self.assertFalse(records_kernel.verify_record_evidence(
+                    candidate, "authority", transport,
+                    repository="acme/widgets", actor="founder", head_sha=HEAD,
+                ))
+                self.assertEqual(
+                    decide([candidate], evidence_verifier=transport).code,
+                    "AUTHORITY_SOURCE_UNAUTHENTICATED",
+                )
+
     def test_adapter_lookup_call_and_return_failures_are_contained(self):
         payload = record()
         payload.pop("source")
@@ -255,6 +346,62 @@ class AuthorityTests(unittest.TestCase):
                         self.assertFalse(consume_once(store, [binding]))
                     except Exception as error:
                         self.fail("malformed binding raised: %r" % error)
+            connection = sqlite3.connect(store)
+            try:
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM consumed_records").fetchone()[0],
+                    1,
+                )
+            finally:
+                connection.close()
+            self.assertTrue(consume_once(store, [second]))
+
+    def test_uninitialized_and_raising_bindings_fail_before_database_open(self):
+        uninitialized = object.__new__(ConsumptionBinding)
+        valid = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "ledger.sqlite3")
+            cases = [("uninitialized", uninitialized, None)]
+            cases.extend((field, valid, field) for field in (
+                "kind", "record_id", "nonce", "binding_digest",
+            ))
+            for name, binding, raising_field in cases:
+                with self.subTest(name=name):
+                    descriptor = (
+                        patch.object(
+                            ConsumptionBinding, raising_field,
+                            property(lambda self: (_ for _ in ()).throw(
+                                RuntimeError("binding attribute failed")
+                            )),
+                            create=True,
+                        )
+                        if raising_field is not None else None
+                    )
+                    if descriptor is not None:
+                        descriptor.start()
+                    try:
+                        with patch(
+                            "engineering_os.consumption.sqlite3.connect",
+                            side_effect=sqlite3.OperationalError("must not open"),
+                        ) as connect:
+                            try:
+                                result = consume_once(store, [binding])
+                            except Exception as error:
+                                self.fail("malformed binding escaped: %r" % error)
+                            self.assertFalse(result)
+                            connect.assert_not_called()
+                    finally:
+                        if descriptor is not None:
+                            descriptor.stop()
+                    self.assertFalse(Path(store).exists())
+
+    def test_malformed_exact_binding_does_not_mutate_existing_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "ledger.sqlite3")
+            first = ConsumptionBinding("authority", "record-1", "nonce-1", "1" * 64)
+            second = ConsumptionBinding("authority", "record-2", "nonce-2", "2" * 64)
+            self.assertTrue(consume_once(store, [first]))
+            self.assertFalse(consume_once(store, [object.__new__(ConsumptionBinding)]))
             connection = sqlite3.connect(store)
             try:
                 self.assertEqual(

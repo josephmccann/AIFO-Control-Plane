@@ -61,7 +61,12 @@ def generate_evidence(
     ):
         raise ValueError("evidence identity or policy is invalid")
     audit = validate_audit_chain(audit_events)
-    if not audit.allowed or not audit.head_hash:
+    if (
+        not audit.allowed
+        or not audit.head_hash
+        or not audit_events
+        or audit_events[0].get("mission_id") != mission.get("mission_id")
+    ):
         raise ValueError("audit evidence is invalid")
     required_checks = policy.get("required_status_checks")
     if (

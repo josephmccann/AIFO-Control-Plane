@@ -141,6 +141,12 @@ class EvidenceTests(unittest.TestCase):
                 },
             ])
 
+    def test_audit_chain_must_belong_to_the_manifest_mission(self):
+        mission = self.mission()
+        mission["mission_id"] = "different-mission"
+        with self.assertRaises(ValueError):
+            self.generate(mission=mission)
+
     def test_artifact_hash_cleanup_and_deployment_state_are_exact(self):
         manifest = self.generate(cleanup_state="pending", deployment_state="not_deployed")
         self.assertEqual(manifest["cleanup_state"], "pending")

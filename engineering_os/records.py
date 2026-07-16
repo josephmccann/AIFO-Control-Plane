@@ -139,7 +139,14 @@ def _verify_record_evidence(
         evidence = retrieve(*locator)
     except Exception:
         return False
-    if not isinstance(evidence, Mapping) or set(evidence) != _EVIDENCE_FIELDS:
+    if not isinstance(evidence, Mapping):
+        return False
+    evidence_keys = list(evidence)
+    if (
+        any(type(key) is not str for key in evidence_keys)
+        or len(evidence_keys) != len(_EVIDENCE_FIELDS)
+        or set(evidence_keys) != _EVIDENCE_FIELDS
+    ):
         return False
     evidence_repository = evidence.get("repository")
     subject_kind = evidence.get("subject_kind")

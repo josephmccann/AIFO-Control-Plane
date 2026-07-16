@@ -1,4 +1,5 @@
 import copy
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 import json
 import sqlite3
@@ -58,6 +59,113 @@ def decide(records, **updates):
 
 
 class AuthorityTests(unittest.TestCase):
+    def test_transport_evidence_keys_are_exact_before_hash_or_equality(self):
+        class StringKeySubclass(str):
+            pass
+
+        class HashBomb:
+            def __init__(self):
+                self.hash_calls = 0
+                self.equality_calls = 0
+
+            def __hash__(self):
+                self.hash_calls += 1
+                raise RuntimeError("unsafe key hash")
+
+            def __eq__(self, other):
+                self.equality_calls += 1
+                raise RuntimeError("unsafe key equality")
+
+        class EqualityBomb(HashBomb):
+            def __hash__(self):
+                self.hash_calls += 1
+                return hash("repository")
+
+        class EvidenceMapping(Mapping):
+            def __init__(self, keys, values, *, iteration_error=False, access_error=False):
+                self._keys = list(keys)
+                self._values = values
+                self._iteration_error = iteration_error
+                self._access_error = access_error
+
+            def __iter__(self):
+                if self._iteration_error:
+                    raise RuntimeError("key iteration failed")
+                return iter(self._keys)
+
+            def __len__(self):
+                return len(self._keys)
+
+            def __getitem__(self, key):
+                if self._access_error:
+                    raise RuntimeError("evidence access failed")
+                return self._values[key]
+
+        class DirectTransport:
+            transport_provenance = SealedFakeGitHubTransport.transport_provenance
+
+            def __init__(self, evidence):
+                self.evidence = evidence
+
+            def retrieve_comment(self, *args):
+                return self.evidence
+
+        payload = record()
+        payload.pop("source")
+        candidate, evidence = transported_record("authority", payload)
+        keys = list(evidence)
+        hash_bomb = HashBomb()
+        equality_bomb = EqualityBomb()
+        cases = (
+            (
+                "custom_hash", EvidenceMapping(
+                    [hash_bomb if key == "repository" else key for key in keys],
+                    evidence,
+                ),
+            ),
+            (
+                "custom_equality", EvidenceMapping(
+                    [*keys, equality_bomb], evidence,
+                ),
+            ),
+            (
+                "string_subclass", EvidenceMapping(
+                    [StringKeySubclass(key) if key == "repository" else key for key in keys],
+                    evidence,
+                ),
+            ),
+            ("duplicate", EvidenceMapping([*keys, "repository"], evidence)),
+            (
+                "equivalent_exotic", EvidenceMapping(
+                    [*keys, StringKeySubclass("repository")], evidence,
+                ),
+            ),
+            ("integer", EvidenceMapping([1, *keys[1:]], evidence)),
+            ("bytes", EvidenceMapping([b"repository", *keys[1:]], evidence)),
+            ("unhashable", EvidenceMapping([[], *keys[1:]], evidence)),
+            ("iteration_error", EvidenceMapping(keys, evidence, iteration_error=True)),
+            ("access_error", EvidenceMapping(keys, evidence, access_error=True)),
+        )
+        for name, transported_evidence in cases:
+            with self.subTest(name=name):
+                transport = DirectTransport(transported_evidence)
+                try:
+                    verified = records_kernel.verify_record_evidence(
+                        candidate, "authority", transport,
+                        repository="acme/widgets", actor="founder", head_sha=HEAD,
+                    )
+                except Exception as error:
+                    self.fail("malformed evidence key escaped: %r" % error)
+                self.assertFalse(verified)
+                self.assertEqual(
+                    decide([candidate], evidence_verifier=transport).code,
+                    "AUTHORITY_SOURCE_UNAUTHENTICATED",
+                )
+        self.assertEqual(hash_bomb.hash_calls, 0)
+        self.assertEqual(hash_bomb.equality_calls, 0)
+        self.assertEqual(equality_bomb.hash_calls, 0)
+        self.assertEqual(equality_bomb.equality_calls, 0)
+
     def test_evidence_fields_and_adapter_provenance_require_exact_primitives(self):
         class EqualString(str):
             def __eq__(self, other):

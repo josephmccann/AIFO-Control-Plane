@@ -88,6 +88,17 @@ class DetectorEvasionTests(unittest.TestCase):
             )
         self.assertIn("TEST_CONFIGURATION_WEAKENED", codes(self.analyze()))
 
+    def test_unknown_test_config_or_workflow_change_requires_review(self):
+        for root, value in ((self.base, "addopts = -q\n"), (self.head, "addopts = --tb=no\n")):
+            (root / "pytest.ini").write_text(value, encoding="utf-8")
+        for root, command in ((self.base, "pytest"), (self.head, "echo no-tests")):
+            path = root / ".github/workflows/quality.yml"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("steps:\n  - run: %s\n" % command, encoding="utf-8")
+        found = codes(self.analyze())
+        self.assertIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
+        self.assertIn("VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS", found)
+
     def test_nested_yaml_fixture_reduction_is_counted(self):
         for root, cases in ((self.base, 2), (self.head, 1)):
             path = root / "tests/fixtures/cases.yaml"
@@ -96,6 +107,13 @@ class DetectorEvasionTests(unittest.TestCase):
                 encoding="utf-8",
             )
         self.assertIn("TEST_FIXTURE_CASE_DECLINE", codes(self.analyze()))
+
+    def test_same_count_fixture_substitution_fails_closed_as_ambiguous(self):
+        for root, value in ((self.base, 1), (self.head, 999)):
+            (root / "tests/fixtures/cases.json").write_text(
+                json.dumps([{"input": value, "output": 2}]), encoding="utf-8",
+            )
+        self.assertIn("TEST_FIXTURE_SUBSTITUTION_AMBIGUOUS", codes(self.analyze()))
 
     def test_deletion_of_configured_quality_yaml_workflow_is_blocked(self):
         for root in (self.base, self.head):

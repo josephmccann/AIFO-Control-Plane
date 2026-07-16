@@ -770,9 +770,15 @@ def analyze_test_integrity(
         ))
     for path in sorted(base_workflows & head_workflows):
         try:
-            if _weakened(_source(base / path), _source(head / path)):
+            before_text, after_text = _source(base / path), _source(head / path)
+            if _weakened(before_text, after_text):
                 findings.append(IntegrityFinding(
                     "VALIDATION_WORKFLOW_WEAKENED", "A validation workflow was weakened.", path,
+                ))
+            elif before_text != after_text:
+                findings.append(IntegrityFinding(
+                    "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS",
+                    "A validation workflow changed in a way that cannot be proven equivalent.", path,
                 ))
         except UnicodeDecodeError:
             findings.append(IntegrityFinding("TEST_FILE_UNREADABLE", "Workflow is not valid UTF-8.", path))
@@ -800,6 +806,11 @@ def analyze_test_integrity(
                 findings.append(IntegrityFinding(
                     "TEST_CONFIGURATION_WEAKENED", "Test configuration was weakened.", path,
                 ))
+            elif before_text != after_text:
+                findings.append(IntegrityFinding(
+                    "TEST_CONFIGURATION_CHANGE_AMBIGUOUS",
+                    "Test configuration changed in a way that cannot be proven equivalent.", path,
+                ))
         except (UnicodeDecodeError, json.JSONDecodeError, TypeError, AttributeError):
             findings.append(IntegrityFinding("TEST_CONFIGURATION_INVALID", "Configuration cannot be compared safely.", path))
 
@@ -816,6 +827,15 @@ def analyze_test_integrity(
                 findings.append(IntegrityFinding(
                     "TEST_FIXTURE_CASE_DECLINE", "Fixture substitution reduced behavioral cases.",
                     path, {"base_cases": before, "head_cases": after},
+                ))
+            elif (
+                before == after and path in base_fixtures and path in head_fixtures
+                and checked["base_manifest"].get(path) != checked["head_manifest"].get(path)
+            ):
+                findings.append(IntegrityFinding(
+                    "TEST_FIXTURE_SUBSTITUTION_AMBIGUOUS",
+                    "Changed fixture cases cannot be proven behaviorally equivalent.", path,
+                    {"base_cases": before, "head_cases": after},
                 ))
         except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
             findings.append(IntegrityFinding(

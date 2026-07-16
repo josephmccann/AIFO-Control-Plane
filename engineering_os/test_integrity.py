@@ -660,6 +660,154 @@ def _python_stats(text: str, module: str) -> _FileStats:
         raise SyntaxError("duplicate local test base class binding")
     local_classes = {statement.name: statement for _, statement in class_statements}
     class_binding_positions = {statement.name: index for index, statement in class_statements}
+
+    binding_records: Dict[str, list] = {}
+
+    def target_names(target: ast.AST) -> Tuple[str, ...]:
+        if isinstance(target, ast.Name):
+            return (target.id,)
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return tuple(name for item in target.elts for name in target_names(item))
+        if isinstance(target, ast.Starred):
+            return target_names(target.value)
+        return ()
+
+    def referenced_names(value: Optional[ast.AST]) -> Tuple[str, ...]:
+        if value is None:
+            return ()
+        return tuple(sorted({
+            child.id for child in ast.walk(value)
+            if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+        }))
+
+    def record_binding(
+        name: str, kind: str, position: int, sources: Tuple[str, ...] = (),
+    ) -> None:
+        binding_records.setdefault(name, []).append((kind, position, sources))
+
+    def record_named_expressions(value: Optional[ast.AST], position: int) -> None:
+        if value is None:
+            return
+        for child in ast.walk(value):
+            if isinstance(child, ast.NamedExpr):
+                for name in target_names(child.target):
+                    record_binding(name, "unsupported", position, referenced_names(child.value))
+
+    def collect_bindings(statement: ast.stmt, position: int, *, top_level: bool) -> None:
+        if isinstance(statement, ast.ClassDef):
+            record_binding(statement.name, "class" if top_level else "unsupported", position)
+            return
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            record_binding(
+                statement.name, "unsupported", position,
+                referenced_names(ast.Module(body=statement.body, type_ignores=[])),
+            )
+            return
+        if isinstance(statement, ast.Assign):
+            sources = referenced_names(statement.value)
+            simple = (
+                top_level and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+                and isinstance(statement.value, ast.Name)
+            )
+            for target in statement.targets:
+                for name in target_names(target):
+                    record_binding(name, "alias" if simple else "unsupported", position, sources)
+            record_named_expressions(statement.value, position)
+            return
+        if isinstance(statement, ast.AnnAssign):
+            for name in target_names(statement.target):
+                record_binding(name, "unsupported", position, referenced_names(statement.value))
+            record_named_expressions(statement.value, position)
+            return
+        if isinstance(statement, ast.AugAssign):
+            for name in target_names(statement.target):
+                record_binding(name, "unsupported", position, referenced_names(statement.value))
+            return
+        if isinstance(statement, ast.Delete):
+            for target in statement.targets:
+                for name in target_names(target):
+                    record_binding(name, "unsupported", position)
+            return
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            for item in statement.names:
+                bound = item.asname or item.name.split(".")[0]
+                record_binding(bound, "unsupported", position)
+            return
+        if isinstance(statement, (ast.For, ast.AsyncFor)):
+            sources = referenced_names(statement.iter)
+            for name in target_names(statement.target):
+                record_binding(name, "unsupported", position, sources)
+            record_named_expressions(statement.iter, position)
+            for child in statement.body + statement.orelse:
+                collect_bindings(child, position, top_level=False)
+            return
+        if isinstance(statement, (ast.With, ast.AsyncWith)):
+            for item in statement.items:
+                record_named_expressions(item.context_expr, position)
+                if item.optional_vars is not None:
+                    for name in target_names(item.optional_vars):
+                        record_binding(
+                            name, "unsupported", position,
+                            referenced_names(item.context_expr),
+                        )
+            for child in statement.body:
+                collect_bindings(child, position, top_level=False)
+            return
+        if isinstance(statement, ast.If):
+            record_named_expressions(statement.test, position)
+            for child in statement.body + statement.orelse:
+                collect_bindings(child, position, top_level=False)
+            return
+        if isinstance(statement, ast.While):
+            record_named_expressions(statement.test, position)
+            for child in statement.body + statement.orelse:
+                collect_bindings(child, position, top_level=False)
+            return
+        if isinstance(statement, ast.Try):
+            for child in statement.body + statement.orelse + statement.finalbody:
+                collect_bindings(child, position, top_level=False)
+            for handler in statement.handlers:
+                if handler.name:
+                    record_binding(handler.name, "unsupported", position)
+                for child in handler.body:
+                    collect_bindings(child, position, top_level=False)
+            return
+        record_named_expressions(statement, position)
+
+    for statement_index, statement in enumerate(tree.body):
+        collect_bindings(statement, statement_index, top_level=True)
+
+    participating_names = set(local_classes)
+    participating_names.update(
+        base.id for _, node in class_statements for base in node.bases
+        if isinstance(base, ast.Name)
+    )
+    changed = True
+    while changed:
+        changed = False
+        for name, records in binding_records.items():
+            related = {source for _, _, sources in records for source in sources}
+            if name in participating_names or related & participating_names:
+                before = len(participating_names)
+                participating_names.add(name)
+                participating_names.update(related)
+                changed = changed or len(participating_names) != before
+    for name in participating_names:
+        records = binding_records.get(name, [])
+        if not records:
+            continue
+        if len(records) != 1:
+            raise SyntaxError("ambiguous local test base binding")
+        kind, position, sources = records[0]
+        if kind == "class":
+            continue
+        if kind != "alias" or len(sources) != 1:
+            raise SyntaxError("unsupported local test base binding")
+        source_records = binding_records.get(sources[0], [])
+        if source_records and min(item[1] for item in source_records) >= position:
+            raise SyntaxError("local test base alias used before binding")
+
     class_reference_names = {name: name for name in local_classes}
     class_reference_positions = dict(class_binding_positions)
     assignments_by_name: Dict[str, list] = {}
@@ -979,11 +1127,9 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
                 and tokens[index + 1].kind == "identifier"
                 and tokens[index + 2].value == "="
             ):
-                referenced, cursor = parenthesized_reference(index + 3)
-                boundary = tokens[cursor].value if cursor < len(tokens) else ""
+                referenced, _ = parenthesized_reference(index + 3)
                 if (
                     referenced in global_references
-                    and boundary in ("", ";", ",", "const", "let", "var")
                     and tokens[index + 1].value not in global_references
                 ):
                     global_references.add(tokens[index + 1].value)

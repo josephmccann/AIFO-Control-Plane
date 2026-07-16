@@ -308,6 +308,53 @@ class DetectorEvasionTests(unittest.TestCase):
                     (root / "tests/test_service.py").write_text(text, encoding="utf-8")
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_python_conditional_and_destructured_local_base_rebinding_fails_closed(self):
+        cases = (
+            (
+                "import unittest\nclass Base(unittest.TestCase):\n    pass\n"
+                "class RuntimeBase(unittest.TestCase):\n    pass\n"
+                "if True:\n    Base = RuntimeBase\n"
+                "class TestThing(Base):\n    def test_x(self):\n        self.assertTrue(True)\n",
+                "RuntimeBase",
+            ),
+            (
+                "import unittest\nclass Base(unittest.TestCase):\n    pass\n"
+                "Alias, = (Base,)\n"
+                "class TestThing(Alias):\n    def test_x(self):\n        self.assertTrue(True)\n",
+                "Base",
+            ),
+        )
+        for base, disabled in cases:
+            head = base.replace(
+                "class %s(unittest.TestCase):" % disabled,
+                "@unittest.skip('disabled')\nclass %s(unittest.TestCase):" % disabled,
+            )
+            with self.subTest(base=base):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_unsupported_local_base_binding_forms_fail_closed(self):
+        bindings = (
+            "if flag:\n    Alias = Base\n",
+            "for Alias in (Base,):\n    pass\n",
+            "Alias: type = Base\n",
+            "Alias = Base\nAlias += Base\n",
+            "if (Alias := Base):\n    pass\n",
+            "from module import value as Alias\n",
+            "def Alias():\n    return Base\n",
+        )
+        for binding in bindings:
+            base = (
+                "class Base:\n    pass\n" + binding
+                + "class TestThing(Alias):\n    def test_x(self):\n        assert True\n"
+            )
+            head = base.replace("class Base:\n    pass", "class Base:\n    __test__ = False")
+            with self.subTest(binding=binding):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
         heads = (
@@ -381,6 +428,22 @@ class DetectorEvasionTests(unittest.TestCase):
         )
         for head in heads:
             with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_asi_alias_after_prior_statement_fails_closed_generally(self):
+        bases = (
+            "const suiteName = 'describe'\nconst root = globalThis\n"
+            "root[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n",
+            "const suiteName = 'describe'\nlet root = (globalThis)\n"
+            "root[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n",
+            "const suiteName = 'describe'\nvar first = globalThis\nconst root = first\n"
+            "root[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n",
+        )
+        for base in bases:
+            head = base.replace("root[suiteName](", "root[suiteName]['skip'](")
+            with self.subTest(base=base):
                 for root, text in ((self.base, base), (self.head, head)):
                     (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))

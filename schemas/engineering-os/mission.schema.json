@@ -18,6 +18,7 @@
     "founder_decisions": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
     "risk_tier": {"enum": ["Tier 0", "Tier 1", "Tier 2"]},
     "capabilities": {"type": "array", "items": {"enum": ["read", "write", "merge", "deploy", "cloud_mutation", "secrets", "customer_data", "spend", "cutover"]}, "uniqueItems": true},
+    "risk_signals": {"type": "array", "items": {"enum": ["methodology", "destructive", "security", "privacy", "public_claim", "cross_module", "cross_repository", "residual_risk"]}, "uniqueItems": true},
     "budgets": {
       "type": "object",
       "additionalProperties": false,

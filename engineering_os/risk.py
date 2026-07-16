@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence, Tuple
 
+from .schema import validate_document
 from .scope import PathInputError, _policy_patterns, normalize_paths, path_matches
 
 
@@ -11,6 +12,7 @@ _TIER_NAME = {value: name for name, value in _TIER_VALUE.items()}
 _TIER_TWO_CAPABILITIES = frozenset(
     ("deploy", "cloud_mutation", "secrets", "customer_data", "spend", "cutover")
 )
+_CAPABILITIES = frozenset(("read", "write", "merge")) | _TIER_TWO_CAPABILITIES
 _TIER_TWO_SIGNALS = frozenset((
     "methodology", "destructive", "security", "privacy", "public_claim",
     "cross_module", "cross_repository", "residual_risk",
@@ -27,9 +29,9 @@ class RiskDecision:
     triggers: Tuple[str, ...] = ()
 
 
-def _invalid(declared: Any, trigger: str) -> RiskDecision:
+def _invalid(declared: Any, trigger: str, code: str = "RISK_INPUT_INVALID") -> RiskDecision:
     declared_name = declared if declared in _TIER_VALUE else "Tier 2"
-    return RiskDecision(False, "RISK_INPUT_INVALID", declared_name, "Tier 2", "Tier 2", (trigger,))
+    return RiskDecision(False, code, declared_name, "Tier 2", "Tier 2", (trigger,))
 
 
 def compute_tier(
@@ -42,6 +44,22 @@ def compute_tier(
     declared = mission.get("risk_tier")
     if declared not in _TIER_VALUE:
         return _invalid(declared, "invalid-declared-tier")
+    capabilities = mission.get("capabilities")
+    if (
+        not isinstance(capabilities, list)
+        or any(not isinstance(item, str) or item not in _CAPABILITIES for item in capabilities)
+    ):
+        return _invalid(declared, "invalid-capabilities")
+    signals = mission.get("risk_signals", [])
+    if (
+        not isinstance(signals, list)
+        or any(not isinstance(item, str) or item not in _TIER_TWO_SIGNALS for item in signals)
+    ):
+        return _invalid(declared, "invalid-risk-signals")
+    if validate_document("mission", dict(mission)):
+        return _invalid(declared, "invalid-mission-schema", "RISK_MISSION_INVALID")
+    if validate_document("repository-policy", dict(policy)):
+        return _invalid(declared, "invalid-policy-schema", "RISK_POLICY_INVALID")
     try:
         changed = normalize_paths(changed_files)
         tier_two_patterns, domains = _policy_patterns(policy)
@@ -77,21 +95,13 @@ def compute_tier(
     if all_explicit_tier_zero:
         computed = 0
 
-    capabilities = mission.get("capabilities", [])
-    if not isinstance(capabilities, list) or any(not isinstance(item, str) for item in capabilities):
-        return _invalid(declared, "invalid-capabilities")
     for capability in sorted(set(capabilities) & _TIER_TWO_CAPABILITIES):
         computed = 2
         triggers.append("capability:%s" % capability)
 
-    signals = mission.get("risk_signals", [])
-    if not isinstance(signals, list) or any(not isinstance(item, str) for item in signals):
-        return _invalid(declared, "invalid-risk-signals")
     for signal in signals:
         computed = 2
         triggers.append("signal:%s" % signal)
-        if signal not in _TIER_TWO_SIGNALS:
-            triggers.append("unknown-signal")
 
     if len(matched_domains) > 1:
         computed = 2

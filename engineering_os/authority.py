@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import re
-from typing import Any, Dict, Mapping, Sequence, Tuple
+from typing import Any, Dict, Mapping, Sequence
 
 from .schema import validate_document
 from .scope import PathInputError, normalize_paths
@@ -40,13 +40,25 @@ def validate_authority(
     mission: Mapping[str, Any], policy: Mapping[str, Any], changed_files: Sequence[str],
     authority_records: Sequence[Mapping[str, Any]], *, action: str,
     pull_request: int, head_sha: str, now: str, subject: str,
+    authenticated_sources: Sequence[Mapping[str, Any]],
+    consumed_record_ids: Sequence[str], consumed_nonces: Sequence[str],
 ) -> AuthorityDecision:
     """Require one exact authority record for every action other than read."""
 
-    if action == "read" and not authority_records:
-        return AuthorityDecision(True, "AUTHORITY_READ_ONLY_DEFAULT")
-    if not authority_records:
-        return _deny("AUTHORITY_REQUIRED")
+    if not isinstance(mission, Mapping) or validate_document("mission", dict(mission)):
+        return _deny("AUTHORITY_MISSION_INVALID")
+    if not isinstance(policy, Mapping) or validate_document("repository-policy", dict(policy)):
+        return _deny("AUTHORITY_POLICY_INVALID")
+    if (
+        not isinstance(authority_records, (list, tuple))
+        or not isinstance(authenticated_sources, (list, tuple))
+        or any(not isinstance(source, Mapping) for source in authenticated_sources)
+        or not isinstance(consumed_record_ids, (list, tuple))
+        or any(not isinstance(value, str) or not value for value in consumed_record_ids)
+        or not isinstance(consumed_nonces, (list, tuple))
+        or any(not isinstance(value, str) or not value for value in consumed_nonces)
+    ):
+        return _deny("AUTHORITY_INPUT_INVALID")
     try:
         changed = normalize_paths(changed_files)
         current = _time(now)
@@ -59,6 +71,10 @@ def validate_authority(
         or not isinstance(subject, str) or not subject
     ):
         return _deny("AUTHORITY_INPUT_INVALID")
+    if action == "read" and not authority_records:
+        return AuthorityDecision(True, "AUTHORITY_READ_ONLY_DEFAULT")
+    if not authority_records:
+        return _deny("AUTHORITY_REQUIRED")
     if policy.get("repository") != mission.get("repository"):
         return _deny("AUTHORITY_POLICY_REPOSITORY_MISMATCH")
     mission_capabilities = mission.get("capabilities")
@@ -75,10 +91,18 @@ def validate_authority(
     if enabling_flag is not None and policy.get(enabling_flag) is not True:
         return _deny("AUTHORITY_POLICY_CAPABILITY_DISABLED")
 
-    founder_values = policy.get("founder_identities", []) if isinstance(policy, Mapping) else []
-    founders = set(founder_values) if isinstance(founder_values, list) and all(
-        isinstance(value, str) and value for value in founder_values
-    ) else set()
+    founders = set(policy["founder_identities"])
+    record_ids = []
+    nonces = []
+    for record in authority_records:
+        if isinstance(record, Mapping):
+            record_ids.append(record.get("record_id"))
+            nonces.append(record.get("nonce"))
+    if (
+        all(isinstance(value, str) for value in record_ids + nonces)
+        and (len(record_ids) != len(set(record_ids)) or len(nonces) != len(set(nonces)))
+    ):
+        return _deny("AUTHORITY_RECORD_DUPLICATE")
     last_denial = _deny("AUTHORITY_REQUIRED")
     for record in authority_records:
         if not isinstance(record, Mapping):
@@ -115,6 +139,17 @@ def validate_authority(
             (record.get("status") != "active", "AUTHORITY_INACTIVE"),
             (current < starts, "AUTHORITY_NOT_STARTED"),
             (current >= expires, "AUTHORITY_EXPIRED"),
+            (
+                record.get("record_id") in set(consumed_record_ids)
+                or record.get("nonce") in set(consumed_nonces),
+                "AUTHORITY_REPLAYED",
+            ),
+            (
+                record.get("source", {}).get("actor") != record.get("issuer")
+                or record.get("source", {}).get("repository") != mission.get("repository")
+                or not any(dict(source) == dict(record.get("source", {})) for source in authenticated_sources),
+                "AUTHORITY_SOURCE_UNAUTHENTICATED",
+            ),
         )
         failed = next((code for condition, code in checks if condition), None)
         if failed:

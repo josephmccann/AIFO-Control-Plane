@@ -10,6 +10,7 @@ from engineering_os.frozen import validate_frozen_changes
 
 parser = argparse.ArgumentParser(description="Validate EOS frozen artifact changes")
 parser.add_argument("--mission", required=True)
+parser.add_argument("--policy", required=True)
 parser.add_argument("--changed-files", required=True)
 parser.add_argument("--declarations", required=True)
 parser.add_argument("--exceptions", required=True)
@@ -17,19 +18,23 @@ parser.add_argument("--repository", required=True)
 parser.add_argument("--pull-request", required=True, type=int)
 parser.add_argument("--head-sha", required=True)
 parser.add_argument("--now", required=True)
-parser.add_argument("--action", default="write")
-parser.add_argument("--observations")
-parser.add_argument("--release-conditions")
-parser.add_argument("--consumed-exceptions")
+parser.add_argument("--action", required=True)
+parser.add_argument("--git-evidence", required=True)
+parser.add_argument("--authenticated-sources", required=True)
+parser.add_argument("--release-records", required=True)
+parser.add_argument("--durable-reservations", required=True)
+parser.add_argument("--consumed-exceptions", required=True)
+parser.add_argument("--consumed-nonces", required=True)
 args = parser.parse_args()
 load = lambda path: json.load(open(path, encoding="utf-8"))
 decision = validate_frozen_changes(
-    load(args.mission), load(args.changed_files), load(args.declarations), load(args.exceptions),
+    load(args.mission), load(args.policy), load(args.changed_files), load(args.declarations), load(args.exceptions),
     repository=args.repository, pull_request=args.pull_request, head_sha=args.head_sha,
     now=args.now, action=args.action,
-    observations=load(args.observations) if args.observations else {},
-    satisfied_release_conditions=load(args.release_conditions) if args.release_conditions else [],
-    consumed_exception_ids=load(args.consumed_exceptions) if args.consumed_exceptions else [],
+    git_evidence=load(args.git_evidence), authenticated_sources=load(args.authenticated_sources),
+    authenticated_release_records=load(args.release_records),
+    durable_reservations=load(args.durable_reservations),
+    consumed_exception_ids=load(args.consumed_exceptions), consumed_nonces=load(args.consumed_nonces),
 )
 print(json.dumps(asdict(decision), sort_keys=True, separators=(",", ":")))
 raise SystemExit(0 if decision.allowed else 1)

@@ -3,67 +3,99 @@ name: Reusable frozen path guard
 on:
   workflow_call:
     inputs:
-      mission_json:
-        description: Authenticated mission declaration JSON
+      issue_number:
+        description: Authenticated mission issue number
         required: true
-        type: string
-      exceptions_json:
-        description: Authenticated founder exception records
-        required: false
-        default: "[]"
-        type: string
-      observations_json:
-        description: Frozen artifact pin observations
-        required: false
-        default: "{}"
-        type: string
-      release_conditions_json:
-        description: Satisfied release condition identifiers
-        required: false
-        default: "[]"
-        type: string
-      consumed_exceptions_json:
-        description: Previously consumed one-shot exception identifiers
-        required: false
-        default: "[]"
-        type: string
+        type: number
 
 permissions: {}
 
 jobs:
   guard:
+    concurrency:
+      group: eos-frozen-${{ github.repository }}-${{ inputs.issue_number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
+      issues: read
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
-      - name: Materialize authenticated inputs and base declarations
+      - name: Derive complete base and head git trees
         env:
-          GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          MISSION_JSON: ${{ inputs.mission_json }}
-          EXCEPTIONS_JSON: ${{ inputs.exceptions_json }}
-          OBSERVATIONS_JSON: ${{ inputs.observations_json }}
-          RELEASE_CONDITIONS_JSON: ${{ inputs.release_conditions_json }}
-          CONSUMED_EXCEPTIONS_JSON: ${{ inputs.consumed_exceptions_json }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          test -n "$BASE_SHA"
+          test -n "$BASE_SHA" && test -n "$HEAD_SHA"
+          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$HEAD_SHA^{commit}"
+          git merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
+          git config diff.renames false
+          git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
           git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
           if ! git show "$BASE_SHA:.aifo/frozen-declarations.json" > "$RUNNER_TEMP/frozen-declarations.json"; then
             printf '[]\n' > "$RUNNER_TEMP/frozen-declarations.json"
           fi
-          printf '%s' "$MISSION_JSON" | jq -e . > "$RUNNER_TEMP/mission.json"
-          printf '%s' "$EXCEPTIONS_JSON" | jq -e . > "$RUNNER_TEMP/exceptions.json"
-          printf '%s' "$OBSERVATIONS_JSON" | jq -e . > "$RUNNER_TEMP/observations.json"
-          printf '%s' "$RELEASE_CONDITIONS_JSON" | jq -e . > "$RUNNER_TEMP/release-conditions.json"
-          printf '%s' "$CONSUMED_EXCEPTIONS_JSON" | jq -e . > "$RUNNER_TEMP/consumed-exceptions.json"
-          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${{ github.event.pull_request.number }}/files" \
-            | jq '[add[] | .filename]' > "$RUNNER_TEMP/changed-files.json"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          root = os.environ["RUNNER_TEMP"]
+          base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
+          raw = open(os.path.join(root, "changed-files.zlist"), "rb").read()
+          if raw and not raw.endswith(b"\0"):
+              raise SystemExit("incomplete NUL-delimited git diff")
+          changed = [item.decode("utf-8") for item in raw.split(b"\0") if item]
+          if len(changed) != len(set(changed)):
+              raise SystemExit("duplicate changed path")
+          def tree(revision):
+              names = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", "-z", revision]).split(b"\0")
+              result = {}
+              for raw_name in names:
+                  if not raw_name:
+                      continue
+                  name = raw_name.decode("utf-8")
+                  content = subprocess.check_output(["git", "show", "%s:%s" % (revision, name)])
+                  result[name] = hashlib.sha256(content).hexdigest()
+              return result
+          evidence = {"repository": os.environ["GITHUB_REPOSITORY"], "base_sha": base, "head_sha": head, "complete": True, "changed_files": changed, "base_files": tree(base), "head_files": tree(head)}
+          json.dump(changed, open(os.path.join(root, "changed-files.json"), "w", encoding="utf-8"))
+          json.dump(evidence, open(os.path.join(root, "git-evidence.json"), "w", encoding="utf-8"), sort_keys=True)
+          PY
+      - name: Authenticate mission history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"
+          python3 - <<'PY'
+          import json, os
+          from engineering_os.commands import authenticate_event_history
+          from engineering_os.mission import parse_issue_body
+          root = os.environ["RUNNER_TEMP"]
+          load = lambda name: json.load(open(os.path.join(root, name), encoding="utf-8"))
+          policy, issue, comments, runs = load("base-policy.json"), load("issue.json"), load("comments.json"), load("runs.json")
+          mission = parse_issue_body(issue.get("body", ""))
+          history = authenticate_event_history(comments, mission, policy, repository=os.environ["GITHUB_REPOSITORY"], actions_runs=runs)
+          if not history.allowed:
+              raise SystemExit("mission history denied: %s" % history.code)
+          json.dump(mission, open(os.path.join(root, "mission.json"), "w", encoding="utf-8"), sort_keys=True)
+          PY
+      - name: Fail closed until Task 5 authenticates exceptions and reservations
+        run: |
+          printf '[]\n' > "$RUNNER_TEMP/exceptions.json"
+          printf '[]\n' > "$RUNNER_TEMP/authenticated-sources.json"
+          printf '[]\n' > "$RUNNER_TEMP/release-records.json"
+          printf '[]\n' > "$RUNNER_TEMP/durable-reservations.json"
+          printf '[]\n' > "$RUNNER_TEMP/consumed-exceptions.json"
+          printf '[]\n' > "$RUNNER_TEMP/consumed-nonces.json"
       - name: Enforce frozen declarations from base revision
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -71,6 +103,7 @@ jobs:
         run: |
           scripts/engineering-os/validate-frozen-artifacts \
             --mission "$RUNNER_TEMP/mission.json" \
+            --policy "$RUNNER_TEMP/base-policy.json" \
             --changed-files "$RUNNER_TEMP/changed-files.json" \
             --declarations "$RUNNER_TEMP/frozen-declarations.json" \
             --exceptions "$RUNNER_TEMP/exceptions.json" \
@@ -78,6 +111,10 @@ jobs:
             --pull-request "$PR_NUMBER" \
             --head-sha "$HEAD_SHA" \
             --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --observations "$RUNNER_TEMP/observations.json" \
-            --release-conditions "$RUNNER_TEMP/release-conditions.json" \
-            --consumed-exceptions "$RUNNER_TEMP/consumed-exceptions.json"
+            --action write \
+            --git-evidence "$RUNNER_TEMP/git-evidence.json" \
+            --authenticated-sources "$RUNNER_TEMP/authenticated-sources.json" \
+            --release-records "$RUNNER_TEMP/release-records.json" \
+            --durable-reservations "$RUNNER_TEMP/durable-reservations.json" \
+            --consumed-exceptions "$RUNNER_TEMP/consumed-exceptions.json" \
+            --consumed-nonces "$RUNNER_TEMP/consumed-nonces.json"

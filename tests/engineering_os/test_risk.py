@@ -1,11 +1,12 @@
-import copy
 import json
 import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
 from engineering_os.risk import compute_tier
+from tests.engineering_os.helpers import load_fixture
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,7 +18,8 @@ def files(name):
 
 
 def policy():
-    return {
+    value = load_fixture("policy-control-plane.json")
+    value.update({
         "repository": "acme/widgets",
         "founder_identities": ["founder"],
         "semantic_domains": [
@@ -44,17 +46,22 @@ def policy():
             },
         ],
         "tier_2_paths": [".aifo/**", ".github/**", "schemas/**", "SECURITY.md"],
-    }
+    })
+    return value
 
 
 def mission(tier="Tier 1"):
-    return {
+    value = load_fixture("mission-valid.json")
+    value.update({
         "mission_id": "mission-123",
         "repository": "acme/widgets",
         "risk_tier": tier,
         "capabilities": ["read", "write"],
         "rollback": {"class": "clean_revert", "plan": "revert"},
-    }
+        "allowed_paths": ["src/reporting/**", "tests/reporting/**", "docs/**", ".aifo/**", ".github/**", "schemas/**"],
+        "prohibited_paths": ["src/reporting/private/**"],
+    })
+    return value
 
 
 class RiskTests(unittest.TestCase):
@@ -113,18 +120,36 @@ class RiskTests(unittest.TestCase):
     def test_unknown_or_malformed_evidence_fails_closed_at_tier_two(self):
         candidate = mission("Tier 2")
         candidate["risk_signals"] = ["unrecognized"]
-        self.assertEqual(compute_tier(candidate, policy(), ["src/reporting/render.py"]).computed_tier, "Tier 2")
+        decision = compute_tier(candidate, policy(), ["src/reporting/render.py"])
+        self.assertEqual((decision.allowed, decision.code, decision.computed_tier), (False, "RISK_INPUT_INVALID", "Tier 2"))
         self.assertEqual(compute_tier(candidate, policy(), ["../escape"]).code, "RISK_INPUT_INVALID")
+
+        unknown_capability = mission("Tier 2")
+        unknown_capability["capabilities"].append("root_access")
+        decision = compute_tier(unknown_capability, policy(), ["src/reporting/render.py"])
+        self.assertEqual((decision.allowed, decision.code, decision.computed_tier), (False, "RISK_INPUT_INVALID", "Tier 2"))
+
+    def test_complete_mission_and_base_policy_schemas_are_required(self):
+        incomplete_mission = mission("Tier 2")
+        incomplete_mission.pop("objective")
+        incomplete_policy = policy()
+        incomplete_policy.pop("required_status_checks")
+        self.assertEqual(compute_tier(incomplete_mission, policy(), ["src/reporting/render.py"]).code, "RISK_MISSION_INVALID")
+        self.assertEqual(compute_tier(mission("Tier 2"), incomplete_policy, ["src/reporting/render.py"]).code, "RISK_POLICY_INVALID")
 
     def test_tier_wrapper_is_executable_and_emits_a_machine_decision(self):
         wrapper = ROOT / "scripts" / "engineering-os" / "validate-tier"
         self.assertTrue(os.access(wrapper, os.X_OK))
-        completed = subprocess.run(
-            [str(wrapper), "--mission", str(ROOT / "tests/engineering_os/fixtures/mission-valid.json"),
-             "--policy", str(ROOT / "tests/engineering_os/fixtures/policy-control-plane.json"),
-             "--changed-files", str(FIXTURES / "tier-2/governance.json")],
-            check=False, capture_output=True, text=True,
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            mission_path = Path(directory) / "mission.json"
+            policy_path = Path(directory) / "policy.json"
+            mission_path.write_text(json.dumps(mission("Tier 2")), encoding="utf-8")
+            policy_path.write_text(json.dumps(policy()), encoding="utf-8")
+            completed = subprocess.run(
+                [str(wrapper), "--mission", str(mission_path), "--policy", str(policy_path),
+                 "--changed-files", str(FIXTURES / "tier-2/governance.json")],
+                check=False, capture_output=True, text=True,
+            )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(json.loads(completed.stdout)["computed_tier"], "Tier 2")
 

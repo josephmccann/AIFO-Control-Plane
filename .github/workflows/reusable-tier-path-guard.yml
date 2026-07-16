@@ -3,20 +3,10 @@ name: Reusable tier and path guard
 on:
   workflow_call:
     inputs:
-      mission_json:
-        description: Authenticated mission declaration JSON
+      issue_number:
+        description: Authenticated mission issue number
         required: true
-        type: string
-      active_missions_json:
-        description: Authenticated active mission projections
-        required: false
-        default: "[]"
-        type: string
-      coordination_records_json:
-        description: Authenticated founder coordination records
-        required: false
-        default: "[]"
-        type: string
+        type: number
 
 permissions: {}
 
@@ -24,40 +14,85 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
+      issues: read
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
-      - name: Materialize authenticated inputs and base policy
+      - name: Derive complete base and head git evidence
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test -n "$BASE_SHA" && test -n "$HEAD_SHA"
+          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$HEAD_SHA^{commit}"
+          git merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
+          git config diff.renames false
+          git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
+          python3 - <<'PY'
+          import json, os
+          raw = open(os.path.join(os.environ["RUNNER_TEMP"], "changed-files.zlist"), "rb").read()
+          if raw and not raw.endswith(b"\0"):
+              raise SystemExit("incomplete NUL-delimited git diff")
+          paths = [item.decode("utf-8") for item in raw.split(b"\0") if item]
+          if len(paths) != len(set(paths)):
+              raise SystemExit("duplicate changed path")
+          json.dump(paths, open(os.path.join(os.environ["RUNNER_TEMP"], "changed-files.json"), "w", encoding="utf-8"))
+          PY
+          git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
+      - name: Authenticate current mission and all active mission histories
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          MISSION_JSON: ${{ inputs.mission_json }}
-          ACTIVE_MISSIONS_JSON: ${{ inputs.active_missions_json }}
-          COORDINATION_RECORDS_JSON: ${{ inputs.coordination_records_json }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
-          test -n "$BASE_SHA"
-          git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
-          printf '%s' "$MISSION_JSON" | jq -e . > "$RUNNER_TEMP/mission.json"
-          printf '%s' "$ACTIVE_MISSIONS_JSON" | jq -e . > "$RUNNER_TEMP/active-missions.json"
-          printf '%s' "$COORDINATION_RECORDS_JSON" | jq -e . > "$RUNNER_TEMP/coordination-records.json"
-          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${{ github.event.pull_request.number }}/files" \
-            | jq '[add[] | .filename]' > "$RUNNER_TEMP/changed-files.json"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/issues.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"
+          mkdir -p "$RUNNER_TEMP/comments"
+          while read -r number; do
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${number}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments/${number}.json"
+          done < <(jq -r '.[].number' "$RUNNER_TEMP/issues.json")
+          python3 - <<'PY'
+          import json, os
+          from engineering_os.commands import discover_repository_mission_candidates, authenticate_event_history
+          from engineering_os.mission import parse_issue_body
+          root = os.environ["RUNNER_TEMP"]
+          load = lambda name: json.load(open(os.path.join(root, name), encoding="utf-8"))
+          policy, issue, issues, runs = load("base-policy.json"), load("issue.json"), load("issues.json"), load("runs.json")
+          comments = {str(item["number"]): load("comments/%s.json" % item["number"]) for item in issues}
+          mission = parse_issue_body(issue.get("body", ""))
+          history = authenticate_event_history(comments[str(issue["number"])], mission, policy, repository=os.environ["GITHUB_REPOSITORY"], actions_runs=runs)
+          if not history.allowed:
+              raise SystemExit("current mission history denied: %s" % history.code)
+          discovery = discover_repository_mission_candidates(issues, comments)
+          if not discovery.allowed:
+              raise SystemExit("repository mission discovery denied: %s" % discovery.code)
+          active = []
+          for candidate in discovery.candidates:
+              checked = authenticate_event_history(candidate["comments"], candidate["mission"], policy, repository=os.environ["GITHUB_REPOSITORY"], actions_runs=runs)
+              if not checked.allowed:
+                  raise SystemExit("repository mission history denied: %s" % checked.code)
+              active.append({"mission_id": candidate["mission"]["mission_id"], "state": checked.projection.state, "paths": candidate["mission"]["allowed_paths"]})
+          json.dump(mission, open(os.path.join(root, "mission.json"), "w", encoding="utf-8"), sort_keys=True)
+          json.dump(active, open(os.path.join(root, "active-missions.json"), "w", encoding="utf-8"), sort_keys=True)
+          PY
       - name: Enforce tier from base policy
         run: |
           scripts/engineering-os/validate-tier \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy "$RUNNER_TEMP/base-policy.json" \
             --changed-files "$RUNNER_TEMP/changed-files.json"
-      - name: Enforce paths and semantic ownership from base policy
+      - name: Enforce paths and semantic ownership without coordination bypass
         run: |
           scripts/engineering-os/validate-paths \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy "$RUNNER_TEMP/base-policy.json" \
             --changed-files "$RUNNER_TEMP/changed-files.json" \
-            --active-missions "$RUNNER_TEMP/active-missions.json" \
-            --coordination-records "$RUNNER_TEMP/coordination-records.json"
+            --active-missions "$RUNNER_TEMP/active-missions.json"

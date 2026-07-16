@@ -13,15 +13,13 @@ parser.add_argument("--mission", required=True)
 parser.add_argument("--policy", required=True)
 parser.add_argument("--changed-files", required=True)
 parser.add_argument("--active-missions")
-parser.add_argument("--coordination-records")
 args = parser.parse_args()
 load = lambda path: json.load(open(path, encoding="utf-8"))
 mission, policy, changed = load(args.mission), load(args.policy), load(args.changed_files)
 active = load(args.active_missions) if args.active_missions else []
-coordination = load(args.coordination_records) if args.coordination_records else []
 violations = validate_scope(mission, policy, changed)
 violations.extend(detect_mission_conflicts(
-    mission, policy, changed, active, coordination_records=coordination,
+    mission, policy, changed, active,
 ))
 print(json.dumps({"allowed": not violations, "violations": [asdict(item) for item in violations]}, sort_keys=True, separators=(",", ":")))
 raise SystemExit(0 if not violations else 1)

@@ -1,5 +1,6 @@
 {
   "schema_version": "1.0.0",
+  "record_id": "authority-record-write-1",
   "authority_id": "authority-write-1",
   "repository": "acme/widgets",
   "paths": ["src/reporting/render.py"],
@@ -11,5 +12,17 @@
   "head_sha": "2222222222222222222222222222222222222222",
   "starts_at": "2026-07-15T00:00:00Z",
   "expires_at": "2026-07-16T00:00:00Z",
-  "status": "active"
+  "status": "active",
+  "nonce": "authority-nonce-write-1",
+  "single_use": true,
+  "source": {
+    "provider": "github",
+    "repository": "acme/widgets",
+    "issue_number": 123,
+    "comment_id": 9001,
+    "url": "https://github.com/acme/widgets/issues/123#issuecomment-9001",
+    "actor": "founder",
+    "created_at": "2026-07-15T00:00:00Z",
+    "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
 }

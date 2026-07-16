@@ -23,6 +23,9 @@ def decide(records, **updates):
         "head_sha": HEAD,
         "now": "2026-07-15T12:00:00Z",
         "subject": "producer-a",
+        "authenticated_sources": [item["source"] for item in records if isinstance(item, dict) and "source" in item],
+        "consumed_record_ids": [],
+        "consumed_nonces": [],
     }
     context.update(updates)
     return validate_authority(
@@ -36,6 +39,16 @@ class AuthorityTests(unittest.TestCase):
         write = decide([])
         self.assertEqual((read.allowed, read.code), (True, "AUTHORITY_READ_ONLY_DEFAULT"))
         self.assertEqual((write.allowed, write.code), (False, "AUTHORITY_REQUIRED"))
+
+    def test_authority_requires_authenticated_source_and_rejects_replay(self):
+        candidate = record()
+        self.assertEqual(decide([candidate], authenticated_sources=[]).code, "AUTHORITY_SOURCE_UNAUTHENTICATED")
+        self.assertEqual(decide([candidate], consumed_record_ids=[candidate["record_id"]]).code, "AUTHORITY_REPLAYED")
+        self.assertEqual(decide([candidate], consumed_nonces=[candidate["nonce"]]).code, "AUTHORITY_REPLAYED")
+
+        duplicate = copy.deepcopy(candidate)
+        duplicate["authority_id"] = "authority-write-2"
+        self.assertEqual(decide([candidate, duplicate]).code, "AUTHORITY_RECORD_DUPLICATE")
 
     def test_exact_active_record_authorizes_only_its_bound_action(self):
         self.assertEqual((decide([record()]).allowed, decide([record()]).code), (True, "AUTHORITY_ALLOWED"))
@@ -68,6 +81,7 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), wrong_base, ["src/reporting/render.py"], [record()],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
+            authenticated_sources=[record()["source"]], consumed_record_ids=[], consumed_nonces=[],
         )
         self.assertEqual(base_denied.code, "AUTHORITY_POLICY_REPOSITORY_MISMATCH")
 
@@ -87,8 +101,9 @@ class AuthorityTests(unittest.TestCase):
             mission("Tier 1"), no_founders, ["src/reporting/render.py"], [record()],
             action="write", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
+            authenticated_sources=[record()["source"]], consumed_record_ids=[], consumed_nonces=[],
         )
-        self.assertEqual(denied.code, "AUTHORITY_ISSUER_DENIED")
+        self.assertEqual(denied.code, "AUTHORITY_POLICY_INVALID")
 
     def test_malformed_timestamps_and_paths_fail_closed(self):
         malformed = record(); malformed["expires_at"] = "tomorrow"
@@ -112,8 +127,22 @@ class AuthorityTests(unittest.TestCase):
             declared_mission, base_policy, ["src/reporting/render.py"], [deploy],
             action="deploy", pull_request=42, head_sha=HEAD,
             now="2026-07-15T12:00:00Z", subject="producer-a",
+            authenticated_sources=[deploy["source"]], consumed_record_ids=[], consumed_nonces=[],
         )
         self.assertEqual(disabled.code, "AUTHORITY_POLICY_CAPABILITY_DISABLED")
+
+    def test_malformed_collections_and_boolean_pr_fail_stably(self):
+        self.assertEqual(validate_authority(
+            mission("Tier 1"), policy(), ["src/reporting/render.py"], None,
+            action="write", pull_request=42, head_sha=HEAD, now="2026-07-15T12:00:00Z",
+            subject="producer-a", authenticated_sources=[], consumed_record_ids=[], consumed_nonces=[],
+        ).code, "AUTHORITY_INPUT_INVALID")
+        self.assertEqual(validate_authority(
+            mission("Tier 1"), policy(), ["src/reporting/render.py"], [record()],
+            action="write", pull_request=True, head_sha=HEAD, now="2026-07-15T12:00:00Z",
+            subject="producer-a", authenticated_sources=[record()["source"]],
+            consumed_record_ids=[], consumed_nonces=[],
+        ).code, "AUTHORITY_INPUT_INVALID")
 
     def test_credential_model_names_real_gap_and_github_app_migration(self):
         text = (ROOT / "docs/engineering-os/CREDENTIAL_MODEL.md").read_text(encoding="utf-8")

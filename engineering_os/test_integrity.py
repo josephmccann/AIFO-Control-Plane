@@ -577,6 +577,89 @@ def _descendant_binding_names(node: ast.AST) -> Tuple[str, ...]:
     return tuple(sorted(names))
 
 
+def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
+    """Detect static forms that can mutate module bindings outside AST Store nodes."""
+
+    namespace_factories = {"globals", "locals", "vars"}
+    mutating_methods = {
+        "update", "setdefault", "__setitem__", "__delitem__", "__ior__",
+        "pop", "popitem", "clear",
+    }
+
+    def direct_namespace(value: ast.AST) -> bool:
+        return (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id in namespace_factories
+            and (value.func.id != "vars" or not value.args and not value.keywords)
+        )
+
+    namespace_aliases = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if len(targets) != 1 or not isinstance(targets[0], ast.Name):
+                continue
+            value = node.value
+            if value is None:
+                continue
+            aliases_namespace = direct_namespace(value) or (
+                isinstance(value, ast.Name) and value.id in namespace_aliases
+            )
+            if aliases_namespace and targets[0].id not in namespace_aliases:
+                namespace_aliases.add(targets[0].id)
+                changed = True
+
+    def namespace(value: ast.AST) -> bool:
+        return direct_namespace(value) or (
+            isinstance(value, ast.Name) and value.id in namespace_aliases
+        )
+
+    def namespace_subscript(value: ast.AST) -> bool:
+        return isinstance(value, ast.Subscript) and namespace(value.value)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if (
+                isinstance(node.func, ast.Name) and node.func.id in {"exec", "eval"}
+            ) or (
+                isinstance(node.func, ast.Attribute) and node.func.attr in {"exec", "eval"}
+            ):
+                return True
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr in mutating_methods
+                and namespace(node.func.value)
+            ):
+                return True
+            if (
+                isinstance(node.func, ast.Name)
+                and node.func.id in {"setattr", "delattr", "setitem", "delitem"}
+                and node.args and namespace(node.args[0])
+            ):
+                return True
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"setitem", "delitem"}
+                and node.args and namespace(node.args[0])
+            ):
+                return True
+        if isinstance(node, ast.Assign):
+            if any(namespace_subscript(target) for target in node.targets):
+                return True
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            if namespace_subscript(node.target):
+                return True
+        elif isinstance(node, ast.Delete):
+            if any(namespace_subscript(target) for target in node.targets):
+                return True
+    return False
+
+
 class _SafeConstantFolder(ast.NodeTransformer):
     def visit_UnaryOp(self, node):
         node = self.generic_visit(node)
@@ -618,6 +701,8 @@ class _SafeConstantFolder(ast.NodeTransformer):
 
 def _python_stats(text: str, module: str) -> _FileStats:
     tree = ast.parse(text)
+    if _has_dynamic_namespace_mutation(tree):
+        raise SyntaxError("dynamic Python namespace mutation")
     top_level_classes = {
         id(statement) for statement in tree.body if isinstance(statement, ast.ClassDef)
     }
@@ -935,6 +1020,8 @@ def _python_stats(text: str, module: str) -> _FileStats:
                 inherited_disabled = inherited_disabled or base_disabled
             elif isinstance(base, ast.Name) and base.id in assignments_by_name:
                 raise SyntaxError("ambiguous local test base class")
+            elif isinstance(base, ast.Name):
+                raise SyntaxError("unresolved Python test base class")
         result = (
             canonical_json({
                 "class": own_class_metadata(node),

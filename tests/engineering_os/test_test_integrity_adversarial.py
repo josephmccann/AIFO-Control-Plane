@@ -205,8 +205,8 @@ class DetectorEvasionTests(unittest.TestCase):
                 "def test_value():\n    assert True\ntest_value.__test__ = False\n",
             ),
             (
-                "class TestValues(Base):\n    def test_value(self):\n        assert True\n",
-                "class TestValues(AlternateBase):\n    def test_value(self):\n        assert True\n",
+                "class TestValues(external.Base):\n    def test_value(self):\n        assert True\n",
+                "class TestValues(external.AlternateBase):\n    def test_value(self):\n        assert True\n",
             ),
         )
         for base, head in cases:
@@ -455,6 +455,73 @@ class DetectorEvasionTests(unittest.TestCase):
             value=ast.Name(id="Base", ctx=ast.Load()),
         )])
         self.assertEqual(_descendant_binding_names(node), ("Alias",))
+
+    def test_python_dynamic_namespace_alias_creation_fails_closed(self):
+        bindings = (
+            'globals()["Alias"] = Base\n',
+            "globals().update(Alias=Base)\n",
+            'exec("Alias = Base")\n',
+        )
+        for binding in bindings:
+            base = (
+                "class Base:\n    pass\n" + binding
+                + "class TestThing(Alias):\n    def test_x(self):\n        assert True\n"
+            )
+            head = base.replace("class Base:\n    pass", "class Base:\n    __test__ = False")
+            with self.subTest(binding=binding):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_unresolved_name_base_fails_closed(self):
+        source = (
+            "class TestThing(UnknownBase):\n"
+            "    def test_x(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_dynamic_namespace_replacement_of_local_base_fails_closed(self):
+        bindings = (
+            'globals()["Base"] = RuntimeBase\n',
+            "locals().update(Base=RuntimeBase)\n",
+            'exec("Base = RuntimeBase")\n',
+        )
+        for binding in bindings:
+            base = (
+                "class Base:\n    pass\n"
+                "class RuntimeBase:\n    pass\n"
+                + binding
+                + "class TestThing(Base):\n    def test_x(self):\n        assert True\n"
+            )
+            head = base.replace(
+                "class RuntimeBase:\n    pass",
+                "class RuntimeBase:\n    __test__ = False",
+            )
+            with self.subTest(binding=binding):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_supported_explicit_and_local_bases_remain_parseable(self):
+        sources = (
+            (
+                "import unittest\n"
+                "class TestThing(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n"
+            ),
+            (
+                "class Base:\n    pass\n"
+                "class TestThing(Base):\n"
+                "    def test_x(self):\n        assert True\n"
+            ),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"

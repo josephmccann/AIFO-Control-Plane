@@ -401,10 +401,10 @@ class FrozenTests(unittest.TestCase):
         self.assertIn("contents: read", workflow_text)
         self.assertNotIn("contents: write", workflow_text)
         self.assertIn("github.event.pull_request.base.sha", workflow_text)
-        self.assertIn('git show "$BASE_SHA:.aifo/engineering-os-policy.json"', workflow_text)
+        self.assertIn('git -C target show "$BASE_SHA:.aifo/engineering-os-policy.json"', workflow_text)
         self.assertIn("fetch-depth: 0", workflow_text)
-        self.assertIn('git cat-file -e "$HEAD_SHA^{commit}"', workflow_text)
-        self.assertIn('git diff --name-only -z "$BASE_SHA" "$HEAD_SHA"', workflow_text)
+        self.assertIn('git -C target cat-file -e "$HEAD_SHA^{commit}"', workflow_text)
+        self.assertIn('git -C target diff --name-only -z "$BASE_SHA" "$HEAD_SHA"', workflow_text)
         self.assertNotIn("pulls/${{ github.event.pull_request.number }}/files", workflow_text)
         for raw_input in ("mission_json", "exceptions_json", "observations_json", "release_conditions_json", "consumed_exceptions_json"):
             self.assertNotIn(raw_input, workflow_text)

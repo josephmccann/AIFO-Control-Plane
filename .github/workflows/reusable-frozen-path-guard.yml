@@ -22,9 +22,20 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out immutable enforcement kernel
+        uses: actions/checkout@v4
         with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: kernel
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Check out target repository base revision
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.base.sha }}
+          path: target
           fetch-depth: 0
           persist-credentials: false
       - name: Derive complete base and head git trees
@@ -33,14 +44,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           test -n "$BASE_SHA" && test -n "$HEAD_SHA"
-          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
-          git cat-file -e "$BASE_SHA^{commit}"
-          git cat-file -e "$HEAD_SHA^{commit}"
-          git merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
-          git config diff.renames false
-          git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
-          git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
-          if ! git show "$BASE_SHA:.aifo/frozen-declarations.json" > "$RUNNER_TEMP/frozen-declarations.json"; then
+          git -C target fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
+          git -C target cat-file -e "$BASE_SHA^{commit}"
+          git -C target cat-file -e "$HEAD_SHA^{commit}"
+          git -C target merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
+          git -C target config diff.renames false
+          git -C target diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
+          git -C target show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
+          if ! git -C target show "$BASE_SHA:.aifo/frozen-declarations.json" > "$RUNNER_TEMP/frozen-declarations.json"; then
             printf '[]\n' > "$RUNNER_TEMP/frozen-declarations.json"
           fi
           python3 - <<'PY'
@@ -58,6 +69,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments.json"
@@ -80,10 +92,12 @@ jobs:
           printf '[]\n' > "$RUNNER_TEMP/exceptions.json"
       - name: Enforce frozen declarations from base revision
         env:
+          GIT_DIR: ${{ github.workspace }}/target/.git
+          GIT_WORK_TREE: ${{ github.workspace }}/target
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          scripts/engineering-os/validate-frozen-artifacts \
+          kernel/scripts/engineering-os/validate-frozen-artifacts \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy "$RUNNER_TEMP/base-policy.json" \
             --declarations "$RUNNER_TEMP/frozen-declarations.json" \

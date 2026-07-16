@@ -11,21 +11,35 @@ on:
 permissions: {}
 
 jobs:
-  validate:
+  mission-history:
+    name: Mission history
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       issues: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out immutable enforcement kernel
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: kernel
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Check out immutable target base revision
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: target
+          fetch-depth: 1
           persist-credentials: false
       - name: Read and flatten authenticated issue history
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
@@ -58,10 +72,70 @@ jobs:
           done < "$RUNNER_TEMP/run-ids.txt"
           if [[ -s "$RUNNER_TEMP/runs.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs.ndjson" > "$RUNNER_TEMP/runs.json"; else printf '[]\n' > "$RUNNER_TEMP/runs.json"; fi
       - name: Authenticate event history, authority, and projection
+        env:
+          PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
           python3 -m engineering_os.commands authenticate-event-history \
             --comments "$RUNNER_TEMP/comments.json" \
             --mission "$RUNNER_TEMP/mission.json" \
-            --policy .aifo/engineering-os-policy.json \
+            --policy target/.aifo/engineering-os-policy.json \
             --runs "$RUNNER_TEMP/runs.json" \
             --repository "$GITHUB_REPOSITORY"
+
+  tier-path:
+    name: Tier and path guard
+    needs: mission-history
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-tier-path-guard.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+
+  frozen-path:
+    name: Frozen path guard
+    needs: mission-history
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-frozen-path-guard.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+
+  test-integrity:
+    name: Test integrity
+    needs: mission-history
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-test-integrity.yml
+
+  evidence:
+    name: Evidence manifest
+    needs: [mission-history, tier-path, frozen-path, test-integrity]
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-evidence-manifest.yml
+    with:
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      pull_request: ${{ github.event.pull_request.number }}
+
+  merge-authorization:
+    name: Merge authorization
+    needs: [mission-history, tier-path, frozen-path, test-integrity, evidence]
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-merge-authorization.yml

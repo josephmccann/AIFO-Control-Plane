@@ -19,9 +19,20 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out immutable enforcement kernel
+        uses: actions/checkout@v4
         with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: kernel
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Check out target repository base revision
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.base.sha }}
+          path: target
           fetch-depth: 0
           persist-credentials: false
       - name: Derive complete base and head git evidence
@@ -30,12 +41,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           test -n "$BASE_SHA" && test -n "$HEAD_SHA"
-          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
-          git cat-file -e "$BASE_SHA^{commit}"
-          git cat-file -e "$HEAD_SHA^{commit}"
-          git merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
-          git config diff.renames false
-          git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
+          git -C target fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
+          git -C target cat-file -e "$BASE_SHA^{commit}"
+          git -C target cat-file -e "$HEAD_SHA^{commit}"
+          git -C target merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
+          git -C target config diff.renames false
+          git -C target diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
           python3 - <<'PY'
           import json, os
           raw = open(os.path.join(os.environ["RUNNER_TEMP"], "changed-files.zlist"), "rb").read()
@@ -46,11 +57,12 @@ jobs:
               raise SystemExit("duplicate changed path")
           json.dump(paths, open(os.path.join(os.environ["RUNNER_TEMP"], "changed-files.json"), "w", encoding="utf-8"))
           PY
-          git show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
+          git -C target show "$BASE_SHA:.aifo/engineering-os-policy.json" > "$RUNNER_TEMP/base-policy.json"
       - name: Authenticate current mission and all active mission histories
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/issues.json"
@@ -85,13 +97,13 @@ jobs:
           PY
       - name: Enforce tier from base policy
         run: |
-          scripts/engineering-os/validate-tier \
+          kernel/scripts/engineering-os/validate-tier \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy "$RUNNER_TEMP/base-policy.json" \
             --changed-files "$RUNNER_TEMP/changed-files.json"
       - name: Enforce paths and semantic ownership without coordination bypass
         run: |
-          scripts/engineering-os/validate-paths \
+          kernel/scripts/engineering-os/validate-paths \
             --mission "$RUNNER_TEMP/mission.json" \
             --policy "$RUNNER_TEMP/base-policy.json" \
             --changed-files "$RUNNER_TEMP/changed-files.json" \

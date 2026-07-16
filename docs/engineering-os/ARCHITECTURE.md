@@ -82,6 +82,15 @@ The product runtime remains outside this package. In particular, the
 deterministic financial engine, customer data, credentials, deployment, and
 external connectors receive no authority from an engineering mission.
 
+Cross-repository reusable workflows maintain two explicit trust roots. An
+immutable enforcement-kernel checkout is selected from the reusable workflow's
+own repository and exact workflow SHA. A separate target-repository checkout
+is selected from the caller repository at the revision being evaluated. Only
+the target checkout supplies source, policy, and declarations. The target
+checkout must never supply executable EOS code. Python imports and EOS command wrappers always run
+from the immutable kernel. If either repository identity, revision, checkout,
+or required policy cannot be established, validation fails closed.
+
 ## Current limitations
 
 GitHub does not provide path-scoped Git credentials, authenticated comments

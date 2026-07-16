@@ -87,6 +87,7 @@ class MergeTests(unittest.TestCase):
             ("status_checks", {"EOS": "success"}, "MERGE_CHECKS_INCOMPLETE"),
             ("adversarial_review_complete", False, "MERGE_REVIEW_INCOMPLETE"),
             ("unresolved_threads", 1, "MERGE_THREADS_UNRESOLVED"),
+            ("unresolved_threads", False, "MERGE_THREADS_UNRESOLVED"),
             ("tier_valid", False, "MERGE_TIER_INVALID"),
             ("approval", {}, "MERGE_APPROVAL_INVALID"),
             ("evidence", {}, "MERGE_EVIDENCE_INVALID"),

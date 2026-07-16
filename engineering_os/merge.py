@@ -52,7 +52,11 @@ def authorize_merge(
         return MergeDecision(False, "MERGE_CHECKS_INCOMPLETE")
     if adversarial_review_complete is not True:
         return MergeDecision(False, "MERGE_REVIEW_INCOMPLETE")
-    if not isinstance(unresolved_threads, int) or unresolved_threads != 0:
+    if (
+        isinstance(unresolved_threads, bool)
+        or not isinstance(unresolved_threads, int)
+        or unresolved_threads != 0
+    ):
         return MergeDecision(False, "MERGE_THREADS_UNRESOLVED")
     if tier_valid is not True:
         return MergeDecision(False, "MERGE_TIER_INVALID")

@@ -1,0 +1,23 @@
+name: Reusable merge authorization
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+      - name: Require authenticated merge adapter
+        run: scripts/engineering-os/validate-merge-authorization

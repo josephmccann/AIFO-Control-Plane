@@ -1,0 +1,17 @@
+name: Engineering incident
+description: Preserve an EOS incident and recovery record.
+title: "[Incident] "
+labels: ["eos:incident"]
+body:
+  - type: input
+    id: origin
+    attributes:
+      label: Originating mission and pull request
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Kill switch, recovery actions, and verification
+    validations:
+      required: true

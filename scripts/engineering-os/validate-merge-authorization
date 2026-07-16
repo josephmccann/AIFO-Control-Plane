@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"allowed":false,"code":"MERGE_AUTHENTICATED_ADAPTER_REQUIRED"}'
+exit 1

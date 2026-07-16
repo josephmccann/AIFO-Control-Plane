@@ -83,6 +83,7 @@ class MergeTests(unittest.TestCase):
     def test_every_merge_gate_fails_closed(self):
         cases = (
             ("state", "Founder Approval", "MERGE_STATE_DENIED"),
+            ("required_checks", [], "MERGE_CHECKS_INCOMPLETE"),
             ("status_checks", {"EOS": "success"}, "MERGE_CHECKS_INCOMPLETE"),
             ("adversarial_review_complete", False, "MERGE_REVIEW_INCOMPLETE"),
             ("unresolved_threads", 1, "MERGE_THREADS_UNRESOLVED"),

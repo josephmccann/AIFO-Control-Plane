@@ -45,6 +45,7 @@ def authorize_merge(
         return MergeDecision(False, "MERGE_STATE_DENIED")
     if (
         not isinstance(required_checks, (list, tuple))
+        or not required_checks
         or not isinstance(status_checks, Mapping)
         or any(status_checks.get(name) != "success" for name in required_checks)
     ):

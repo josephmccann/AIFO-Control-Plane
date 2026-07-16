@@ -199,7 +199,7 @@ class ResourceBudget:
         if self._usage["bytes"] > self._limits["max_total_bytes"]:
             raise OverflowError("TEST_RESOURCE_LIMIT")
 
-    def consume_file(self, path: str, *, phase: str) -> None:
+    def consume_entry(self, path: str, *, phase: str) -> None:
         if not isinstance(path, str) or not path or not phase:
             raise ValueError("TEST_RESOURCE_USAGE_INVALID")
         if len(path.encode("utf-8")) > self._limits["max_path_bytes"]:
@@ -207,6 +207,9 @@ class ResourceBudget:
         self._usage["files"] += 1
         if self._usage["files"] > self._limits["max_files"]:
             raise OverflowError("TEST_RESOURCE_LIMIT")
+
+    def consume_file(self, path: str, *, phase: str) -> None:
+        self.consume_entry(path, phase=phase)
 
     def consume_git_record(self, amount: int) -> None:
         if amount > self._limits["max_git_record_bytes"]:
@@ -518,6 +521,7 @@ def _scan(
                 relative = path.relative_to(root).as_posix()
                 if relative == ".git" or relative.startswith(".git/"):
                     continue
+                budget.consume_entry(relative, phase="checkout-traversal")
                 if entry.is_symlink():
                     raise ValueError("checkout contains a symlink")
                 if entry.is_dir(follow_symlinks=False):
@@ -525,7 +529,6 @@ def _scan(
                     continue
                 if not entry.is_file(follow_symlinks=False):
                     raise ValueError("checkout contains an unsupported entry")
-                budget.consume_file(relative, phase="checkout-discovery")
                 result[relative] = _file_digests(
                     path, config["max_file_bytes"], budget, phase="checkout-digest",
                 )
@@ -648,19 +651,29 @@ def _python_stats(text: str, module: str) -> _FileStats:
         ) and not isinstance(statement, ast.ClassDef)
     )
     module_disabled = any(false_assignment(statement, "__test__") for statement in tree.body)
-    local_classes = {
-        statement.name: statement for statement in tree.body
+    class_statements = [
+        (index, statement) for index, statement in enumerate(tree.body)
         if isinstance(statement, ast.ClassDef)
-    }
+    ]
+    class_names = [statement.name for _, statement in class_statements]
+    if len(class_names) != len(set(class_names)):
+        raise SyntaxError("duplicate local test base class binding")
+    local_classes = {statement.name: statement for _, statement in class_statements}
+    class_binding_positions = {statement.name: index for index, statement in class_statements}
     class_reference_names = {name: name for name in local_classes}
+    class_reference_positions = dict(class_binding_positions)
     assignments_by_name: Dict[str, list] = {}
-    for statement in tree.body:
+    assignment_positions: Dict[str, list] = {}
+    for statement_index, statement in enumerate(tree.body):
         if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
             continue
         targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
         for target in targets:
             if isinstance(target, ast.Name):
                 assignments_by_name.setdefault(target.id, []).append(statement.value)
+                assignment_positions.setdefault(target.id, []).append(statement_index)
+                if target.id in local_classes:
+                    raise SyntaxError("rebound local test base class")
     changed = True
     while changed:
         changed = False
@@ -669,7 +682,11 @@ def _python_stats(text: str, module: str) -> _FileStats:
                 continue
             value = values[0]
             if isinstance(value, ast.Name) and value.id in class_reference_names:
+                position = assignment_positions[name][0]
+                if class_reference_positions[value.id] >= position:
+                    continue
                 class_reference_names[name] = class_reference_names[value.id]
+                class_reference_positions[name] = position
                 changed = True
     class_cache: Dict[str, Tuple[str, bool]] = {}
 
@@ -714,6 +731,8 @@ def _python_stats(text: str, module: str) -> _FileStats:
         inherited_disabled = False
         for base in node.bases:
             if isinstance(base, ast.Name) and base.id in class_reference_names:
+                if class_reference_positions[base.id] >= class_binding_positions.get(node.name, len(tree.body)):
+                    raise SyntaxError("local test base used before binding")
                 resolved_name = class_reference_names[base.id]
                 base_metadata, base_disabled = resolved_class_metadata(
                     local_classes[resolved_name], trail + (node.name,),
@@ -934,25 +953,47 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
 
     global_roots = {"globalThis", "window", "global", "self"}
     global_references = set(global_roots)
+
+    def parenthesized_reference(start: int) -> Tuple[Optional[str], int]:
+        cursor = start
+        openings = 0
+        while cursor < len(tokens) and tokens[cursor].value == "(":
+            openings += 1
+            cursor += 1
+        if cursor >= len(tokens) or tokens[cursor].kind != "identifier":
+            return None, start
+        name = tokens[cursor].value
+        cursor += 1
+        for _ in range(openings):
+            if cursor >= len(tokens) or tokens[cursor].value != ")":
+                return None, start
+            cursor += 1
+        return name, cursor
+
     changed = True
     while changed:
         changed = False
-        for index in range(len(tokens) - 4):
+        for index in range(len(tokens) - 3):
             if (
                 tokens[index].value in ("const", "let", "var")
                 and tokens[index + 1].kind == "identifier"
                 and tokens[index + 2].value == "="
-                and tokens[index + 3].kind == "identifier"
-                and tokens[index + 3].value in global_references
-                and tokens[index + 4].value in (";", ",")
-                and tokens[index + 1].value not in global_references
             ):
-                global_references.add(tokens[index + 1].value)
-                changed = True
+                referenced, cursor = parenthesized_reference(index + 3)
+                boundary = tokens[cursor].value if cursor < len(tokens) else ""
+                if (
+                    referenced in global_references
+                    and boundary in ("", ";", ",", "const", "let", "var")
+                    and tokens[index + 1].value not in global_references
+                ):
+                    global_references.add(tokens[index + 1].value)
+                    changed = True
     collection_names = test_names | suite_names
     for index, token in enumerate(tokens):
         if token.kind == "identifier" and token.value in global_references:
             cursor = index + 1
+            while cursor < len(tokens) and tokens[cursor].value == ")":
+                cursor += 1
             if cursor + 1 < len(tokens) and tokens[cursor].value == "?" and tokens[cursor + 1].value == ".":
                 cursor += 2
             if cursor < len(tokens) and tokens[cursor].value == "[":

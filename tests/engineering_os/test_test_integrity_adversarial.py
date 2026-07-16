@@ -270,6 +270,44 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(text, encoding="utf-8")
         self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
 
+    def test_python_rebound_local_base_fails_closed(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n    pass\n"
+            "class RuntimeBase(unittest.TestCase):\n    pass\n"
+            "Base = RuntimeBase\n"
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        head = base.replace(
+            "class RuntimeBase(unittest.TestCase):",
+            "@unittest.skip('disabled')\nclass RuntimeBase(unittest.TestCase):",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_duplicate_or_cyclic_local_base_bindings_fail_closed(self):
+        cases = (
+            (
+                "class Base:\n    pass\nAlias = Base\nclass Base:\n    pass\n"
+                "class TestThing(Alias):\n    def test_x(self):\n        assert True\n",
+                "class Base:\n    __test__ = False\nAlias = Base\nclass Base:\n    pass\n"
+                "class TestThing(Alias):\n    def test_x(self):\n        assert True\n",
+            ),
+            (
+                "class Base:\n    pass\nAlias = Base\nOther = Alias\nAlias = Other\n"
+                "class TestThing(Alias):\n    def test_x(self):\n        assert True\n",
+                "class Base:\n    __test__ = False\nAlias = Base\nOther = Alias\nAlias = Other\n"
+                "class TestThing(Alias):\n    def test_x(self):\n        assert True\n",
+            ),
+        )
+        for base, head in cases:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"
         heads = (
@@ -321,6 +359,38 @@ class DetectorEvasionTests(unittest.TestCase):
             "globalThis[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n",
             "window[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
             "const root = globalThis; root[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_asi_global_alias_computed_suite_fails_closed(self):
+        base = (
+            "const root = globalThis\nconst suiteName = 'describe'\n"
+            "root[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n"
+        )
+        heads = (
+            base.replace("root[suiteName](", "root[suiteName]['skip']("),
+            base.replace("const root = globalThis", "let root = globalThis"),
+            base.replace(
+                "const root = globalThis",
+                "const first = globalThis\nconst root = first",
+            ),
+        )
+        for head in heads:
+            with self.subTest(head=head):
+                for root, text in ((self.base, base), (self.head, head)):
+                    (root / "tests/suite.test.js").write_text(text, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_javascript_parenthesized_global_computed_suite_fails_closed(self):
+        base = "(globalThis)[suiteName]('suite', () => { it('value', () => { expect(1); }); });\n"
+        heads = (
+            "(globalThis)[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+            "((globalThis))[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
+            "(window)[suiteName]['skip']('suite', () => { it('value', () => { expect(1); }); });\n",
         )
         for head in heads:
             with self.subTest(head=head):
@@ -473,6 +543,40 @@ class DetectorEvasionTests(unittest.TestCase):
         budget.consume_file("c", phase="parsing")
         with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
             budget.consume_file("d", phase="reporting")
+
+    def test_resource_budget_charges_directory_entries_at_exact_boundary(self):
+        from engineering_os.test_integrity import ResourceBudget
+        configured = policy(self.base, self.head)["configuration"]
+        budget = ResourceBudget({**configured, "max_files": 3})
+        budget.consume_entry("one", phase="directory")
+        budget.consume_entry("two", phase="directory")
+        budget.consume_entry("three", phase="file")
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            budget.consume_entry("four", phase="directory")
+
+    def test_checkout_directory_fanout_depth_and_path_are_bounded(self):
+        cases = ("wide", "deep", "long")
+        for shape in cases:
+            with self.subTest(shape=shape):
+                shutil.rmtree(self.head)
+                shutil.copytree(FIXTURES / "head", self.head)
+                if shape == "wide":
+                    for index in range(8):
+                        (self.head / ("empty-%02d" % index)).mkdir()
+                elif shape == "deep":
+                    cursor = self.head
+                    for index in range(8):
+                        cursor = cursor / ("d%d" % index)
+                        cursor.mkdir()
+                else:
+                    (self.head / ("d" * 80)).mkdir()
+                configured = policy(self.base, self.head)
+                configured["configuration"]["max_files"] = 2 * (
+                    len(configured["base_manifest"]) + len(configured["head_manifest"])
+                ) + 5
+                if shape == "long":
+                    configured["configuration"]["max_path_bytes"] = 64
+                self.assertIn("TEST_RESOURCE_LIMIT", codes(self.analyze(configured)))
 
     def test_report_contains_authenticated_mission_and_pr_truth(self):
         report = self.analyze().to_dict()
@@ -661,6 +765,32 @@ class RevisionEvidenceTests(unittest.TestCase):
             derive_git_manifests(
                 base, repo, base_sha, head_sha, 1024 * 1024, limits,
                 resource_budget=budget,
+            )
+
+    def test_git_adapter_reconciliation_charges_empty_directory_fanout(self):
+        from engineering_os.test_integrity import ResourceBudget
+        from engineering_os.test_integrity_cli import derive_git_manifests
+        repo, base_sha = self.repository("repo")
+        (repo / "tests/test_value.py").write_text(
+            "def test_value():\n    assert 1 == 1\n", encoding="utf-8",
+        )
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-qm", "head")
+        head_sha = self.git(repo, "rev-parse", "HEAD")
+        base = self.root / "base-worktree"
+        self.git(repo, "worktree", "add", "-q", "--detach", str(base), base_sha)
+        for index in range(5):
+            (repo / ("empty-%d" % index)).mkdir()
+        limits = {
+            "max_files": 8, "max_total_bytes": 65536,
+            "max_path_bytes": 128, "max_git_record_bytes": 256,
+            "max_github_pages": 2, "max_github_items": 10,
+            "max_github_response_bytes": 1024, "max_coverage_bytes": 1024,
+        }
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            derive_git_manifests(
+                base, repo, base_sha, head_sha, 1024 * 1024, limits,
+                resource_budget=ResourceBudget(limits),
             )
 
 

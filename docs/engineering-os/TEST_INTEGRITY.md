@@ -8,7 +8,7 @@ Executable test discovery is parser-backed and fail closed. Python semantics bin
 
 Coverage deltas are accepted only when a sealed trusted adapter result binds the coverage bytes and source manifest to an independently retrieved successful GitHub Actions run, exact workflow revision, artifact identity and digest, repository, commit, and transport timestamp. Repositories without coverage evidence do not need an attestation; configured coverage with unavailable or mismatched transport evidence fails closed.
 
-The adapter and kernel share one non-resetting resource budget across policy and manifest validation, Git discovery, filesystem reconciliation, parsing, semantic comparison, GitHub transport, coverage verification, and report construction. Caps cover files, total processed bytes, paths, Git records, GitHub pagination/items/responses, and coverage artifacts. Git tree and filesystem evidence is streamed rather than collected through an unbounded repository-wide traversal, and resource failures preserve the pre-initialized machine denial report.
+The adapter and kernel share one non-resetting resource budget across policy and manifest validation, Git discovery, filesystem reconciliation, parsing, semantic comparison, GitHub transport, coverage verification, and report construction. Caps cover filesystem entries (including directories), total processed bytes, paths, Git records, GitHub pagination/items/responses, and coverage artifacts. Directory paths are validated and charged before enqueueing, so wide empty fanout and deep trees cannot evade the streamed traversal budget. Resource failures preserve the pre-initialized machine denial report.
 
 ## Activation boundary
 

@@ -176,6 +176,7 @@ def _tree_manifest(
         manifest[name] = evidence
     disk = set()
     pending = [root]
+    reconciled_entries = 0
     while pending:
         directory = pending.pop()
         with os.scandir(str(directory)) as entries:
@@ -184,6 +185,14 @@ def _tree_manifest(
                 relative = path.relative_to(root)
                 if relative.parts and relative.parts[0] == ".git":
                     continue
+                reconciled_entries += 1
+                if reconciled_entries > limits["max_files"]:
+                    raise OverflowError("TEST_RESOURCE_LIMIT")
+                name = relative.as_posix()
+                if resource_budget is not None:
+                    resource_budget.consume_entry(name, phase="filesystem-reconciliation")
+                elif len(name.encode("utf-8")) > limits["max_path_bytes"]:
+                    raise OverflowError("TEST_RESOURCE_LIMIT")
                 if entry.is_symlink():
                     raise ValueError("TEST_CHECKOUT_DIRTY")
                 if entry.is_dir(follow_symlinks=False):
@@ -192,11 +201,6 @@ def _tree_manifest(
                 if not entry.is_file(follow_symlinks=False):
                     raise ValueError("TEST_CHECKOUT_DIRTY")
                 if len(disk) >= limits["max_files"]:
-                    raise OverflowError("TEST_RESOURCE_LIMIT")
-                name = relative.as_posix()
-                if resource_budget is not None:
-                    resource_budget.consume_file(name, phase="filesystem-reconciliation")
-                elif len(name.encode("utf-8")) > limits["max_path_bytes"]:
                     raise OverflowError("TEST_RESOURCE_LIMIT")
                 disk.add(name)
     if disk != set(manifest):

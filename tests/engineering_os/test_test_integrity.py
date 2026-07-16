@@ -198,7 +198,7 @@ class TestIntegrityTests(unittest.TestCase):
             encoding="utf-8",
         )
         found = codes(self.analyze())
-        self.assertIn("TEST_SKIP_ADDED", found)
+        self.assertIn("TEST_FILE_UNPARSABLE", found)
         self.assertIn("TEST_ASSERTION_DECLINE", found)
 
     def test_javascript_skip_alias_and_config_level_disablement_are_reported(self):

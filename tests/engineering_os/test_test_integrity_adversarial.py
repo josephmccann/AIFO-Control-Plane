@@ -38,7 +38,7 @@ class DetectorEvasionTests(unittest.TestCase):
         head = "from unittest import skip as defer\n@defer('later')\ndef test_value():\n    assert 1 == 1\n"
         for root, text in ((self.base, base), (self.head, head)):
             (root / "tests/test_service.py").write_text(text, encoding="utf-8")
-        self.assertIn("TEST_SKIP_ADDED", codes(self.analyze()))
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_assertion_comment_cannot_offset_removed_semantic_assertion(self):
         (self.base / "tests/test_service.py").write_text(
@@ -160,12 +160,14 @@ class DetectorEvasionTests(unittest.TestCase):
     def test_python_signature_defaults_decorators_and_async_state_are_semantic(self):
         cases = (
             (
-                "def test_value(value=authoritative()):\n    assert value\n",
-                "def test_value(value=True):\n    assert value\n",
+                "def test_value(value=1):\n    assert value\n",
+                "def test_value(value=2):\n    assert value\n",
             ),
             (
-                "@mark.authoritative\ndef test_value():\n    assert True\n",
-                "@mark.fallback\ndef test_value():\n    assert True\n",
+                "import pytest\n@pytest.mark.parametrize('value', [1])\n"
+                "def test_value(value):\n    assert value\n",
+                "import pytest\n@pytest.mark.parametrize('value', [2])\n"
+                "def test_value(value):\n    assert value\n",
             ),
             (
                 "async def test_value():\n    assert True\n",
@@ -619,7 +621,7 @@ class DetectorEvasionTests(unittest.TestCase):
         source = (
             "import unittest\nimport json as json_module\n"
             "LABEL = 'collection metadata'\nENABLED = True\n"
-            "def helper(value=LABEL):\n    return value\n"
+            "def helper(value='collection metadata'):\n    return value\n"
             "class Base(unittest.TestCase):\n    pass\n"
             "Alias = Base\n"
             "class TestThing(Alias):\n"
@@ -628,6 +630,117 @@ class DetectorEvasionTests(unittest.TestCase):
         for root in (self.base, self.head):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")
         self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_init_subclass_execution_is_inherited_semantic_metadata(self):
+        base = (
+            "import unittest\n"
+            "class Base(unittest.TestCase):\n"
+            "    def __init_subclass__(cls, **kwargs):\n        pass\n"
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        self.assertTrue(True)\n"
+        )
+        head = base.replace(
+            "    def __init_subclass__(cls, **kwargs):\n        pass",
+            "    def __init_subclass__(cls, **kwargs):\n"
+            "        cls.__unittest_skip__ = True\n"
+            "        cls.__unittest_skip_why__ = 'disabled'",
+        )
+        for root, text in ((self.base, base), (self.head, head)):
+            (root / "tests/test_service.py").write_text(text, encoding="utf-8")
+        self.assertTrue(codes(self.analyze()) & {
+            "TEST_SKIP_ADDED", "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS",
+        })
+
+    def test_python_imported_definition_decorators_fail_closed(self):
+        sources = (
+            (
+                "from support import decorate\n"
+                "@decorate\nclass TestThing:\n"
+                "    def test_x(self):\n        assert True\n"
+            ),
+            (
+                "from support import decorate\n"
+                "@decorate\ndef test_x():\n    assert True\n"
+            ),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                    (root / "tests/support.py").write_text(
+                        "def decorate(value):\n    return value\n", encoding="utf-8",
+                    )
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_metaclass_and_class_keyword_execution_fail_closed(self):
+        sources = (
+            (
+                "class Meta:\n    pass\n"
+                "class TestThing(metaclass=Meta):\n"
+                "    def test_x(self):\n        assert True\n"
+            ),
+            (
+                "class Base:\n"
+                "    def __init_subclass__(cls, **kwargs):\n        pass\n"
+                "class TestThing(Base, collection=False):\n"
+                "    def test_x(self):\n        assert True\n"
+            ),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_dynamic_defaults_and_annotations_fail_closed(self):
+        declarations = (
+            "def test_x(value=factory()):\n    assert value\n",
+            "def test_x(value: factory()):\n    assert value\n",
+            "def test_x() -> factory():\n    assert True\n",
+            "class TestThing:\n"
+            "    def test_x(self, value=factory()):\n        assert value\n",
+        )
+        for declaration in declarations:
+            source = "def factory():\n    return True\n" + declaration
+            with self.subTest(declaration=declaration):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_init_subclass_external_execution_fails_closed(self):
+        source = (
+            "from support import configure\n"
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n        configure(cls)\n"
+            "class TestThing(Base):\n"
+            "    def test_x(self):\n        assert True\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+            (root / "tests/support.py").write_text(
+                "def configure(cls):\n    return cls\n", encoding="utf-8",
+            )
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_python_known_safe_definition_metadata_remains_parseable(self):
+        sources = (
+            (
+                "import unittest\n"
+                "@unittest.skip('known disabled')\nclass TestThing(unittest.TestCase):\n"
+                "    def test_x(self, value: 'int' = 1) -> 'None':\n"
+                "        self.assertEqual(value, 1)\n"
+            ),
+            (
+                "import pytest\n"
+                "@pytest.mark.parametrize('value', [1, 2], ids=['one', 'two'])\n"
+                "def test_x(value: 'int'):\n    assert value > 0\n"
+            ),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_javascript_computed_suite_disablement_is_detected(self):
         base = "describe('suite', () => { test('value', () => { expect(1); }); });\n"

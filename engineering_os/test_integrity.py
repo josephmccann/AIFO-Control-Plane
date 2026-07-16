@@ -637,12 +637,33 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
             and statement.value.value is False
         )
 
-    def safe_runtime_body(body: Sequence[ast.stmt]) -> bool:
+    def direct_binding_names(statement: ast.stmt) -> set:
+        if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            return {statement.name}
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            return {
+                item.asname or item.name.split(".")[0] for item in statement.names
+            }
+        targets = []
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+        elif isinstance(statement, (ast.AnnAssign, ast.AugAssign)):
+            targets = [statement.target]
+        names = set()
+        for target in targets:
+            names.update(_descendant_binding_names(target))
+        return names
+
+    def safe_runtime_body(
+        body: Sequence[ast.stmt], *, class_scope: bool = False,
+    ) -> bool:
         for statement in body:
+            if class_scope and direct_binding_names(statement) & {"pytest", "unittest"}:
+                return False
             if references_dynamic_primitive(statement):
                 return False
             if isinstance(statement, ast.ClassDef):
-                if not safe_runtime_body(statement.body):
+                if not safe_runtime_body(statement.body, class_scope=True):
                     return False
                 continue
             if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -655,7 +676,7 @@ def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
                 if not all(simple_target(target) for target in statement.targets):
                     return False
                 simple_alias = (
-                    len(statement.targets) == 1
+                    not class_scope and len(statement.targets) == 1
                     and isinstance(statement.targets[0], ast.Name)
                     and isinstance(statement.value, ast.Name)
                 )
@@ -715,40 +736,209 @@ class _SafeConstantFolder(ast.NodeTransformer):
 
 def _python_stats(
     text: str, module: str, *, allow_unittest_testcase: bool,
+    allow_pytest_parametrize: bool,
 ) -> _FileStats:
     tree = ast.parse(text)
     if _has_dynamic_namespace_mutation(tree):
         raise SyntaxError("dynamic Python namespace mutation")
     statement_positions = {id(statement): index for index, statement in enumerate(tree.body)}
 
-    def exact_unittest_testcase(base: ast.AST, owner: ast.ClassDef) -> bool:
-        if not (
-            allow_unittest_testcase and isinstance(base, ast.Attribute)
-            and base.attr == "TestCase"
-            and isinstance(base.value, ast.Name)
-            and base.value.id == "unittest"
-        ):
-            return False
+    def exact_module_import_before(name: str, position: int) -> bool:
         bindings = []
-        for statement in tree.body[:statement_positions[id(owner)]]:
+        for statement in tree.body[:position]:
             if isinstance(statement, ast.Import):
                 for item in statement.names:
                     bound = item.asname or item.name.split(".")[0]
-                    if bound == "unittest":
-                        bindings.append(item.name == "unittest" and item.asname is None)
+                    if bound == name:
+                        bindings.append(item.name == name and item.asname is None)
                 continue
             if isinstance(statement, ast.ImportFrom):
                 for item in statement.names:
-                    if (item.asname or item.name) == "unittest":
+                    if (item.asname or item.name) == name:
                         bindings.append(False)
                 continue
             if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                if statement.name == "unittest":
+                if statement.name == name:
                     bindings.append(False)
                 continue
-            if "unittest" in _descendant_binding_names(statement):
+            if name in _descendant_binding_names(statement):
                 bindings.append(False)
         return bindings == [True]
+
+    def exact_unittest_testcase(base: ast.AST, owner: ast.ClassDef) -> bool:
+        return (
+            allow_unittest_testcase
+            and isinstance(base, ast.Attribute)
+            and base.attr == "TestCase"
+            and isinstance(base.value, ast.Name)
+            and base.value.id == "unittest"
+            and exact_module_import_before("unittest", statement_positions[id(owner)])
+        )
+
+    def static_definition_value(value: Optional[ast.AST]) -> bool:
+        if value is None or isinstance(value, ast.Constant):
+            return True
+        if isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+            return all(static_definition_value(item) for item in value.elts)
+        if isinstance(value, ast.Dict):
+            return all(
+                static_definition_value(item) for item in value.keys + value.values
+            )
+        if isinstance(value, ast.UnaryOp):
+            return static_definition_value(value.operand)
+        if isinstance(value, ast.BinOp):
+            return (
+                static_definition_value(value.left)
+                and static_definition_value(value.right)
+            )
+        return False
+
+    def safe_annotation(value: Optional[ast.AST]) -> bool:
+        return value is None or (
+            isinstance(value, ast.Constant)
+            and (value.value is None or isinstance(value.value, str))
+        )
+
+    def dotted_name(value: ast.AST) -> Tuple[str, ...]:
+        if isinstance(value, ast.Name):
+            return (value.id,)
+        if isinstance(value, ast.Attribute):
+            parent = dotted_name(value.value)
+            return parent + (value.attr,) if parent else ()
+        return ()
+
+    def safe_collection_decorator(
+        decorator: ast.AST, position: int,
+    ) -> bool:
+        if not isinstance(decorator, ast.Call):
+            return False
+        name = dotted_name(decorator.func)
+        if name in {
+            ("unittest", "skip"),
+            ("unittest", "skipIf"),
+            ("unittest", "skipUnless"),
+        }:
+            if (
+                not allow_unittest_testcase
+                or not exact_module_import_before("unittest", position)
+                or decorator.keywords
+            ):
+                return False
+            if name[-1] == "skip":
+                return (
+                    len(decorator.args) == 1
+                    and isinstance(decorator.args[0], ast.Constant)
+                    and isinstance(decorator.args[0].value, str)
+                )
+            return (
+                len(decorator.args) == 2
+                and isinstance(decorator.args[0], ast.Constant)
+                and isinstance(decorator.args[0].value, bool)
+                and isinstance(decorator.args[1], ast.Constant)
+                and isinstance(decorator.args[1].value, str)
+            )
+        if name == ("pytest", "mark", "parametrize"):
+            return (
+                allow_pytest_parametrize
+                and exact_module_import_before("pytest", position)
+                and len(decorator.args) >= 2
+                and isinstance(decorator.args[0], ast.Constant)
+                and isinstance(decorator.args[0].value, str)
+                and bool(decorator.args[0].value)
+                and all(static_definition_value(item) for item in decorator.args[1:])
+                and all(
+                    item.arg is not None and static_definition_value(item.value)
+                    for item in decorator.keywords
+                )
+            )
+        return False
+
+    def safe_init_subclass_body(node: Any) -> bool:
+        positional = list(node.args.posonlyargs) + list(node.args.args)
+        if not positional:
+            return False
+        receiver = positional[0].arg
+        for statement in node.body:
+            if isinstance(statement, ast.Pass):
+                continue
+            if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
+                continue
+            if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                targets = (
+                    statement.targets if isinstance(statement, ast.Assign)
+                    else [statement.target]
+                )
+                if (
+                    not targets
+                    or not all(
+                        isinstance(target, ast.Attribute)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == receiver
+                        for target in targets
+                    )
+                    or not static_definition_value(statement.value)
+                ):
+                    return False
+                continue
+            return False
+        return True
+
+    def safe_function_definition(
+        node: Any, position: int,
+    ) -> bool:
+        arguments = node.args
+        annotated = (
+            list(arguments.posonlyargs) + list(arguments.args)
+            + list(arguments.kwonlyargs)
+        )
+        if arguments.vararg is not None:
+            annotated.append(arguments.vararg)
+        if arguments.kwarg is not None:
+            annotated.append(arguments.kwarg)
+        return (
+            not getattr(node, "type_params", [])
+            and (
+                node.name != "__init_subclass__"
+                or safe_init_subclass_body(node)
+            )
+            and all(safe_collection_decorator(item, position) for item in node.decorator_list)
+            and all(static_definition_value(item) for item in arguments.defaults)
+            and all(
+                item is None or static_definition_value(item)
+                for item in arguments.kw_defaults
+            )
+            and all(safe_annotation(item.annotation) for item in annotated)
+            and safe_annotation(node.returns)
+        )
+
+    def validate_definitions(
+        body: Sequence[ast.stmt], owner_position: Optional[int] = None,
+    ) -> None:
+        for statement in body:
+            position = (
+                statement_positions[id(statement)]
+                if id(statement) in statement_positions else owner_position
+            )
+            if isinstance(statement, ast.ClassDef):
+                if (
+                    position is None
+                    or statement.keywords
+                    or getattr(statement, "type_params", [])
+                    or not all(
+                        safe_collection_decorator(item, position)
+                        for item in statement.decorator_list
+                    )
+                ):
+                    raise SyntaxError("unproven Python class definition execution")
+                validate_definitions(statement.body, position)
+            elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if position is None or not safe_function_definition(statement, position):
+                    raise SyntaxError("unproven Python function definition execution")
+            elif isinstance(statement, ast.AnnAssign):
+                if not safe_annotation(statement.annotation):
+                    raise SyntaxError("unproven Python annotation execution")
+
+    validate_definitions(tree.body)
 
     top_level_classes = {
         id(statement) for statement in tree.body if isinstance(statement, ast.ClassDef)
@@ -1025,17 +1215,37 @@ def _python_stats(
         return normalized(ast.ClassDef(
             name=node.name, bases=copy.deepcopy(node.bases),
             keywords=copy.deepcopy(node.keywords),
-            body=[
-                copy.deepcopy(statement) for statement in node.body
-                if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            ], decorator_list=copy.deepcopy(node.decorator_list),
+            body=copy.deepcopy(node.body),
+            decorator_list=copy.deepcopy(node.decorator_list),
             type_params=copy.deepcopy(getattr(node, "type_params", [])),
         ))
 
     def own_class_disabled(node: ast.ClassDef) -> bool:
+        init_subclass_disables = any(
+            isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and statement.name == "__init_subclass__"
+            and any(
+                isinstance(child, (ast.Assign, ast.AnnAssign))
+                and isinstance(child.value, ast.Constant)
+                and any(
+                    isinstance(target, ast.Attribute)
+                    and target.attr in {"__unittest_skip__", "__test__"}
+                    and (
+                        (target.attr == "__unittest_skip__" and child.value.value is True)
+                        or (target.attr == "__test__" and child.value.value is False)
+                    )
+                    for target in (
+                        child.targets if isinstance(child, ast.Assign) else [child.target]
+                    )
+                )
+                for child in ast.walk(statement)
+            )
+            for statement in node.body
+        )
         return (
             decorators_disable(node.decorator_list)
             or any(false_assignment(statement, "__test__") for statement in node.body)
+            or init_subclass_disables
             or any(
                 "skip" in normalized(statement).lower()
                 for statement in node.body
@@ -1502,6 +1712,11 @@ def _test_stats(
         or path == "unittest/__init__.py" or path.endswith("/unittest/__init__.py")
         for path in repository_paths
     )
+    pytest_shadowed = any(
+        path == "pytest.py" or path.endswith("/pytest.py")
+        or path == "pytest/__init__.py" or path.endswith("/pytest/__init__.py")
+        for path in repository_paths
+    )
     result = {}
     for relative in sorted(paths):
         try:
@@ -1509,6 +1724,7 @@ def _test_stats(
             result[relative] = (
                 _python_stats(
                     text, relative, allow_unittest_testcase=not unittest_shadowed,
+                    allow_pytest_parametrize=not pytest_shadowed,
                 ) if relative.endswith(".py")
                 else _javascript_stats(text, relative)
             )

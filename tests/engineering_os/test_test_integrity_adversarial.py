@@ -1919,6 +1919,21 @@ class DetectorEvasionTests(unittest.TestCase):
         self.assertEqual(context["mission_sha256"], content_sha256(mission))
         self.assertEqual(context["mission_event_hash"], event["event_hash"])
         self.assertEqual(context["effective_tier"], "Tier 2")
+        with self.assertRaisesRegex(
+            ValueError, "TEST_MISSION_READY_EVIDENCE_CONTRADICTORY"
+        ):
+            authenticate_integrity_context(
+                mission,
+                [source, event_comment(8002, [event])],
+                repository_policy,
+                ["engineering_os/test_integrity.py"],
+                repository=repository_policy["repository"],
+                mission_issue=101,
+                pull_request=42,
+                base_sha="1" * 40,
+                head_sha="2" * 40,
+                initial_ready_attestation_sha256="5" * 64,
+            )
         mission["risk_tier"] = "Tier 1"
         with self.assertRaisesRegex(ValueError, "TEST_MISSION"):
             authenticate_integrity_context(
@@ -2016,7 +2031,14 @@ class CliFailureArtifactTests(unittest.TestCase):
             (pr, issue, "0" * 64, [], policy, arguments),
             (pr, issue, _INITIAL_READY_MISSION_SHA256, [{}], policy, arguments),
             ({**pr, "state": "closed"}, issue, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            ({**pr, "user": {"login": "other"}}, issue, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            ({**pr, "head": {**pr["head"], "ref": "other"}}, issue, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            ({**pr, "head": {**pr["head"], "repo": {"full_name": "josephmccann/AI-CFO"}}}, issue, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
             (pr, {**issue, "user": {"login": "other"}}, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            (pr, {**issue, "state": "closed"}, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            (pr, issue, _INITIAL_READY_MISSION_SHA256, [], {**policy, "founder_identities": []}, arguments),
+            (pr, issue, _INITIAL_READY_MISSION_SHA256, [], policy, {**arguments, "repository": "josephmccann/AI-CFO"}),
+            (pr, issue, _INITIAL_READY_MISSION_SHA256, [], policy, {**arguments, "pull_request": 203}),
             (pr, issue, _INITIAL_READY_MISSION_SHA256, [], policy, {**arguments, "base_sha": "0" * 40}),
         )
         for values in mutations:

@@ -61,6 +61,40 @@ class PythonImportClosure:
 def has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
     """Detect runtime namespace mutation while allowing direct benign getattr."""
 
+    parents = {
+        id(child): parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+    def transparent_proxy(call: ast.Call) -> bool:
+        if len(call.args) != 2 or call.keywords:
+            return False
+        parent = parents.get(id(call))
+        if not isinstance(parent, ast.Return) or parent.value is not call:
+            return False
+        function = parents.get(id(parent))
+        while function is not None and not isinstance(
+            function, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda),
+        ):
+            function = parents.get(id(function))
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        positional = list(function.args.posonlyargs) + list(function.args.args)
+        if function.name != "__getattr__" or len(positional) != 2:
+            return False
+        receiver, attribute = positional
+        if (
+            not isinstance(call.args[0], ast.Attribute)
+            or not isinstance(call.args[1], ast.Name)
+            or call.args[1].id != attribute.arg
+        ):
+            return False
+        root = call.args[0]
+        while isinstance(root, ast.Attribute):
+            root = root.value
+        return isinstance(root, ast.Name) and root.id == receiver.arg
+
     allowed_getattr = set()
     for node in ast.walk(tree):
         if (
@@ -70,13 +104,14 @@ def has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
             and len(node.args) in (2, 3)
             and not node.keywords
         ):
-            allowed_getattr.add(id(node.func))
-            if (
+            literal_name = (
                 isinstance(node.args[1], ast.Constant)
                 and isinstance(node.args[1].value, str)
-                and node.args[1].value in _RUNTIME_REFLECTION_ATTRIBUTES
-            ):
+            )
+            if literal_name and node.args[1].value in _RUNTIME_REFLECTION_ATTRIBUTES:
                 return True
+            if literal_name or transparent_proxy(node):
+                allowed_getattr.add(id(node.func))
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):
             if node.id in _RUNTIME_DYNAMIC_NAMES:

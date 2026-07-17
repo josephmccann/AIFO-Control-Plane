@@ -77,6 +77,8 @@ class DetectorEvasionTests(unittest.TestCase):
             "def test_value():\n    setattr(test_value, '__test__', False)\n    assert True\n",
             "def test_value():\n    reflect = getattr\n    assert reflect(test_value, '__name__')\n",
             "def test_value():\n    assert getattr(__builtins__, '__import__')\n",
+            "def test_value(subject):\n    name = '__dict__'\n    assert getattr(subject, name)\n",
+            "def test_value(subject):\n    name = '__glo' + 'bals__'\n    assert getattr(subject, name)\n",
         )
         for source in sources:
             with self.subTest(source=source):
@@ -88,6 +90,18 @@ class DetectorEvasionTests(unittest.TestCase):
         source = (
             "def test_value(subject):\n"
             "    assert getattr(subject, 'provenance', None) is not None\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_transparent_getattr_proxy_is_bounded_and_fingerprinted(self):
+        source = (
+            "def test_value(subject):\n"
+            "    class Proxy:\n"
+            "        def __init__(self, target):\n            self.target = target\n"
+            "        def __getattr__(self, name):\n            return getattr(self.target, name)\n"
+            "    assert Proxy(subject).provenance is not None\n"
         )
         for root in (self.base, self.head):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")

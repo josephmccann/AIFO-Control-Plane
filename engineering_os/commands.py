@@ -62,8 +62,9 @@ _EVENT_END = "EOS:EVENT:END"
 _BOT = "github-actions[bot]"
 _RECOVERY_EVENTS = frozenset(("workflow_dispatch",))
 _ACTIVATION_AUTHORIZED = "test_integrity.baseline.authorized"
+_ACTIVATION_ATTEMPTED = "test_integrity.baseline.consumption_attempted"
 _ACTIVATION_CONSUMED = "test_integrity.baseline.consumed"
-_ACTIVATION_EVENTS = frozenset((_ACTIVATION_AUTHORIZED, _ACTIVATION_CONSUMED))
+_ACTIVATION_EVENTS = frozenset((_ACTIVATION_AUTHORIZED, _ACTIVATION_ATTEMPTED, _ACTIVATION_CONSUMED))
 _ACTIVATION_REQUIRED = frozenset({
     "repository", "mission_issue", "remediation_head", "remediation_tree",
     "baseline_artifact_sha256", "canonical_inventory_sha256",
@@ -135,6 +136,7 @@ def validate_activation_ledger(
     if current_tree is not None and expected["remediation_tree"] != current_tree:
         return False, "ACTIVATION_TREE_MISMATCH", {}
     authorizations = []
+    attempts = []
     consumptions = []
     nonces = set()
     for event in events:
@@ -168,6 +170,10 @@ def validate_activation_ledger(
             if event.get("actor_role") != "founder":
                 return False, "ACTIVATION_AUTHORITY_INVALID", {}
             authorizations.append(event)
+        elif event.get("type") == _ACTIVATION_ATTEMPTED:
+            if event.get("actor_role") != "system":
+                return False, "ACTIVATION_CONSUMER_INVALID", {}
+            attempts.append(event)
         else:
             if event.get("actor_role") != "system":
                 return False, "ACTIVATION_CONSUMER_INVALID", {}
@@ -176,17 +182,21 @@ def validate_activation_ledger(
         return False, "ACTIVATION_AUTHORIZATION_REPLAY", {}
     if len(nonces) != len(authorizations):
         return False, "ACTIVATION_NONCE_REPLAY", {}
+    if len(attempts) > 1:
+        return False, "ACTIVATION_ATTEMPT_REPLAY", {}
     if len(consumptions) > 1:
         return False, "ACTIVATION_CONSUMPTION_REPLAY", {}
-    if consumptions and not authorizations:
+    if (attempts or consumptions) and not authorizations:
         return False, "ACTIVATION_ORPHAN_CONSUMPTION", {}
-    if consumptions:
+    if attempts or consumptions:
         auth = authorizations[0]
-        consumed = consumptions[0]
+        consumed = (consumptions or attempts)[0]
         if consumed.get("details", {}).get("authorization_event_hash") != auth.get("event_hash"):
             return False, "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID", {}
         if consumed.get("details", {}).get("authorization_sequence") != auth.get("sequence"):
             return False, "ACTIVATION_AUTHORIZATION_SEQUENCE_INVALID", {}
+        if attempts and not consumptions:
+            return False, "ACTIVATION_ATTEMPT_LOCKED", {"consumed": False}
         return True, "ACTIVATION_ALREADY_CONSUMED", {"consumed": True}
     return bool(authorizations), ("ACTIVATION_AUTHORIZED" if authorizations else "ACTIVATION_NOT_AUTHORIZED"), {
         "consumed": False,
@@ -458,6 +468,20 @@ def validate_recovery_run(
     )
 
 
+def validate_activation_run(run: Mapping[str, Any], repository: str, source_url: str) -> bool:
+    """Authenticate the existing mission-command workflow as activation source."""
+    if not isinstance(run, Mapping) or not isinstance(repository, str):
+        return False
+    run_id = run.get("id")
+    expected = "https://github.com/%s/actions/runs/%s" % (repository, run_id)
+    return (
+        isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0
+        and source_url == expected and run.get("html_url") == expected
+        and run.get("path") == ".github/workflows/mission-command.yml"
+        and run.get("event") == "issue_comment"
+        and isinstance(run.get("repository"), Mapping)
+        and run["repository"].get("full_name") == repository
+    )
 def effective_limits(mission: Mapping[str, Any], policy: Mapping[str, Any]) -> Dict[str, Any]:
     """Return the most restrictive declared mission/repository cap per resource."""
 
@@ -538,7 +562,8 @@ def authenticate_event_history(
 
     system_indexes = {
         index for index, event in enumerate(events)
-        if event.get("actor") == "system" or event.get("actor_role") == "system"
+        if (event.get("actor") == "system" or event.get("actor_role") == "system")
+        and event.get("type") not in _ACTIVATION_EVENTS
     }
     expected_system_source = (
         r"https://github\.com/%s/actions/runs/[1-9][0-9]*" % re.escape(repository)
@@ -550,7 +575,7 @@ def authenticate_event_history(
             or event.get("actor_role") != "system"
             or not isinstance(event.get("source_url"), str)
             or re.fullmatch(expected_system_source, event["source_url"]) is None
-            or event.get("type") not in {"mission.orphaned", "mission.released"}
+            or event.get("type") not in {"mission.orphaned", "mission.released", *_ACTIVATION_EVENTS}
         ):
             return _deny_history("EVENT_SYSTEM_SOURCE_INVALID", events[:index], projection)
     recovery_pairs: Dict[int, int] = {}
@@ -598,15 +623,18 @@ def authenticate_event_history(
                 or event.get("actor_role") != "system"
                 or not isinstance(source_url, str)
                 or re.fullmatch(expected, source_url) is None
-                or event_type not in {"mission.orphaned", "mission.released"}
+                or event_type not in {"mission.orphaned", "mission.released", *_ACTIVATION_EVENTS}
             ):
                 return _deny_history("EVENT_SYSTEM_SOURCE_INVALID", accepted, projection)
             matching_runs = [run for run in actions_runs if run.get("html_url") == source_url]
             if not matching_runs:
                 return _deny_history("EVENT_SYSTEM_RUN_NOT_FOUND", accepted, projection)
-            if len(matching_runs) != 1 or not validate_recovery_run(
-                matching_runs[0], repository, source_url, policy
-            ):
+            run_valid = (
+                validate_activation_run(matching_runs[0], repository, source_url)
+                if event_type in _ACTIVATION_EVENTS
+                else validate_recovery_run(matching_runs[0], repository, source_url, policy)
+            )
+            if len(matching_runs) != 1 or not run_valid:
                 return _deny_history("EVENT_SYSTEM_RUN_INVALID", accepted, projection)
         else:
             source = comment_urls.get(source_url)

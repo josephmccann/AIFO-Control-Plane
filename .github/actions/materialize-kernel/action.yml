@@ -1,5 +1,6 @@
 name: Materialize immutable Engineering OS kernel
 description: Copy the exact private-action revision into the caller workspace.
+# Transport identity changes whenever governed schemas change; callers must repin.
 
 inputs:
   expected_kernel_sha:

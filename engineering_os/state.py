@@ -70,6 +70,9 @@ TRANSITIONS = {
     "test_integrity.baseline.consumed": (
         {"Ready", "Founder Approval"}, "__PRESERVE__", {"system"},
     ),
+    "test_integrity.baseline.consumption_attempted": (
+        {"Ready", "Founder Approval"}, "__PRESERVE__", {"system"},
+    ),
 }
 
 

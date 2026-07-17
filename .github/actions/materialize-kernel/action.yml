@@ -1,6 +1,7 @@
 name: Materialize immutable Engineering OS kernel
 description: Copy the exact private-action revision into the caller workspace.
 # Transport identity changes whenever governed schemas change; callers must repin.
+# Activation event schemas are part of the immutable governed transport.
 
 inputs:
   expected_kernel_sha:

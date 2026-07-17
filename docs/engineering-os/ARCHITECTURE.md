@@ -120,7 +120,9 @@ decorators retain audited import or built-in provenance, custom metaclasses and
 implicit class hooks are denied, and only constant pytest/unittest collection
 assignments are admitted in `__init_subclass__`. Proven-safe frozen dataclasses
 may be instantiated only without inheritance, lifecycle hooks, implicit hooks,
-or default factories. Recursion exhaustion produces a structured denial.
+or default factories. Exact-provenance `pytest.fixture` supports only closed,
+bounded literal options; shadowed, computed, callable, or unknown fixture
+configuration is denied. Recursion exhaustion produces a structured denial.
 The immutable materialization action requires and byte-compares the dedicated
 `engineering_os/python_imports.py` kernel before a reusable workflow can use
 it.

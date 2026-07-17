@@ -569,9 +569,9 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         expected = (
             "kernel/scripts/engineering-os/resolve-base-policy",
             "--bootstrap-repository josephmccann/AI.FO-Demo",
-            "--bootstrap-base-sha 438a68bf0b4f49ae15a04a69ad72c14cc43de0cb",
+            "--bootstrap-base-sha 52ca01c7c8b034b212feede58ddcc77d9c37c388",
             "--bootstrap-policy-sha256 "
-            "fabb771249074b1f012b59698068aef2ca3578644f25381f64ee31306c868699",
+            "60bc2bdb34359062af092934e19dd75fb363d8672ebe70bdabfd204609e3c42f",
             '--output "$RUNNER_TEMP/base-policy.json"',
         )
         for name in consumers:

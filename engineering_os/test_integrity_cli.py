@@ -26,7 +26,7 @@ from .canonical import content_sha256
 _SHA40 = re.compile(r"[0-9a-f]{40}")
 _MISSION_MARKER = re.compile(r"<!-- AIFO-EOS-MISSION-ISSUE: ([1-9][0-9]*) -->")
 _INITIAL_READY_REPOSITORY = "josephmccann/AI.FO-Demo"
-_INITIAL_READY_BASE_SHA = "438a68bf0b4f49ae15a04a69ad72c14cc43de0cb"
+_INITIAL_READY_BASE_SHA = "52ca01c7c8b034b212feede58ddcc77d9c37c388"
 _INITIAL_READY_MISSION_SHA256 = "9a9c6b751c45732d108d0f833f6096df1558c9d546761fc03a922489dfa0240a"
 _DEFAULT_LIMITS = {
     "max_files": 10000, "max_total_bytes": 256 * 1024 * 1024,

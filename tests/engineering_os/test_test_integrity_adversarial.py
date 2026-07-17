@@ -2018,6 +2018,10 @@ class CliFailureArtifactTests(unittest.TestCase):
             "base_sha": _INITIAL_READY_BASE_SHA,
             "head_sha": head_sha,
         }
+        self.assertEqual(
+            "52ca01c7c8b034b212feede58ddcc77d9c37c388",
+            _INITIAL_READY_BASE_SHA,
+        )
         attestation = _initial_ready_attestation(
             pr,
             issue,

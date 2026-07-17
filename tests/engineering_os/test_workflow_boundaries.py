@@ -18,7 +18,6 @@ KERNEL_ACTION_SHA = "5a273627a1a4d4addfcf81129dcdbda4dc58c383"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
     "docs/engineering-os/ENGINEERING_CONSTITUTION.md",
-    "engineering_os",
     "scripts/engineering-os",
     "schemas/engineering-os",
 )

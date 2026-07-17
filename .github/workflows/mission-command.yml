@@ -94,7 +94,18 @@ jobs:
             --mission "$RUNNER_TEMP/mission.json" \
             --policy .aifo/engineering-os-policy.json \
             --runs "$RUNNER_TEMP/runs.json" \
-            --repository "$GITHUB_REPOSITORY"
+            --repository "$GITHUB_REPOSITORY" \
+            --events-output "$RUNNER_TEMP/events.json"
+          python3 - <<'PY'
+          import json, os
+          from engineering_os.commands import validate_activation_ledger
+          events = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events.json"), encoding="utf-8")) if os.path.exists(os.path.join(os.environ["RUNNER_TEMP"], "events.json")) else []
+          activations = [event for event in events if event.get("type") == "test_integrity.baseline.authorized"]
+          if activations:
+              ok, code, _ = validate_activation_ledger(events, activations[0]["details"], repository=os.environ["GITHUB_REPOSITORY"])
+              if not ok:
+                  raise SystemExit(code)
+          PY
           python3 -m engineering_os.commands propose-command \
             --comments "$RUNNER_TEMP/comments.json" \
             --mission "$RUNNER_TEMP/mission.json" \

@@ -14,7 +14,7 @@ KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.ym
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
-KERNEL_ACTION_SHA = "5a273627a1a4d4addfcf81129dcdbda4dc58c383"
+KERNEL_ACTION_SHA = "4e9f8b27e274db0f53a35f1864dadea9317036dd"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
     "docs/engineering-os/ENGINEERING_CONSTITUTION.md",
@@ -824,8 +824,8 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
 
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
-          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@5a273627a1a4d4addfcf81129dcdbda4dc58c383
-          expected_kernel_sha: 5a273627a1a4d4addfcf81129dcdbda4dc58c383
+          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@4e9f8b27e274db0f53a35f1864dadea9317036dd
+          expected_kernel_sha: 4e9f8b27e274db0f53a35f1864dadea9317036dd
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           path: target
@@ -836,7 +836,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(cross_repository_boundary_errors(valid), [])
 
         no_kernel_identity = valid.replace(
-            "materialize-kernel@5a273627a1a4d4addfcf81129dcdbda4dc58c383",
+            "materialize-kernel@4e9f8b27e274db0f53a35f1864dadea9317036dd",
             "materialize-kernel@main",
             1,
         )

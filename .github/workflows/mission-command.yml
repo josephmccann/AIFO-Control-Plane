@@ -118,6 +118,7 @@ jobs:
           if parsed is None:
               raise SystemExit("invalid activation command")
           nonce = parsed[1][0]
+          events = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events.json"), encoding="utf-8"))
           details = {
               "repository": "josephmccann/AIFO-Control-Plane", "mission_issue": 26,
               "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
@@ -135,6 +136,13 @@ jobs:
               "single_use": True, "founder_authorization_identity": "josephmccann",
               "founder_authorization_sequence": len(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events.json")))) + 1,
           }
+          if parsed[0] != "authorize-baseline":
+              existing = next((event for event in events if event.get("type") == "test_integrity.baseline.authorized"), None)
+              if not existing:
+                  raise SystemExit("activation authorization is required before consumption")
+              details = dict(existing["details"])
+              if details.get("activation_nonce") != nonce:
+                  raise SystemExit("activation nonce does not match the authorized tuple")
           json.dump(details, open(os.path.join(os.environ["RUNNER_TEMP"], "activation.json"), "w"), sort_keys=True)
           PY
             activation_args=(--activation "$RUNNER_TEMP/activation.json")

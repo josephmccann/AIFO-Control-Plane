@@ -240,6 +240,9 @@ def validate_activation_ledger(
         if event.get("type") == _ACTIVATION_AUTHORIZED:
             if event.get("actor_role") != "founder":
                 return False, "ACTIVATION_AUTHORITY_INVALID", {}
+            if (not isinstance(details, Mapping)
+                    or details.get("founder_authorization_identity") != event.get("actor")):
+                return False, "ACTIVATION_AUTHORITY_INVALID", {}
             authorizations.append(event)
         elif event.get("type") == _ACTIVATION_ATTEMPTED:
             if event.get("actor_role") != "system":
@@ -748,7 +751,8 @@ def authenticate_event_history(
             roles = _actor_roles(actor, mission, policy) if isinstance(actor, str) else set()
             if event.get("actor_role") not in roles:
                 return _deny_history("EVENT_ROLE_MISMATCH", accepted, projection)
-            if arguments and str(event.get("details", {}).get("lease_nonce", "")).strip() != arguments[0].strip():
+            nonce_key = "activation_nonce" if event_type in _ACTIVATION_EVENTS else "lease_nonce"
+            if arguments and str(event.get("details", {}).get(nonce_key, "")).strip() != arguments[0].strip():
                 return _deny_history("EVENT_NONCE_MISMATCH", accepted, projection)
 
         if event_type in {"mission.ready", "mission.claimed"} and validate_ready(dict(mission)):

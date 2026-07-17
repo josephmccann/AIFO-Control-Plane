@@ -106,11 +106,16 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
+          cd "$GITHUB_WORKSPACE/kernel"
           python3 - <<'PY'
           import json
           import os
           from engineering_os.schema import validate_document
-          policy = json.load(open("target/.aifo/engineering-os-policy.json", encoding="utf-8"))
+          policy_path = os.path.join(
+              os.environ["GITHUB_WORKSPACE"],
+              "target/.aifo/engineering-os-policy.json",
+          )
+          policy = json.load(open(policy_path, encoding="utf-8"))
           if validate_document("repository-policy", policy):
               raise SystemExit("repository policy is invalid")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
@@ -143,6 +148,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/kernel
           REQUESTED_ISSUE: ${{ inputs.issue_number }}
         run: |
+          cd "$GITHUB_WORKSPACE/kernel"
           if [[ -n "$REQUESTED_ISSUE" && "$REQUESTED_ISSUE" != "0" ]]; then
             [[ "$REQUESTED_ISSUE" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
             printf '[{"number":%s}]\n' "$REQUESTED_ISSUE" > "$RUNNER_TEMP/issues.json"
@@ -228,6 +234,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/kernel
           SOURCE_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          cd "$GITHUB_WORKSPACE/kernel"
           [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments-latest.json"

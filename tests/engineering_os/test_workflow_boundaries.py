@@ -467,6 +467,70 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                             self.assertIn("success()", job_condition)
         self.assertEqual(4, len(scripts))
 
+    def test_reusable_python_imports_exclude_target_workspace_precedence(self):
+        for path in sorted(WORKFLOW_ROOT.glob("reusable-*.yml")):
+            workflow = load_workflow(path.name)
+            for job_name, job in workflow["jobs"].items():
+                for step in job.get("steps", []):
+                    script = step.get("run", "")
+                    if "engineering_os" not in script:
+                        continue
+                    launches = [
+                        line.strip()
+                        for line in script.splitlines()
+                        if "python3" in line
+                    ]
+                    with self.subTest(workflow=path.name, job=job_name):
+                        self.assertTrue(launches)
+                        first_launch = script.index("python3")
+                        kernel_cwd = script.index('cd "$GITHUB_WORKSPACE/kernel"')
+                        self.assertLess(kernel_cwd, first_launch)
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            shadow = target / "engineering_os"
+            shadow.mkdir()
+            (shadow / "__init__.py").write_text(
+                "raise SystemExit('target workspace imported')\n", encoding="utf-8"
+            )
+            kernel = target / "kernel"
+            kernel.symlink_to(ROOT, target_is_directory=True)
+            environment = os.environ.copy()
+            environment.pop("PYTHONPATH", None)
+            isolated = subprocess.run(
+                [
+                    "python3",
+                    "-c",
+                    (
+                        "from pathlib import Path; import engineering_os; "
+                        "print(Path(engineering_os.__file__).resolve())"
+                    ),
+                ],
+                cwd=kernel,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, isolated.returncode, isolated.stderr)
+            self.assertEqual(
+                (ROOT / "engineering_os/__init__.py").resolve(),
+                Path(isolated.stdout.strip()),
+            )
+
+    def test_frozen_guard_routes_base_revision_through_environment(self):
+        workflow = load_workflow("reusable-frozen-path-guard.yml")
+        step = next(
+            item
+            for item in workflow["jobs"]["guard"]["steps"]
+            if item.get("name") == "Enforce frozen declarations from base revision"
+        )
+        self.assertEqual(
+            "${{ github.event.pull_request.base.sha }}", step["env"]["BASE_SHA"]
+        )
+        self.assertIn('--base-sha "$BASE_SHA"', step["run"])
+        self.assertNotIn("${{ github.event.pull_request.base.sha }}", step["run"])
+
     def test_caller_authorization_script_fails_closed(self):
         workflow = load_workflow("reusable-mission-validation.yml")
         self.assertIn("caller-authorization", workflow["jobs"])

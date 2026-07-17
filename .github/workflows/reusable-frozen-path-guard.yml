@@ -117,6 +117,7 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"
+          cd "$GITHUB_WORKSPACE/kernel"
           python3 - <<'PY'
           import json, os
           from engineering_os.commands import authenticate_event_history
@@ -137,6 +138,7 @@ jobs:
         env:
           GIT_DIR: ${{ github.workspace }}/target/.git
           GIT_WORK_TREE: ${{ github.workspace }}/target
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
@@ -147,7 +149,7 @@ jobs:
             --exceptions "$RUNNER_TEMP/exceptions.json" \
             --repository "$GITHUB_REPOSITORY" \
             --pull-request "$PR_NUMBER" \
-            --base-sha "${{ github.event.pull_request.base.sha }}" \
+            --base-sha "$BASE_SHA" \
             --head-sha "$HEAD_SHA" \
             --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --action write

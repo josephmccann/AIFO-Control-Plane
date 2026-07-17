@@ -48,11 +48,6 @@ jobs:
             [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
             [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
             [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
-          elif [[ "$EXPECTED_WORKFLOW_FILE_PATH" == ".github/workflows/reusable-orphan-recovery.yml" &&
-                  ( "$CALLER_EVENT_NAME" == "schedule" || "$CALLER_EVENT_NAME" == "workflow_dispatch" ) ]]; then
-            [[ "$CALLER_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "direct repository"
-            [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "direct ref"
-            [[ -z "$EXPECTED_WORKFLOW_SHA" ]] || deny "unexpected direct evidence"
           else
             deny "event"
           fi

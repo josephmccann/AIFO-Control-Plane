@@ -88,6 +88,11 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 }
                 self.assertEqual(expected_environment, step["env"])
                 scripts.add(step["run"])
+                direct_event_check = '"$CALLER_EVENT_NAME" == "schedule"'
+                if name == "reusable-orphan-recovery.yml":
+                    self.assertIn(direct_event_check, step["run"])
+                else:
+                    self.assertNotIn(direct_event_check, step["run"])
                 self.assertIn("expected_workflow_sha:", self.read(name))
                 self.assertIn("required: true", self.read(name).split(
                     "expected_workflow_sha:", 1
@@ -110,7 +115,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                         job_condition = jobs[job_name].get("if")
                         if job_condition:
                             self.assertIn("success()", job_condition)
-        self.assertEqual(1, len(scripts))
+        self.assertEqual(2, len(scripts))
 
     def test_caller_authorization_script_fails_closed(self):
         workflow = load_workflow("reusable-mission-validation.yml")

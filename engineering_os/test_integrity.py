@@ -1007,6 +1007,8 @@ def _python_stats(
         decorator: ast.AST, position: int, function: Optional[Any] = None,
         bound_receiver: Optional[str] = None,
     ) -> bool:
+        if safe_pytest_fixture(decorator, position):
+            return True
         if not isinstance(decorator, ast.Call):
             return False
         name = dotted_name(decorator.func)
@@ -1041,6 +1043,63 @@ def _python_stats(
                 decorator, position, function, bound_receiver,
             )
         return False
+
+    def safe_pytest_fixture(decorator: ast.AST, position: int) -> bool:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if (
+            dotted_name(target) != ("pytest", "fixture")
+            or not allow_pytest_parametrize
+            or not exact_module_import_before("pytest", position)
+        ):
+            return False
+        if not isinstance(decorator, ast.Call):
+            return True
+        if decorator.args:
+            return False
+        options = {
+            item.arg: item.value for item in decorator.keywords if item.arg is not None
+        }
+        if (
+            len(options) != len(decorator.keywords)
+            or set(options) - {"autouse", "ids", "name", "params", "scope"}
+        ):
+            return False
+        if "autouse" in options and not (
+            isinstance(options["autouse"], ast.Constant)
+            and isinstance(options["autouse"].value, bool)
+        ):
+            return False
+        if "scope" in options and not (
+            isinstance(options["scope"], ast.Constant)
+            and options["scope"].value
+            in {"class", "function", "module", "package", "session"}
+        ):
+            return False
+        if "name" in options and not (
+            isinstance(options["name"], ast.Constant)
+            and isinstance(options["name"].value, str)
+            and _bounded_definition_literal(options["name"])
+        ):
+            return False
+        params = options.get("params")
+        if params is not None and not (
+            isinstance(params, (ast.List, ast.Tuple))
+            and static_definition_value(params, position)
+        ):
+            return False
+        ids = options.get("ids")
+        if ids is not None and not (
+            isinstance(ids, (ast.List, ast.Tuple))
+            and all(
+                isinstance(item, ast.Constant)
+                and (item.value is None or isinstance(item.value, str))
+                for item in ids.elts
+            )
+            and _bounded_definition_literal(ids)
+            and (params is None or len(ids.elts) == len(params.elts))
+        ):
+            return False
+        return True
 
     def safe_init_subclass_body(node: Any) -> bool:
         positional = list(node.args.posonlyargs) + list(node.args.args)

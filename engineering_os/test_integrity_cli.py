@@ -655,7 +655,7 @@ def main(argv: Sequence[str] = None) -> int:
         resource_budget.consume_bytes(len(report_bytes), phase="report-output")
         output.write_bytes(report_bytes)
         return 0 if report.allowed else 1
-    except (OverflowError, MemoryError) as error:
+    except (OverflowError, MemoryError, RecursionError) as error:
         value = {
             "schema_version": "1.0.0",
             "repository": args.repository if args is not None else "",

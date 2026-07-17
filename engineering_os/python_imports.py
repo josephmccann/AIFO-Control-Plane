@@ -211,6 +211,7 @@ class _DefinitionProjector:
             canonical = {
                 ("dataclasses", "field"): ("field",),
                 ("pathlib", "Path"): ("Path",),
+                ("pytest", "fixture"): ("pytest", "fixture"),
                 ("re", "compile"): ("re", "compile"),
                 ("pytest", "mark"): ("pytest", "mark"),
                 ("unittest", "skip"): ("unittest", "skip"),
@@ -384,6 +385,8 @@ class _DefinitionProjector:
         return False
 
     def _safe_function_decorator(self, value: ast.AST) -> bool:
+        if self._safe_pytest_fixture(value):
+            return True
         if isinstance(value, ast.Name):
             return value.id in self.definition_decorators
         if not isinstance(value, ast.Call):
@@ -397,6 +400,58 @@ class _DefinitionProjector:
             }
             and self.safe_expression(value)
         )
+
+    def _safe_pytest_fixture(self, value: ast.AST) -> bool:
+        if self._call_target(value) == ("pytest", "fixture"):
+            return True
+        if (
+            not isinstance(value, ast.Call)
+            or self._call_target(value.func) != ("pytest", "fixture")
+            or value.args
+        ):
+            return False
+        options = {item.arg: item.value for item in value.keywords if item.arg is not None}
+        if (
+            len(options) != len(value.keywords)
+            or set(options) - {"autouse", "ids", "name", "params", "scope"}
+        ):
+            return False
+        if "autouse" in options and not (
+            isinstance(options["autouse"], ast.Constant)
+            and isinstance(options["autouse"].value, bool)
+        ):
+            return False
+        if "scope" in options and not (
+            isinstance(options["scope"], ast.Constant)
+            and options["scope"].value
+            in {"class", "function", "module", "package", "session"}
+        ):
+            return False
+        if "name" in options and not (
+            isinstance(options["name"], ast.Constant)
+            and isinstance(options["name"].value, str)
+            and len(options["name"].value.encode("utf-8")) <= 1024
+        ):
+            return False
+        params = options.get("params")
+        if params is not None and not (
+            isinstance(params, (ast.List, ast.Tuple))
+            and self.safe_expression(params)
+        ):
+            return False
+        ids = options.get("ids")
+        if ids is not None and not (
+            isinstance(ids, (ast.List, ast.Tuple))
+            and all(
+                isinstance(item, ast.Constant)
+                and (item.value is None or isinstance(item.value, str))
+                for item in ids.elts
+            )
+            and self._bounded(ids)
+            and (params is None or len(ids.elts) == len(params.elts))
+        ):
+            return False
+        return True
 
     def _frozen_dataclass_decorator(self, value: ast.AST) -> bool:
         return (

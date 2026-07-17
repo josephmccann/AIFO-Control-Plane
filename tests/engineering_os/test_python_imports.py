@@ -134,6 +134,61 @@ class PythonImportGraphTests(unittest.TestCase):
             ),
         )
 
+    def test_implicit_conftest_supports_bounded_pytest_fixtures(self):
+        self.write(
+            "tests/conftest.py",
+            "import pytest\n"
+            "@pytest.fixture(scope='session', params=[1, 2], ids=['one', 'two'])\n"
+            "def client(request):\n    return request.param\n",
+        )
+        self.write(
+            "tests/test_service.py",
+            "def test_client(client):\n    assert client\n",
+        )
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(closure.first_party_paths, ("tests/conftest.py",))
+
+    def test_imported_fixture_alias_has_exact_pytest_provenance(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write(
+            "support.py",
+            "from pytest import fixture as audited_fixture\n"
+            "@audited_fixture(autouse=True)\n"
+            "def setup():\n    return None\n",
+        )
+        self.assertEqual(
+            self.graph().closure("tests/test_service.py").first_party_paths,
+            ("support.py",),
+        )
+
+    def test_shadowed_pytest_fixture_decorator_fails_closed(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write(
+            "support.py",
+            "from pytest import fixture\n"
+            "def fixture(definition):\n    return definition\n"
+            "@fixture\ndef setup():\n    return None\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_pytest_fixture_options_remain_closed_and_bounded(self):
+        sources = (
+            "import pytest\n@pytest.fixture(unknown=True)\ndef setup():\n    return None\n",
+            "import pytest\n@pytest.fixture(ids=lambda value: str(value))\n"
+            "def setup():\n    return None\n",
+            "import pytest\n@pytest.fixture(params=build_values())\n"
+            "def setup():\n    return None\n",
+        )
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        for source in sources:
+            with self.subTest(source=source):
+                self.write("support.py", source)
+                with self.assertRaisesRegex(
+                    PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE",
+                ):
+                    self.graph().closure("tests/test_service.py")
+
     def test_implicit_conftest_body_mutation_changes_fingerprint(self):
         self.write("tests/conftest.py", "def fixture_value():\n    return 1\n")
         self.write("tests/test_service.py", "def test_x():\n    assert True\n")

@@ -155,6 +155,17 @@ class DetectorEvasionTests(unittest.TestCase):
                     )
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_bounded_test_local_pytest_fixture_is_parseable(self):
+        source = (
+            "import pytest\n"
+            "@pytest.fixture(scope='module', params=[1, 2])\n"
+            "def value(request):\n    return request.param\n"
+            "def test_value(value):\n    assert value\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_import_graph_recursion_error_is_a_structured_denial(self):
         with mock.patch(
             "engineering_os.test_integrity.PythonImportGraph.closure",
@@ -2380,20 +2391,24 @@ class CliFailureArtifactTests(unittest.TestCase):
             repository_policy.write_text(
                 json.dumps(load_fixture("policy-control-plane.json")), encoding="utf-8",
             )
-            with mock.patch(
-                "engineering_os.test_integrity_cli.derive_git_manifests",
-                side_effect=OverflowError("TEST_RESOURCE_LIMIT"),
+            for error in (
+                OverflowError("TEST_RESOURCE_LIMIT"),
+                RecursionError("maximum recursion depth exceeded"),
             ):
-                status = main([
-                    "--base-root", str(root), "--head-root", str(root),
-                    "--base-sha", "1" * 40, "--head-sha", "2" * 40,
-                    "--repository", "josephmccann/AIFO-Control-Plane",
-                    "--base-policy", str(repository_policy), "--pull-request", "42",
-                    "--output", str(output),
-                ])
-            self.assertEqual(status, 1)
-            value = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(value["findings"][0]["code"], "TEST_RESOURCE_LIMIT")
+                with self.subTest(error=type(error).__name__), mock.patch(
+                    "engineering_os.test_integrity_cli.derive_git_manifests",
+                    side_effect=error,
+                ):
+                    status = main([
+                        "--base-root", str(root), "--head-root", str(root),
+                        "--base-sha", "1" * 40, "--head-sha", "2" * 40,
+                        "--repository", "josephmccann/AIFO-Control-Plane",
+                        "--base-policy", str(repository_policy), "--pull-request", "42",
+                        "--output", str(output),
+                    ])
+                self.assertEqual(status, 1)
+                value = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(value["findings"][0]["code"], "TEST_RESOURCE_LIMIT")
 
 
 class RevisionEvidenceTests(unittest.TestCase):

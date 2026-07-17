@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from engineering_os.python_imports import PythonImportError, PythonImportGraph
-from engineering_os.test_integrity import ResourceBudget
+from engineering_os.test_integrity import ResourceBudget, _test_stats
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -248,6 +248,35 @@ class PythonImportGraphTests(unittest.TestCase):
         for path in test_paths:
             with self.subTest(path=path):
                 graph.closure(path)
+
+    def test_every_control_plane_python_test_has_deterministic_case_stats(self):
+        evidence = {}
+        paths = sorted(
+            list((REPOSITORY_ROOT / "engineering_os").glob("*.py"))
+            + list((REPOSITORY_ROOT / "tests/engineering_os").glob("*.py"))
+            + [REPOSITORY_ROOT / "tests/__init__.py"]
+        )
+        for path in paths:
+            payload = path.read_bytes()
+            evidence[path.relative_to(REPOSITORY_ROOT).as_posix()] = {
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "git_blob_sha": "0" * 40,
+            }
+        test_paths = sorted(
+            path for path in evidence
+            if path.startswith("tests/engineering_os/test_")
+        )
+        findings = []
+        stats = _test_stats(
+            REPOSITORY_ROOT,
+            test_paths,
+            evidence,
+            findings,
+            {"test_globs": ["tests/**/test_*.py"]},
+            ResourceBudget({**LIMITS, "max_total_bytes": 64 * 1024 * 1024}),
+        )
+        self.assertEqual(findings, [])
+        self.assertEqual(set(stats), set(test_paths))
 
 
 if __name__ == "__main__":

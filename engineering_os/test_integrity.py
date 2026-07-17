@@ -944,15 +944,61 @@ def _python_stats(
             and exact_module_import_before("unittest", statement_positions[id(owner)])
         )
 
-    def static_definition_value(value: Optional[ast.AST]) -> bool:
-        return _bounded_definition_literal(value)
+    def exact_static_binding_before(name: str, position: int) -> bool:
+        bindings = []
+        for statement in tree.body[:position]:
+            if (
+                isinstance(statement, ast.Assign)
+                and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+                and statement.targets[0].id == name
+            ):
+                bindings.append(_bounded_definition_literal(statement.value))
+            elif (
+                isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+                and statement.target.id == name
+            ):
+                bindings.append(_bounded_definition_literal(statement.value))
+            elif name in _descendant_binding_names(statement):
+                bindings.append(False)
+        return bindings == [True]
+
+    def static_definition_value(
+        value: Optional[ast.AST], position: Optional[int] = None,
+    ) -> bool:
+        return _bounded_definition_literal(value) or (
+            position is not None
+            and isinstance(value, ast.Name)
+            and exact_static_binding_before(value.id, position)
+        )
 
     def safe_annotation(value: Optional[ast.AST]) -> bool:
-        return value is None or (
-            isinstance(value, ast.Constant)
-            and (value.value is None or isinstance(value.value, str))
-            and _bounded_definition_literal(value)
-        )
+        if value is None:
+            return True
+        if sum(1 for _ in ast.walk(value)) > 128:
+            return False
+
+        def visit(node: ast.AST) -> bool:
+            if isinstance(node, ast.Name):
+                return node.id.isidentifier()
+            if isinstance(node, ast.Constant):
+                if node.value is Ellipsis:
+                    return True
+                return (
+                    node.value is None or isinstance(node.value, str)
+                ) and _bounded_definition_literal(node)
+            if isinstance(node, ast.Attribute):
+                return visit(node.value)
+            if isinstance(node, ast.Subscript):
+                return visit(node.value) and visit(node.slice)
+            if isinstance(node, (ast.Tuple, ast.List)):
+                return all(visit(item) for item in node.elts)
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+                return visit(node.left) and visit(node.right)
+            return False
+
+        return visit(value)
 
     def dotted_name(value: ast.AST) -> Tuple[str, ...]:
         if isinstance(value, ast.Name):
@@ -1205,9 +1251,12 @@ def _python_stats(
                 )
                 for item in node.decorator_list
             )
-            and all(static_definition_value(item) for item in arguments.defaults)
             and all(
-                item is None or static_definition_value(item)
+                static_definition_value(item, position)
+                for item in arguments.defaults
+            )
+            and all(
+                item is None or static_definition_value(item, position)
                 for item in arguments.kw_defaults
             )
             and all(safe_annotation(item.annotation) for item in annotated)
@@ -1284,9 +1333,16 @@ def _python_stats(
     top_level_classes = {
         id(statement) for statement in tree.body if isinstance(statement, ast.ClassDef)
     }
-    for candidate in ast.walk(tree):
-        if not isinstance(candidate, ast.ClassDef):
-            continue
+    collection_classes = []
+
+    def collect_class_scope(body: Sequence[ast.stmt]) -> None:
+        for statement in body:
+            if isinstance(statement, ast.ClassDef):
+                collection_classes.append(statement)
+                collect_class_scope(statement.body)
+
+    collect_class_scope(tree.body)
+    for candidate in collection_classes:
         if id(candidate) not in top_level_classes:
             raise SyntaxError("nested Python test collection class")
         if any(not isinstance(base, (ast.Name, ast.Attribute)) for base in candidate.bases):

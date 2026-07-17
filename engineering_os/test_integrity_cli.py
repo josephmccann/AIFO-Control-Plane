@@ -27,7 +27,7 @@ _SHA40 = re.compile(r"[0-9a-f]{40}")
 _MISSION_MARKER = re.compile(r"<!-- AIFO-EOS-MISSION-ISSUE: ([1-9][0-9]*) -->")
 _INITIAL_READY_REPOSITORY = "josephmccann/AI.FO-Demo"
 _INITIAL_READY_BASE_SHA = "52ca01c7c8b034b212feede58ddcc77d9c37c388"
-_INITIAL_READY_MISSION_SHA256 = "9a9c6b751c45732d108d0f833f6096df1558c9d546761fc03a922489dfa0240a"
+_INITIAL_READY_MISSION_SHA256 = "b91e5315d29c8ba40134efd6d38e366781f30d2070cd18c8739c2ffd3ced8e23"
 _DEFAULT_LIMITS = {
     "max_files": 10000, "max_total_bytes": 256 * 1024 * 1024,
     "max_path_bytes": 1024, "max_git_record_bytes": 4096,

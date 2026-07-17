@@ -1707,6 +1707,32 @@ class DetectorEvasionTests(unittest.TestCase):
             )
         self.assertIn("TEST_CONFIGURATION_WEAKENED", codes(self.analyze()))
 
+    def test_package_test_command_addition_is_not_weakened_or_ambiguous(self):
+        (self.base / "package.json").write_text(
+            json.dumps({"scripts": {"codegen": "orval"}}), encoding="utf-8",
+        )
+        (self.head / "package.json").write_text(
+            json.dumps({
+                "scripts": {
+                    "codegen": "orval && node normalize-generated.mjs",
+                    "test": "node --test ./test/*.test.mjs",
+                },
+            }),
+            encoding="utf-8",
+        )
+        found = codes(self.analyze())
+        self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
+        self.assertNotIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
+
+    def test_package_test_command_removal_is_blocked(self):
+        (self.base / "package.json").write_text(
+            json.dumps({"scripts": {"test": "vitest"}}), encoding="utf-8",
+        )
+        (self.head / "package.json").write_text(
+            json.dumps({"scripts": {"typecheck": "tsc --noEmit"}}), encoding="utf-8",
+        )
+        self.assertIn("TEST_CONFIGURATION_WEAKENED", codes(self.analyze()))
+
     def test_unchanged_package_without_test_command_is_not_weakened(self):
         for root in (self.base, self.head):
             (root / "package.json").write_text(

@@ -2634,13 +2634,23 @@ def _analyze_test_integrity(
                 if before_text == after_text:
                     continue
                 before_package, after_package = json.loads(before_text), json.loads(after_text)
-                before_command = before_package.get("scripts", {}).get("test") if isinstance(before_package, Mapping) else None
-                after_command = after_package.get("scripts", {}).get("test") if isinstance(after_package, Mapping) else None
+                before_scripts = before_package.get("scripts", {}) if isinstance(before_package, Mapping) else None
+                after_scripts = after_package.get("scripts", {}) if isinstance(after_package, Mapping) else None
+                if not isinstance(before_scripts, Mapping) or not isinstance(after_scripts, Mapping):
+                    raise TypeError("package scripts must be objects")
+                before_command = before_scripts.get("test")
+                after_command = after_scripts.get("test")
+                if before_command is None and isinstance(after_command, str) and after_command:
+                    continue
+                if before_command is None and after_command is None:
+                    continue
                 weakened = (
                     not isinstance(before_command, str) or not before_command
                     or not isinstance(after_command, str) or not after_command
                     or before_command != after_command
                 )
+                if not weakened:
+                    continue
             if weakened:
                 findings.append(IntegrityFinding(
                     "TEST_CONFIGURATION_WEAKENED", "Test configuration was weakened.", path,

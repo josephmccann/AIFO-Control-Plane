@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "repository": "josephmccann/AIFO-Control-Plane",
+  "eos_version": "1.0.0",
+  "constitution_sha256": "a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e",
+  "founder_identities": ["josephmccann"],
+  "semantic_domains": [
+    {"name": "governance", "paths": ["docs/governance/**", "docs/engineering-os/**", "schemas/engineering-os/**"], "minimum_tier": "Tier 2", "owners": ["josephmccann"], "conflict_group": "eos-governance"}
+  ],
+  "tier_2_paths": [".github/**", ".aifo/**", "docs/governance/**", "docs/engineering-os/**", "engineering_os/**", "schemas/**", "terraform/**", "SECURITY.md", "AGENTS.md"],
+  "required_status_checks": ["terraform-validate", "engineering-os"],
+  "default_limits": {"model_cost_usd": 25.0, "model_tokens": 250000, "wall_clock_minutes": 240, "remediation_cycles": 2, "concurrent_agents": 4, "ci_reruns": 3},
+  "transition_roles": {},
+  "recovery_workflow_paths": [".github/workflows/reusable-orphan-recovery.yml"],
+  "auto_merge_enabled": false,
+  "airtable_live_enabled": false,
+  "deployment_enabled": false,
+  "edgar_integration_enabled": false,
+  "orphan_recovery_enabled": false
+}

@@ -6,6 +6,8 @@ on:
       - ".github/workflows/terraform-validate.yml"
       - "terraform/**"
       - "scripts/**"
+      - "engineering_os/**"
+      - "tests/engineering_os/**"
   push:
     branches:
       - main
@@ -13,6 +15,8 @@ on:
       - ".github/workflows/terraform-validate.yml"
       - "terraform/**"
       - "scripts/**"
+      - "engineering_os/**"
+      - "tests/engineering_os/**"
   workflow_dispatch:
 
 permissions:
@@ -30,17 +34,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.10.5
 
-      - name: Terraform format
-        run: terraform fmt -check -recursive terraform
-
-      - name: Terraform validate all roots
+      - name: Canonical Engineering OS and Terraform validation
         run: ./scripts/validate.sh
-
-      - name: Shell syntax
-        run: bash -n scripts/*.sh

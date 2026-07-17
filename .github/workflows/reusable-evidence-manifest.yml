@@ -1,0 +1,230 @@
+name: Reusable evidence manifest
+
+on:
+  workflow_call:
+    inputs:
+      base_sha:
+        required: true
+        type: string
+      head_sha:
+        required: true
+        type: string
+      pull_request:
+        required: true
+        type: number
+      producer_validation_command:
+        description: Target-repository validation command run without privileged authority
+        required: true
+        type: string
+      expected_workflow_sha:
+        description: Exact reviewed Control Plane workflow revision
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  caller-authorization:
+    name: Authorize exact caller and workflow provenance
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail closed unless caller and workflow are authorized
+        env:
+          CALLER_EVENT_NAME: ${{ github.event_name }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_OWNER: ${{ github.repository_owner }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
+          EXPECTED_WORKFLOW_FILE_PATH: .github/workflows/reusable-evidence-manifest.yml
+          EXPECTED_CALLER_WORKFLOW_PATH: .github/workflows/eos-pull-request.yml
+        run: |
+          set -euo pipefail
+          deny() { echo "caller authorization denied: $1" >&2; exit 1; }
+          [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+          [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
+          [[ "$WORKFLOW_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "workflow repository"
+          [[ "$WORKFLOW_FILE_PATH" == "$EXPECTED_WORKFLOW_FILE_PATH" ]] || deny "workflow identity"
+          [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "workflow revision"
+          [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "caller workflow revision"
+          [[ "$CALLER_EVENT_NAME" == "pull_request" ]] || deny "event"
+          [[ "$CALLER_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]] || deny "caller ref"
+          [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/$EXPECTED_CALLER_WORKFLOW_PATH@$CALLER_REF" ]] || deny "caller workflow identity"
+
+  producer-evidence:
+    name: Producer evidence
+    needs: caller-authorization
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out immutable head
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Capture unprivileged validation outputs
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PRODUCER_VALIDATION_COMMAND: ${{ inputs.producer_validation_command }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/eos-producer"
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$HEAD_SHA" ]]
+          git cat-file -e "$BASE_SHA^{commit}"
+          git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+          git update-ref refs/remotes/origin/master "$BASE_SHA"
+          [[ "$(git rev-parse refs/remotes/origin/master)" == "$BASE_SHA" ]]
+          [[ "$PRODUCER_VALIDATION_COMMAND" =~ [^[:space:]] ]]
+          bash -euo pipefail -c "$PRODUCER_VALIDATION_COMMAND" \
+            >"$RUNNER_TEMP/eos-producer/producer-validation.txt" 2>&1
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "eos-producer"
+          content = (root / "producer-validation.txt").read_bytes()
+          value = {
+              "schema_version": "1.0.0",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "pull_request": int(os.environ["PULL_REQUEST"]),
+              "base_sha": os.environ["BASE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "artifacts": [{
+                  "name": "producer-validation.txt",
+                  "sha256": hashlib.sha256(content).hexdigest(),
+                  "size_bytes": len(content),
+              }],
+          }
+          (root / "bundle.json").write_text(
+              json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload producer-only evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: eos-producer-${{ inputs.pull_request }}-${{ inputs.head_sha }}
+          path: ${{ runner.temp }}/eos-producer
+          if-no-files-found: error
+          retention-days: 90
+
+  manifest:
+    name: Evidence manifest
+    needs: producer-evidence
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Materialize immutable evidence kernel
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+        with:
+          expected_kernel_sha: 59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+
+      - name: Download producer-only evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: eos-producer-${{ inputs.pull_request }}-${{ inputs.head_sha }}
+          path: producer
+
+      - name: Check out immutable base
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ inputs.base_sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out immutable head for trusted analysis
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ inputs.head_sha }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve immutable base policy or exact first-policy bootstrap
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          kernel/scripts/engineering-os/resolve-base-policy \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --head-root "$GITHUB_WORKSPACE/head" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --bootstrap-repository josephmccann/AI.FO-Demo \
+            --bootstrap-base-sha 52ca01c7c8b034b212feede58ddcc77d9c37c388 \
+            --bootstrap-policy-sha256 27f04a05fece1cfb8e85b7da641f8d3c98592ebc1d7b943be5b99fd0e3b8cf81 \
+            --output "$RUNNER_TEMP/base-policy.json"
+
+      - name: Validate source integrity with immutable kernel
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
+          GH_TOKEN: ${{ github.token }}
+          EVALUATED_AT: ${{ github.event.pull_request.updated_at }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/eos-validated"
+          kernel/scripts/engineering-os/validate-test-integrity \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --head-root "$GITHUB_WORKSPACE/head" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-policy "$RUNNER_TEMP/base-policy.json" \
+            --pull-request "$PULL_REQUEST" \
+            --evaluated-at "$EVALUATED_AT" \
+            --output "$RUNNER_TEMP/eos-validated/test-integrity-report.json"
+
+      - name: Validate producer artifact boundary with immutable kernel
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/kernel"
+          scripts/engineering-os/validate-evidence-bundle \
+            "$GITHUB_WORKSPACE/producer/bundle.json" \
+            "$GITHUB_WORKSPACE/producer" \
+            "$RUNNER_TEMP/eos-validated/producer-bundle.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --pull-request "$PULL_REQUEST" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
+
+      - name: Retain validated evidence boundary
+        uses: actions/upload-artifact@v4
+        with:
+          name: eos-evidence-${{ inputs.pull_request }}-${{ inputs.head_sha }}
+          path: ${{ runner.temp }}/eos-validated
+          if-no-files-found: error
+          retention-days: 90

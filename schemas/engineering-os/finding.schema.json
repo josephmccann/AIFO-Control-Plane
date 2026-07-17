@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/finding.schema.json",
+  "title": "AI.FO Adversarial Finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "finding_id", "mission_id", "reviewer", "summary", "evidence", "severity", "disposition"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "finding_id": {"type": "string", "minLength": 1}, "mission_id": {"type": "string", "minLength": 1}, "reviewer": {"type": "string", "minLength": 1}, "summary": {"type": "string", "minLength": 1}, "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "severity": {"enum": ["critical", "high", "medium", "low", "informational"]}, "disposition": {"enum": ["valid", "invalid", "duplicate", "founder_decision"]}
+  }
+}

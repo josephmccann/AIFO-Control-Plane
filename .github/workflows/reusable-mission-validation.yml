@@ -1,0 +1,210 @@
+name: Reusable mission validation
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: Mission issue number
+        required: true
+        type: number
+      producer_validation_command:
+        description: Target-repository validation command run in the unprivileged evidence job
+        required: true
+        type: string
+      expected_workflow_sha:
+        description: Exact reviewed Control Plane workflow revision
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  caller-authorization:
+    name: Authorize exact caller and workflow provenance
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail closed unless caller and workflow are authorized
+        env:
+          CALLER_EVENT_NAME: ${{ github.event_name }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_OWNER: ${{ github.repository_owner }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
+          EXPECTED_WORKFLOW_FILE_PATH: .github/workflows/reusable-mission-validation.yml
+          EXPECTED_CALLER_WORKFLOW_PATH: .github/workflows/eos-pull-request.yml
+        run: |
+          set -euo pipefail
+          deny() { echo "caller authorization denied: $1" >&2; exit 1; }
+          [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+          [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
+          [[ "$WORKFLOW_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "workflow repository"
+          [[ "$WORKFLOW_FILE_PATH" == "$EXPECTED_WORKFLOW_FILE_PATH" ]] || deny "workflow identity"
+          [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "workflow revision"
+          [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "caller workflow revision"
+          [[ "$CALLER_EVENT_NAME" == "pull_request" ]] || deny "event"
+          [[ "$CALLER_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]] || deny "caller ref"
+          [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/$EXPECTED_CALLER_WORKFLOW_PATH@$CALLER_REF" ]] || deny "caller workflow identity"
+
+  mission-history:
+    name: Mission history
+    needs: caller-authorization
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+    steps:
+      - name: Materialize immutable enforcement kernel
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+        with:
+          expected_kernel_sha: 59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+      - name: Check out immutable target head with complete history
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve immutable base policy or exact first-policy bootstrap
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git -C target cat-file -e "$BASE_SHA^{commit}"
+          git -C target cat-file -e "$HEAD_SHA^{commit}"
+          git -C target merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
+          kernel/scripts/engineering-os/resolve-base-policy \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-root "$GITHUB_WORKSPACE/target" \
+            --head-root "$GITHUB_WORKSPACE/target" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --bootstrap-repository josephmccann/AI.FO-Demo \
+            --bootstrap-base-sha 52ca01c7c8b034b212feede58ddcc77d9c37c388 \
+            --bootstrap-policy-sha256 27f04a05fece1cfb8e85b7da641f8d3c98592ebc1d7b943be5b99fd0e3b8cf81 \
+            --output "$RUNNER_TEMP/base-policy.json"
+      - name: Read and flatten authenticated issue history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
+          cd "$GITHUB_WORKSPACE/kernel"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
+          from engineering_os.mission import parse_issue_body
+          issue = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "issue.json"), encoding="utf-8"))
+          json.dump(parse_issue_body(issue["body"]), open(os.path.join(os.environ["RUNNER_TEMP"], "mission.json"), "w", encoding="utf-8"))
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments.json"), encoding="utf-8"))
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(os.environ["GITHUB_REPOSITORY"]))
+          run_ids = set()
+          for comment in comments:
+              for match in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(match.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
+          PY
+          : > "$RUNNER_TEMP/runs.ndjson"
+          while read -r run_id; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs.ndjson"
+          done < "$RUNNER_TEMP/run-ids.txt"
+          if [[ -s "$RUNNER_TEMP/runs.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs.ndjson" > "$RUNNER_TEMP/runs.json"; else printf '[]\n' > "$RUNNER_TEMP/runs.json"; fi
+      - name: Authenticate event history, authority, and projection
+        env:
+          PYTHONPATH: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/kernel"
+          python3 -m engineering_os.commands authenticate-event-history \
+            --comments "$RUNNER_TEMP/comments.json" \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy "$RUNNER_TEMP/base-policy.json" \
+            --runs "$RUNNER_TEMP/runs.json" \
+            --repository "$GITHUB_REPOSITORY"
+
+  tier-path:
+    name: Tier and path guard
+    needs: mission-history
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-tier-path-guard.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+      expected_workflow_sha: ${{ inputs.expected_workflow_sha }}
+
+  frozen-path:
+    name: Frozen path guard
+    needs: mission-history
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-frozen-path-guard.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+      expected_workflow_sha: ${{ inputs.expected_workflow_sha }}
+
+  test-integrity:
+    name: Test integrity
+    needs: mission-history
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-test-integrity.yml
+    with:
+      expected_workflow_sha: ${{ inputs.expected_workflow_sha }}
+
+  evidence:
+    name: Evidence manifest
+    needs: [mission-history, tier-path, frozen-path, test-integrity]
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-evidence-manifest.yml
+    with:
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      pull_request: ${{ github.event.pull_request.number }}
+      producer_validation_command: ${{ inputs.producer_validation_command }}
+      expected_workflow_sha: ${{ inputs.expected_workflow_sha }}
+
+  merge-authorization:
+    name: Merge authorization
+    needs: [mission-history, tier-path, frozen-path, test-integrity, evidence]
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-merge-authorization.yml
+    with:
+      expected_workflow_sha: ${{ inputs.expected_workflow_sha }}

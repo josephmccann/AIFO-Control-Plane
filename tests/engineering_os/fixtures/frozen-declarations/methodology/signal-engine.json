@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "declaration_id": "frozen-signal-v1",
+  "repository": "acme/widgets",
+  "paths": ["src/engine/model.py"],
+  "pinned_commit": "1111111111111111111111111111111111111111",
+  "sealed_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "protected_version": "1.4.0",
+  "release_condition": "founder-approved-methodology-release",
+  "exception_authority": "founder",
+  "expires_at": "2026-08-01T00:00:00Z",
+  "one_shot": true
+}

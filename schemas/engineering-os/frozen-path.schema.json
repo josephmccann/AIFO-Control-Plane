@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/frozen-path.schema.json",
+  "title": "AI.FO Frozen Path Declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "declaration_id", "repository", "paths", "pinned_commit", "sealed_manifest_sha256", "protected_version", "release_condition", "exception_authority", "expires_at", "one_shot"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "declaration_id": {"type": "string", "minLength": 1}, "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"}, "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "pinned_commit": {"type": ["string", "null"]}, "sealed_manifest_sha256": {"type": ["string", "null"]}, "protected_version": {"type": ["string", "null"]}, "release_condition": {"type": "string", "minLength": 1}, "exception_authority": {"enum": ["founder"]}, "expires_at": {"type": ["string", "null"]}, "one_shot": {"type": "boolean"}
+  }
+}

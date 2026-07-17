@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "override_id": "override-1",
+  "mission_id": "mission-123",
+  "repository": "acme/widgets",
+  "pull_request": 42,
+  "base_sha": "1111111111111111111111111111111111111111",
+  "head_sha": "2222222222222222222222222222222222222222",
+  "risk_tier": "Tier 1",
+  "report_sha256": "REPLACED_BY_TEST",
+  "finding_codes": ["TEST_CASE_REMOVED"],
+  "reason": "The supported behavior was intentionally removed.",
+  "behavior_removed": "Legacy input handling is no longer supported.",
+  "producer_identity": "producer",
+  "adversary_identity": "adversary",
+  "issued_at": "2026-07-15T10:00:00Z",
+  "expires_at": "2026-07-15T14:00:00Z",
+  "nonce": "override-nonce-1",
+  "single_use": true,
+  "consumed_at": null
+}

@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0.0",
+  "repository": "josephmccann/AIFO-Control-Plane",
+  "eos_version": "1.0.0",
+  "constitution_sha256": "a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e",
+  "founder_identities": [
+    "josephmccann",
+    "joemccann"
+  ],
+  "semantic_domains": [
+    {
+      "name": "governance",
+      "paths": [
+        ".aifo/**",
+        "AGENTS.md",
+        "docs/adr/**",
+        "docs/engineering-os/**",
+        "docs/governance/**",
+        "engineering_os/**",
+        "schemas/engineering-os/**"
+      ],
+      "minimum_tier": "Tier 2",
+      "owners": [
+        "josephmccann"
+      ],
+      "conflict_group": "engineering-governance"
+    },
+    {
+      "name": "infrastructure",
+      "paths": [
+        ".github/workflows/**",
+        "scripts/**",
+        "terraform/**"
+      ],
+      "minimum_tier": "Tier 2",
+      "owners": [
+        "josephmccann"
+      ],
+      "conflict_group": "control-plane-infrastructure"
+    },
+    {
+      "name": "security",
+      "paths": [
+        "SECURITY.md",
+        "docs/security-model.md",
+        "docs/runbooks/emergency-access.md"
+      ],
+      "minimum_tier": "Tier 2",
+      "owners": [
+        "josephmccann"
+      ],
+      "conflict_group": "security-boundary"
+    }
+  ],
+  "tier_2_paths": [
+    ".aifo/**",
+    ".github/**",
+    "AGENTS.md",
+    "SECURITY.md",
+    "docs/adr/**",
+    "docs/engineering-os/**",
+    "docs/governance/**",
+    "docs/security-model.md",
+    "engineering_os/**",
+    "schemas/**",
+    "scripts/**",
+    "terraform/**"
+  ],
+  "required_status_checks": [
+    "Engineering OS Validation",
+    "Terraform Validate"
+  ],
+  "default_limits": {
+    "model_cost_usd": 25.0,
+    "model_tokens": 250000,
+    "wall_clock_minutes": 240,
+    "remediation_cycles": 2,
+    "concurrent_agents": 4,
+    "ci_reruns": 3
+  },
+  "transition_roles": {},
+  "recovery_workflow_paths": [
+    ".github/workflows/reusable-orphan-recovery.yml"
+  ],
+  "auto_merge_enabled": false,
+  "airtable_live_enabled": false,
+  "deployment_enabled": false,
+  "edgar_integration_enabled": false,
+  "orphan_recovery_enabled": false
+}

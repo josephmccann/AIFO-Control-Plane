@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+exec python3 -c '
+import argparse, json
+from dataclasses import asdict
+from engineering_os.scope import detect_mission_conflicts, validate_scope
+
+parser = argparse.ArgumentParser(description="Validate EOS path scope and ownership")
+parser.add_argument("--mission", required=True)
+parser.add_argument("--policy", required=True)
+parser.add_argument("--changed-files", required=True)
+parser.add_argument("--active-missions")
+args = parser.parse_args()
+load = lambda path: json.load(open(path, encoding="utf-8"))
+mission, policy, changed = load(args.mission), load(args.policy), load(args.changed_files)
+active = load(args.active_missions) if args.active_missions else []
+violations = validate_scope(mission, policy, changed)
+violations.extend(detect_mission_conflicts(
+    mission, policy, changed, active,
+))
+print(json.dumps({"allowed": not violations, "violations": [asdict(item) for item in violations]}, sort_keys=True, separators=(",", ":")))
+raise SystemExit(0 if not violations else 1)
+' "$@"

@@ -1,0 +1,8 @@
+[
+  {
+    "mission_id": "mission-other",
+    "state": "In Progress",
+    "paths": ["src/reporting/**"],
+    "conflict_groups": ["reporting"]
+  }
+]

@@ -1,0 +1,230 @@
+name: Mission command
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: eos-mission-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ github.event.issue.pull_request == null }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+    outputs:
+      append: ${{ steps.proposal.outputs.append }}
+      encoded_body: ${{ steps.proposal.outputs.encoded_body }}
+      is_claim: ${{ steps.exact.outputs.command == 'claim' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Recognize one exact command
+        id: exact
+        continue-on-error: true
+        env:
+          COMMAND_BODY: ${{ github.event.comment.body }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from engineering_os.commands import parse_command
+          parsed = parse_command(os.environ["COMMAND_BODY"])
+          if parsed is None:
+              raise SystemExit(1)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              stream.write("command=%s\n" % parsed[0])
+          PY
+      - name: Normalize mission and paginated comments
+        if: ${{ steps.exact.outcome == 'success' && steps.exact.outputs.command != 'claim' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from engineering_os.mission import parse_issue_body
+          json.dump(parse_issue_body(os.environ["ISSUE_BODY"]), open(os.path.join(os.environ["RUNNER_TEMP"], "mission.json"), "w", encoding="utf-8"))
+          PY
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
+          repository = os.environ["GITHUB_REPOSITORY"]
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments.json"), encoding="utf-8"))
+          run_ids = set()
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(repository))
+          for comment in comments:
+              for match in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(match.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  source = event.get("source_url") if isinstance(event, dict) else None
+                  found = pattern.fullmatch(source or "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
+          PY
+          : > "$RUNNER_TEMP/runs.ndjson"
+          while read -r run_id; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs.ndjson"
+          done < "$RUNNER_TEMP/run-ids.txt"
+          if [[ -s "$RUNNER_TEMP/runs.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs.ndjson" > "$RUNNER_TEMP/runs.json"; else printf '[]\n' > "$RUNNER_TEMP/runs.json"; fi
+      - name: Authenticate history and authorize proposal
+        id: proposal
+        if: ${{ steps.exact.outcome == 'success' && steps.exact.outputs.command != 'claim' }}
+        env:
+          COMMAND_URL: ${{ github.event.comment.html_url }}
+        run: |
+          python3 -m engineering_os.commands authenticate-event-history \
+            --comments "$RUNNER_TEMP/comments.json" \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy .aifo/engineering-os-policy.json \
+            --runs "$RUNNER_TEMP/runs.json" \
+            --repository "$GITHUB_REPOSITORY"
+          python3 -m engineering_os.commands propose-command \
+            --comments "$RUNNER_TEMP/comments.json" \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy .aifo/engineering-os-policy.json \
+            --runs "$RUNNER_TEMP/runs.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --command-comment-url "$COMMAND_URL" \
+            --body-output "$RUNNER_TEMP/event-body.txt"
+          {
+            printf 'append=true\n'
+            printf 'encoded_body=%s\n' "$(base64 < "$RUNNER_TEMP/event-body.txt" | tr -d '\n')"
+          } >> "$GITHUB_OUTPUT"
+
+  append:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.append == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Append only the authenticated authorized event
+        env:
+          ENCODED_BODY: ${{ needs.prepare.outputs.encoded_body }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          body="$(printf '%s' "$ENCODED_BODY" | base64 --decode)"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$body" >/dev/null
+
+  claim:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.is_claim == 'true' }}
+    concurrency:
+      group: eos-claim-${{ github.repository }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Re-fetch all-state mission histories and authorize claim under repository lock
+        env:
+          COMMAND_URL: ${{ github.event.comment.html_url }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/all-issues.json"
+          : > "$RUNNER_TEMP/comments-index.ndjson"
+          jq -r '.[].number' "$RUNNER_TEMP/all-issues.json" | while read -r issue; do
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments-${issue}.json"
+            jq -n --arg issue "$issue" --slurpfile comments "$RUNNER_TEMP/comments-${issue}.json" \
+              '{($issue):$comments[0]}' >> "$RUNNER_TEMP/comments-index.ndjson"
+          done
+          jq -s 'reduce .[] as $item ({}; . + $item)' "$RUNNER_TEMP/comments-index.ndjson" > "$RUNNER_TEMP/comments-by-issue.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from engineering_os.commands import discover_repository_mission_candidates
+
+          issues = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "all-issues.json"), encoding="utf-8"))
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments-by-issue.json"), encoding="utf-8"))
+          # Event-bearing <!-- EOS:EVENT:BEGIN --> issues remain candidates even when <!-- EOS:MISSION:BEGIN --> markers were removed.
+          discovery = discover_repository_mission_candidates(issues, comments)
+          if not discovery.allowed:
+              raise SystemExit("%s: %s" % (discovery.code, discovery.details))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "candidate-seeds.json"), "w", encoding="utf-8") as stream:
+              json.dump(list(discovery.candidates), stream, sort_keys=True, separators=(",", ":"))
+          PY
+          : > "$RUNNER_TEMP/candidates.ndjson"
+          jq -r '.[].issue_number' "$RUNNER_TEMP/candidate-seeds.json" | while read -r issue; do
+            jq --argjson issue "$issue" '.[] | select(.issue_number == $issue) | .comments' \
+              "$RUNNER_TEMP/candidate-seeds.json" > "$RUNNER_TEMP/comments-${issue}.json"
+            ISSUE="$issue" python3 - <<'PY'
+          import json
+          import os
+          import re
+          from engineering_os.commands import _EVENT_MARKER
+
+          issue = os.environ["ISSUE"]
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments-%s.json" % issue), encoding="utf-8"))
+          pattern = re.compile(r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(os.environ["GITHUB_REPOSITORY"]))
+          run_ids = set()
+          for comment in comments:
+              for marker in _EVENT_MARKER.finditer(comment.get("body", "")):
+                  try:
+                      event = json.loads(marker.group(1))
+                  except json.JSONDecodeError:
+                      continue
+                  found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
+                  if found:
+                      run_ids.add(int(found.group(1)))
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids-%s.txt" % issue), "w", encoding="utf-8") as stream:
+              stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
+          PY
+            : > "$RUNNER_TEMP/runs-${issue}.ndjson"
+            while read -r run_id; do
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs-${issue}.ndjson"
+            done < "$RUNNER_TEMP/run-ids-${issue}.txt"
+            if [[ -s "$RUNNER_TEMP/runs-${issue}.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs-${issue}.ndjson" > "$RUNNER_TEMP/runs-${issue}.json"; else printf '[]\n' > "$RUNNER_TEMP/runs-${issue}.json"; fi
+            jq --argjson issue "$issue" \
+              --slurpfile comments "$RUNNER_TEMP/comments-${issue}.json" \
+              --slurpfile runs "$RUNNER_TEMP/runs-${issue}.json" \
+              '.[] | select(.issue_number == $issue) | . + {comments:$comments[0], actions_runs:$runs[0]}' \
+              "$RUNNER_TEMP/candidate-seeds.json" >> "$RUNNER_TEMP/candidates.ndjson"
+          done
+          jq -s '.' "$RUNNER_TEMP/candidates.ndjson" > "$RUNNER_TEMP/candidates.json"
+          matches="$(jq --argjson issue "$ISSUE_NUMBER" '[.[] | select(.issue_number == $issue)] | length' "$RUNNER_TEMP/candidates.json")"
+          [[ "$matches" == "1" ]] || { echo "current issue is not exactly one state-independent EOS mission" >&2; exit 1; }
+          jq --argjson issue "$ISSUE_NUMBER" '.[] | select(.issue_number == $issue) | .mission' "$RUNNER_TEMP/candidates.json" > "$RUNNER_TEMP/mission.json"
+          jq --argjson issue "$ISSUE_NUMBER" '.[] | select(.issue_number == $issue) | .comments' "$RUNNER_TEMP/candidates.json" > "$RUNNER_TEMP/comments.json"
+          jq --argjson issue "$ISSUE_NUMBER" '.[] | select(.issue_number == $issue) | .actions_runs' "$RUNNER_TEMP/candidates.json" > "$RUNNER_TEMP/runs.json"
+          python3 -m engineering_os.commands authenticate-repository-leases \
+            --candidates "$RUNNER_TEMP/candidates.json" \
+            --policy .aifo/engineering-os-policy.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --events-output "$RUNNER_TEMP/repository-leases.json"
+          python3 -m engineering_os.commands propose-command \
+            --comments "$RUNNER_TEMP/comments.json" \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy .aifo/engineering-os-policy.json \
+            --runs "$RUNNER_TEMP/runs.json" \
+            --repository-leases "$RUNNER_TEMP/repository-leases.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --command-comment-url "$COMMAND_URL" \
+            --body-output "$RUNNER_TEMP/event-body.txt"
+          body="$(< "$RUNNER_TEMP/event-body.txt")"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$body" >/dev/null

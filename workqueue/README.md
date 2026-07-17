@@ -28,10 +28,15 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 | WQ-034 | Checkpoint control-plane before Codex CLI update | PR #10 merged | Done |
 | WQ-036 | Add durable local `actionlint` and `shellcheck` tooling | Pinned installer, platform tests, full repository validation | Done |
 | WQ-037 | Define control-plane host patching and maintenance | ADR-0010, approval-gated runbook, repository-state reconciliation | Done |
+| WQ-038 | Implement EOS Control Plane packages 1 through 7 | Full deterministic EOS suite and package review gates | Done; no merge or activation performed |
+| WQ-039 | Integrate AI.FO-Demo through pinned thin EOS callers | Demo offline suite, build, and clean-context Package 8 review | Done at `eddc1ca024305d222ef716a27005472590d0a087`; callers remain inactive |
+| WQ-040 | Complete EOS Package 9 review, final reconciliation, and founder packet | Full cumulative validation and clean-context review | Done at Package 9 `f422b5c704c34e0ed4ec939f91e36cf1b1bf58a9`; awaiting founder PR and merge decisions |
 
 ## In Progress
 
-None.
+| ID | Work Item | Validation | Notes |
+| --- | --- | --- | --- |
+| WQ-041 | Complete live EOS caller validation and merge sequence | Exact caller run, required checks, independent review, tree identity, post-merge validation | Control Plane package-detector repair awaiting review; Demo PR remains unmerged |
 
 ## Blocked
 
@@ -44,3 +49,4 @@ None.
 
 - Add periodic deployment-status documentation checks.
 - Add lightweight monthly cost evidence.
+- Complete EOS live caller validation and merge sequence without deployment.

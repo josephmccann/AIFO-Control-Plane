@@ -1,0 +1,162 @@
+name: Reusable test-integrity guard
+
+on:
+  workflow_call:
+    inputs:
+      expected_workflow_sha:
+        description: Exact reviewed Control Plane workflow revision
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  caller-authorization:
+    name: Authorize exact caller and workflow provenance
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail closed unless caller and workflow are authorized
+        env:
+          CALLER_EVENT_NAME: ${{ github.event_name }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_OWNER: ${{ github.repository_owner }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
+          EXPECTED_WORKFLOW_FILE_PATH: .github/workflows/reusable-test-integrity.yml
+          EXPECTED_CALLER_WORKFLOW_PATH: .github/workflows/eos-pull-request.yml
+        run: |
+          set -euo pipefail
+          deny() { echo "caller authorization denied: $1" >&2; exit 1; }
+          [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+          [[ "$WORKFLOW_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "workflow repository"
+          [[ "$WORKFLOW_FILE_PATH" == "$EXPECTED_WORKFLOW_FILE_PATH" ]] || deny "workflow identity"
+          [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "workflow revision"
+          [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "caller workflow revision"
+          if [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "pull_request" ]] || deny "event"
+            [[ "$CALLER_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]] || deny "caller ref"
+            [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/$EXPECTED_CALLER_WORKFLOW_PATH@$CALLER_REF" ]] || deny "caller workflow identity"
+          elif [[ "$CALLER_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "pull_request_target" ]] || deny "control-plane event"
+            [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "control-plane ref"
+            [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@$CALLER_REF" ]] || deny "control-plane caller identity"
+          else
+            deny "calling repository"
+          fi
+
+  test-integrity:
+    name: Test Integrity
+    needs: caller-authorization
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Initialize fail-closed report
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          value = {
+              "schema_version": "1.0.0", "repository": os.environ["GITHUB_REPOSITORY"],
+              "base_sha": os.environ["BASE_SHA"], "head_sha": os.environ["HEAD_SHA"],
+              "pull_request": int(os.environ["PULL_REQUEST"]), "allowed": False,
+              "findings": [{"code": "TEST_INTEGRITY_NOT_COMPLETED", "message": "Test-integrity analysis did not complete.", "path": "$", "details": {}}],
+              "deltas": {},
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "test-integrity-report.json"), "w", encoding="utf-8") as handle:
+              json.dump(value, handle, sort_keys=True, separators=(",", ":"))
+              handle.write("\n")
+          PY
+
+      - name: Materialize immutable enforcement kernel
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+        with:
+          expected_kernel_sha: 59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+
+      - name: Check out immutable base revision
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out immutable head revision
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve immutable base policy or exact first-policy bootstrap
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          kernel/scripts/engineering-os/resolve-base-policy \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --head-root "$GITHUB_WORKSPACE/head" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --bootstrap-repository josephmccann/AI.FO-Demo \
+            --bootstrap-base-sha 52ca01c7c8b034b212feede58ddcc77d9c37c388 \
+            --bootstrap-policy-sha256 27f04a05fece1cfb8e85b7da641f8d3c98592ebc1d7b943be5b99fd0e3b8cf81 \
+            --output "$RUNNER_TEMP/base-policy.json"
+
+      - name: Derive complete test-integrity evidence
+        id: integrity
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVALUATED_AT: ${{ github.event.pull_request.updated_at }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Mission marker is authenticated from the PR body: AIFO-EOS-MISSION-ISSUE
+          set +e
+          kernel/scripts/engineering-os/validate-test-integrity \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --head-root "$GITHUB_WORKSPACE/head" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-policy "$RUNNER_TEMP/base-policy.json" \
+            --pull-request "$PULL_REQUEST" \
+            --evaluated-at "$EVALUATED_AT" \
+            --output "$RUNNER_TEMP/test-integrity-report.json"
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Retain machine-generated report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eos-test-integrity-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/test-integrity-report.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Enforce test-integrity decision
+        if: always()
+        env:
+          INTEGRITY_STATUS: ${{ steps.integrity.outputs.status }}
+        run: test "$INTEGRITY_STATUS" = "0"

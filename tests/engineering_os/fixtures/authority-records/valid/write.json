@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "record_id": "authority-record-write-1",
+  "authority_id": "authority-write-1",
+  "repository": "acme/widgets",
+  "paths": ["src/reporting/render.py"],
+  "capabilities": ["write"],
+  "issuer": "founder",
+  "subject": "producer-a",
+  "mission_id": "mission-123",
+  "pull_request": 42,
+  "head_sha": "2222222222222222222222222222222222222222",
+  "starts_at": "2026-07-15T00:00:00Z",
+  "expires_at": "2026-07-16T00:00:00Z",
+  "status": "active",
+  "nonce": "authority-nonce-write-1",
+  "single_use": true,
+  "source": {
+    "provider": "github",
+    "record_kind": "authority",
+    "payload_sha256": "bae9022ea477a3ab0bf7db2eb3d4ca7a9a82a50fc914f5e64ebd8641946f9cae",
+    "repository": "acme/widgets",
+    "subject_kind": "pull_request",
+    "subject_number": 42,
+    "comment_id": 9001,
+    "url": "https://github.com/acme/widgets/pull/42#issuecomment-9001",
+    "actor": "founder",
+    "created_at": "2026-07-15T00:00:00Z",
+    "content_sha256": "61cd95ee38353d1f9bdb4dfd1560a4d74ae8dd13bc429510ac02e435f4cd10ee",
+    "head_sha": "2222222222222222222222222222222222222222",
+    "transport_provenance": "sealed-fake-github-api:v1"
+  }
+}

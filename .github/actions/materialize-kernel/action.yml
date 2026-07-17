@@ -1,0 +1,80 @@
+name: Materialize immutable Engineering OS kernel
+description: Copy the exact private-action revision into the caller workspace.
+
+inputs:
+  expected_kernel_sha:
+    description: Exact reviewed private-action revision
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Verify and materialize immutable kernel
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+        EXPECTED_KERNEL_SHA: ${{ inputs.expected_kernel_sha }}
+        CALLER_REPOSITORY: ${{ github.repository }}
+        CALLER_OWNER: ${{ github.repository_owner }}
+        CALLER_EVENT_NAME: ${{ github.event_name }}
+        CALLER_REF: ${{ github.ref }}
+        CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+      run: |
+        set -euo pipefail
+        deny() { echo "kernel materialization denied: $1" >&2; exit 1; }
+        [[ "$ACTION_REF" =~ ^[0-9a-f]{40}$ ]] || deny "action revision"
+        [[ "$EXPECTED_KERNEL_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected revision"
+        [[ "$ACTION_REF" == "$EXPECTED_KERNEL_SHA" ]] || deny "kernel provenance"
+        [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+
+        if [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]]; then
+          if [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/eos-pull-request.yml@$CALLER_REF" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "pull_request" ]] || deny "pull-request event"
+            [[ "$CALLER_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]] || deny "pull-request ref"
+          elif [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/eos-orphan-recovery.yml@refs/heads/master" ||
+                  "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/eos-airtable-mirror.yml@refs/heads/master" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "schedule" || "$CALLER_EVENT_NAME" == "workflow_dispatch" ]] || deny "dry-run event"
+            [[ "$CALLER_REF" == "refs/heads/master" ]] || deny "dry-run ref"
+          else
+            deny "Demo caller workflow"
+          fi
+        elif [[ "$CALLER_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]]; then
+          if [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@refs/heads/main" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "pull_request_target" ]] || deny "Control Plane test event"
+            [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "Control Plane test ref"
+          elif [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/reusable-orphan-recovery.yml@refs/heads/main" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "schedule" || "$CALLER_EVENT_NAME" == "workflow_dispatch" ]] || deny "Control Plane orphan event"
+            [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "Control Plane orphan ref"
+          else
+            deny "Control Plane caller workflow"
+          fi
+        else
+          deny "calling repository"
+        fi
+
+        source_root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd -P)"
+        [[ -d "$source_root/engineering_os" ]] || deny "Python kernel"
+        [[ -d "$source_root/scripts/engineering-os" ]] || deny "command kernel"
+        [[ -d "$source_root/schemas/engineering-os" ]] || deny "schema kernel"
+        constitution="$source_root/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
+        [[ -f "$constitution" && ! -L "$constitution" ]] || deny "Engineering Constitution"
+
+        destination="$GITHUB_WORKSPACE/kernel"
+        [[ ! -e "$destination" && ! -L "$destination" ]] || deny "destination"
+        mkdir -p \
+          "$destination/scripts" \
+          "$destination/schemas" \
+          "$destination/docs/engineering-os"
+        cp -R "$source_root/engineering_os" "$destination/engineering_os"
+        cp -R "$source_root/scripts/engineering-os" "$destination/scripts/engineering-os"
+        cp -R "$source_root/schemas/engineering-os" "$destination/schemas/engineering-os"
+        cp "$constitution" "$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
+
+        [[ -d "$destination/engineering_os" ]] || deny "materialized Python kernel"
+        [[ -d "$destination/scripts/engineering-os" ]] || deny "materialized command kernel"
+        [[ -d "$destination/schemas/engineering-os" ]] || deny "materialized schema kernel"
+        materialized_constitution="$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
+        [[ -f "$materialized_constitution" && ! -L "$materialized_constitution" ]] || \
+          deny "materialized Engineering Constitution"
+        cmp -s "$constitution" "$materialized_constitution" || \
+          deny "Engineering Constitution integrity"

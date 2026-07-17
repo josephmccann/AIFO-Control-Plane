@@ -43,6 +43,26 @@ Every PR should identify:
 - rollback path;
 - deployment or approval gate, if any.
 
+## Engineering Operating System Changes
+
+EOS version `1.0.0` is pinned to Engineering Constitution SHA-256
+`a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e`.
+Start with `docs/engineering-os/HUMAN_ONBOARDING.md` and use the same governed
+path whether the producer is a human or an agent. Every EOS pull request binds
+one authoritative mission issue, exact scope and risk, reproducible validation,
+a distinct independent reviewer, zero unresolved valid Critical or Important
+findings, and founder approval for the exact head and merge method.
+
+Run the credential-free EOS gate before the complete repository gate:
+
+```bash
+scripts/engineering-os/validate-all
+```
+
+Auto-merge, deployment, cloud mutation, live Airtable writes, orphan mutation,
+and EDGAR integration remain disabled. Do not interpret mission, review, or
+merge approval as authority for any external action.
+
 ## Commit Style
 
 Use conventional commit messages such as:

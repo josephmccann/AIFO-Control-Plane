@@ -1,0 +1,12 @@
+name: Engineering mission
+description: Declare a machine-readable EOS mission.
+title: "[Mission] "
+labels: ["eos:proposed"]
+body:
+  - type: textarea
+    id: declaration
+    attributes:
+      label: Mission declaration
+      description: Include the complete AIFO-EOS-MISSION JSON declaration.
+    validations:
+      required: true

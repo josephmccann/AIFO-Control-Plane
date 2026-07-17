@@ -1,0 +1,8 @@
+[
+  {
+    "mission_id": "mission-other",
+    "state": "Claimed",
+    "paths": ["tests/reporting/**"],
+    "conflict_groups": ["spoofed-non-conflict"]
+  }
+]

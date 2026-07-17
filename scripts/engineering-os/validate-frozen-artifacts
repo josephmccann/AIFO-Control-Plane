@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+exec python3 -c '
+import argparse, json
+from dataclasses import asdict
+from engineering_os.frozen import FrozenDecision, derive_git_evidence, validate_frozen_changes
+
+parser = argparse.ArgumentParser(description="Validate EOS frozen artifact changes")
+parser.add_argument("--mission", required=True)
+parser.add_argument("--policy", required=True)
+parser.add_argument("--declarations", required=True)
+parser.add_argument("--exceptions", required=True)
+parser.add_argument("--repository", required=True)
+parser.add_argument("--pull-request", required=True, type=int)
+parser.add_argument("--base-sha", required=True)
+parser.add_argument("--head-sha", required=True)
+parser.add_argument("--now", required=True)
+parser.add_argument("--action", required=True)
+args = parser.parse_args()
+load = lambda path: json.load(open(path, encoding="utf-8"))
+exceptions = load(args.exceptions)
+if exceptions:
+    decision = FrozenDecision(False, "FROZEN_CLI_UNAUTHENTICATED_CLAIMS")
+else:
+    evidence = derive_git_evidence(
+        args.repository, args.base_sha, args.head_sha, worktree=".",
+    )
+    decision = validate_frozen_changes(
+        load(args.mission), load(args.policy), evidence["changed_files"],
+        load(args.declarations), exceptions,
+        repository=args.repository, pull_request=args.pull_request,
+        head_sha=args.head_sha, now=args.now, action=args.action,
+        git_evidence=evidence, evidence_verifier=None,
+        release_records=[], durable_reservations=[],
+        consumption_store="",
+    )
+print(json.dumps(asdict(decision), sort_keys=True, separators=(",", ":")))
+raise SystemExit(0 if decision.allowed else 1)
+' "$@"

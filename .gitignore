@@ -26,6 +26,8 @@ terraform/bootstrap/*/*.auto.tfvars
 # Generated output
 build/
 dist/
+.superpowers/
+__pycache__/
 
 # OS/editor
 .DS_Store

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/mission-state.schema.json",
+  "title": "AI.FO Mission State Projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission_id", "state", "remediation_cycles", "last_event_hash"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"}, "mission_id": {"type": "string", "minLength": 1}, "state": {"enum": ["Proposed", "Ready", "Claimed", "In Progress", "Adversarial Review", "Founder Approval", "Merge Authorized", "Merged", "Verified", "Closed", "Parked", "Incident", "Cancelled"]}, "remediation_cycles": {"type": "integer", "minimum": 0}, "last_event_hash": {"type": ["string", "null"]}
+  }
+}

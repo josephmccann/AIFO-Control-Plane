@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+exec python3 -c '
+import argparse, json
+from dataclasses import asdict
+from engineering_os.risk import compute_tier
+
+parser = argparse.ArgumentParser(description="Compute the maximum EOS risk tier")
+parser.add_argument("--mission", required=True)
+parser.add_argument("--policy", required=True)
+parser.add_argument("--changed-files", required=True)
+args = parser.parse_args()
+load = lambda path: json.load(open(path, encoding="utf-8"))
+decision = compute_tier(load(args.mission), load(args.policy), load(args.changed_files))
+print(json.dumps(asdict(decision), sort_keys=True, separators=(",", ":")))
+raise SystemExit(0 if decision.allowed else 1)
+' "$@"

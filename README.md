@@ -6,6 +6,11 @@ Session state: ACTIVE — OPERATIONAL REFINEMENT
 
 The approved current-scope AWS control-plane baseline is operationally complete. It does not host the AI.FO product runtime and it does not include an apply workflow.
 
+The repository also contains Engineering Operating System version `1.0.0`,
+pinned to Engineering Constitution SHA-256
+`a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e`.
+Start at [docs/engineering-os/README.md](docs/engineering-os/README.md).
+
 Start with [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md) before changing infrastructure design or resuming work.
 
 ## Baseline
@@ -138,7 +143,11 @@ terraform -chdir=terraform/environments/control-plane plan \
 
 ## Operating Model
 
+- EOS operations: [docs/engineering-os/README.md](docs/engineering-os/README.md)
+- EOS known gaps: [docs/engineering-os/KNOWN_ENFORCEMENT_GAPS.md](docs/engineering-os/KNOWN_ENFORCEMENT_GAPS.md)
+- EOS onboarding: [docs/engineering-os/HUMAN_ONBOARDING.md](docs/engineering-os/HUMAN_ONBOARDING.md)
 - Current state: [memory/current-state.md](memory/current-state.md)
+- Known risks: [memory/known-risks.md](memory/known-risks.md)
 - Open decisions: [memory/open-decisions.md](memory/open-decisions.md)
 - Work queue: [workqueue/README.md](workqueue/README.md)
 - Deployment readiness: [docs/deployment-readiness-review.md](docs/deployment-readiness-review.md)

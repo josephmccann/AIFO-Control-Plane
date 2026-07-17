@@ -1,0 +1,156 @@
+name: Reusable frozen path guard
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        description: Authenticated mission issue number
+        required: true
+        type: number
+      expected_workflow_sha:
+        description: Exact reviewed Control Plane workflow revision
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  caller-authorization:
+    name: Authorize exact caller and workflow provenance
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail closed unless caller and workflow are authorized
+        env:
+          CALLER_EVENT_NAME: ${{ github.event_name }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_OWNER: ${{ github.repository_owner }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
+          EXPECTED_WORKFLOW_FILE_PATH: .github/workflows/reusable-frozen-path-guard.yml
+          EXPECTED_CALLER_WORKFLOW_PATH: .github/workflows/eos-pull-request.yml
+        run: |
+          set -euo pipefail
+          deny() { echo "caller authorization denied: $1" >&2; exit 1; }
+          [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+          [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
+          [[ "$WORKFLOW_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "workflow repository"
+          [[ "$WORKFLOW_FILE_PATH" == "$EXPECTED_WORKFLOW_FILE_PATH" ]] || deny "workflow identity"
+          [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "workflow revision"
+          [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "caller workflow revision"
+          [[ "$CALLER_EVENT_NAME" == "pull_request" ]] || deny "event"
+          [[ "$CALLER_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]] || deny "caller ref"
+          [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/$EXPECTED_CALLER_WORKFLOW_PATH@$CALLER_REF" ]] || deny "caller workflow identity"
+
+  guard:
+    needs: caller-authorization
+    concurrency:
+      group: eos-frozen-${{ github.repository }}-${{ inputs.issue_number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Materialize immutable enforcement kernel
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+        with:
+          expected_kernel_sha: 59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+      - name: Check out target repository head with complete history
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Derive complete base and head git trees
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test -n "$BASE_SHA" && test -n "$HEAD_SHA"
+          git -C target cat-file -e "$BASE_SHA^{commit}"
+          git -C target cat-file -e "$HEAD_SHA^{commit}"
+          git -C target merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null
+          git -C target config diff.renames false
+          git -C target diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.zlist"
+          kernel/scripts/engineering-os/resolve-base-policy \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-root "$GITHUB_WORKSPACE/target" \
+            --head-root "$GITHUB_WORKSPACE/target" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --bootstrap-repository josephmccann/AI.FO-Demo \
+            --bootstrap-base-sha 52ca01c7c8b034b212feede58ddcc77d9c37c388 \
+            --bootstrap-policy-sha256 27f04a05fece1cfb8e85b7da641f8d3c98592ebc1d7b943be5b99fd0e3b8cf81 \
+            --output "$RUNNER_TEMP/base-policy.json"
+          if ! git -C target show "$BASE_SHA:.aifo/frozen-declarations.json" > "$RUNNER_TEMP/frozen-declarations.json"; then
+            printf '[]\n' > "$RUNNER_TEMP/frozen-declarations.json"
+          fi
+          python3 - <<'PY'
+          import json, os
+          root = os.environ["RUNNER_TEMP"]
+          raw = open(os.path.join(root, "changed-files.zlist"), "rb").read()
+          if raw and not raw.endswith(b"\0"):
+              raise SystemExit("incomplete NUL-delimited git diff")
+          changed = [item.decode("utf-8") for item in raw.split(b"\0") if item]
+          if len(changed) != len(set(changed)):
+              raise SystemExit("duplicate changed path")
+          json.dump(changed, open(os.path.join(root, "changed-files-audit.json"), "w", encoding="utf-8"))
+          PY
+      - name: Authenticate mission history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" | jq 'add' > "$RUNNER_TEMP/comments.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"
+          cd "$GITHUB_WORKSPACE/kernel"
+          python3 - <<'PY'
+          import json, os
+          from engineering_os.commands import authenticate_event_history
+          from engineering_os.mission import parse_issue_body
+          root = os.environ["RUNNER_TEMP"]
+          load = lambda name: json.load(open(os.path.join(root, name), encoding="utf-8"))
+          policy, issue, comments, runs = load("base-policy.json"), load("issue.json"), load("comments.json"), load("runs.json")
+          mission = parse_issue_body(issue.get("body", ""))
+          history = authenticate_event_history(comments, mission, policy, repository=os.environ["GITHUB_REPOSITORY"], actions_runs=runs)
+          if not history.allowed:
+              raise SystemExit("mission history denied: %s" % history.code)
+          json.dump(mission, open(os.path.join(root, "mission.json"), "w", encoding="utf-8"), sort_keys=True)
+          PY
+      - name: Fail closed until Task 5 authenticates exceptions and reservations
+        run: |
+          printf '[]\n' > "$RUNNER_TEMP/exceptions.json"
+      - name: Enforce frozen declarations from base revision
+        env:
+          GIT_DIR: ${{ github.workspace }}/target/.git
+          GIT_WORK_TREE: ${{ github.workspace }}/target
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          kernel/scripts/engineering-os/validate-frozen-artifacts \
+            --mission "$RUNNER_TEMP/mission.json" \
+            --policy "$RUNNER_TEMP/base-policy.json" \
+            --declarations "$RUNNER_TEMP/frozen-declarations.json" \
+            --exceptions "$RUNNER_TEMP/exceptions.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --pull-request "$PR_NUMBER" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --action write

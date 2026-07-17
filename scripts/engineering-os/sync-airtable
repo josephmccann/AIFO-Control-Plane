@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec python3 - "$@" <<'PY'
+"""Emit the deterministic Airtable mirror or fail closed for live mode."""
+
+import argparse
+import json
+
+from engineering_os.airtable import project_airtable_record, sync_airtable
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--direction", required=True)
+    parser.add_argument("--mode", required=True)
+    parser.add_argument("--missions", required=True)
+    parser.add_argument("--projected-at", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    try:
+        with open(args.missions, encoding="utf-8") as handle:
+            inputs = json.load(handle)
+        if not isinstance(inputs, list) or not inputs:
+            raise ValueError("mission inputs are absent")
+        records = []
+        for item in inputs:
+            if not isinstance(item, dict) or set(item) != {
+                "mission", "projection", "head_sha",
+            }:
+                raise ValueError("mission input is not closed")
+            records.append(project_airtable_record(
+                item["mission"],
+                item["projection"],
+                head_sha=item["head_sha"],
+                projected_at=args.projected_at,
+            ))
+        if args.mode == "live":
+            return 1
+        decision = sync_airtable(
+            direction=args.direction,
+            mode=args.mode,
+            records=records,
+        )
+        if not decision.allowed:
+            return 1
+        with open(args.output, "w", encoding="utf-8") as handle:
+            json.dump(
+                list(decision.records),
+                handle,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            handle.write("\n")
+        return 0
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY

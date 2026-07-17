@@ -88,13 +88,18 @@ Plane. Immutable enforcement-kernel materialization therefore uses the pinned
 private `materialize-kernel` composite action and GitHub's short-lived scoped
 installation token for private-action transport. The action verifies its exact
 40-hex action ref against the workflow's pinned kernel SHA before copying the
-kernel into the workspace. A separate target-repository checkout is selected
-from the caller repository at the revision being evaluated. Only the target
-checkout supplies source, policy, and declarations. The target checkout must
-never supply executable EOS code. Python imports and EOS command wrappers
-always run from the immutable kernel. If either repository identity, revision,
-transport, checkout, or required policy cannot be established, validation
-fails closed.
+kernel into the workspace. Because a commit cannot contain a reference to its
+own not-yet-known SHA, transport or kernel changes use two commits: first
+publish the changed action and kernel bytes, then pin every reusable workflow
+to that commit. The EOS boundary suite compares the pinned commit with the
+reviewed action and all three copied kernel paths byte-for-byte; stale or
+partially updated pins fail validation. A separate target-repository checkout
+is selected from the caller repository at the revision being evaluated. Only
+the target checkout supplies source, policy, and declarations. The target
+checkout must never supply executable EOS code. Python imports and EOS command
+wrappers always run from the immutable kernel. If either repository identity,
+revision, transport, checkout, pin consistency, or required policy cannot be
+established, validation fails closed.
 
 GitHub's personal-account sharing setting is coarse-grained, so every
 Demo-only reusable workflow enforces a repository-level caller boundary before

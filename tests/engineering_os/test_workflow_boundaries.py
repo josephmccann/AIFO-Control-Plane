@@ -14,6 +14,12 @@ AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
 KERNEL_ACTION_SHA = "5dcb70302451f3d3bfc635caa76bccd2c26dcd61"
+PINNED_TRANSPORT_PATHS = (
+    ".github/actions/materialize-kernel/action.yml",
+    "engineering_os",
+    "scripts/engineering-os",
+    "schemas/engineering-os",
+)
 DEMO_CALLER_PATHS = {
     "reusable-airtable-mirror.yml": ".github/workflows/eos-airtable-mirror.yml",
     "reusable-orphan-recovery.yml": ".github/workflows/eos-orphan-recovery.yml",
@@ -71,6 +77,44 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
 
     def read(self, name: str) -> str:
         return (WORKFLOW_ROOT / name).read_text(encoding="utf-8")
+
+    def test_pinned_action_commit_matches_reviewed_transport_and_kernel(self):
+        comparison = subprocess.run(
+            [
+                "git",
+                "diff",
+                "--no-ext-diff",
+                "--exit-code",
+                KERNEL_ACTION_SHA,
+                "--",
+                *PINNED_TRANSPORT_PATHS,
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(
+            0,
+            comparison.returncode,
+            "pinned private-action transport or kernel differs from the reviewed "
+            "working tree; publish the changed paths, repin every reusable "
+            "workflow, and review the resulting head:\n" + comparison.stdout,
+        )
+        untracked = subprocess.check_output(
+            [
+                "git",
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "--",
+                *PINNED_TRANSPORT_PATHS,
+            ],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual("", untracked)
 
     def test_private_kernel_action_materializes_only_authenticated_source(self):
         rendered = subprocess.check_output(
@@ -218,6 +262,31 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                         text=True,
                     )
                     self.assertEqual(0, accepted.returncode, accepted.stderr)
+
+        rejected_callers = (
+            ({}, {"CALLER_EVENT_NAME": "push"}),
+            (allowed_callers[0], {"CALLER_REF": "refs/heads/feature"}),
+            (allowed_callers[1], {"CALLER_EVENT_NAME": "push"}),
+            (allowed_callers[2], {"CALLER_REF": "refs/heads/feature"}),
+            (allowed_callers[3], {"CALLER_EVENT_NAME": "pull_request"}),
+        )
+        for caller, mutation in rejected_callers:
+            with self.subTest(rejected_caller=caller, mutation=mutation):
+                with tempfile.TemporaryDirectory() as directory:
+                    rejected = subprocess.run(
+                        ["bash", "-c", step["run"]],
+                        env={
+                            **environment,
+                            **caller,
+                            **mutation,
+                            "GITHUB_WORKSPACE": directory,
+                        },
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertNotEqual(0, rejected.returncode)
+                    self.assertIn("kernel materialization denied", rejected.stderr)
+                    self.assertFalse((Path(directory) / "kernel").exists())
 
     def test_demo_only_reusable_workflows_authenticate_caller_and_provenance(self):
         expected_names = {path.name for path in WORKFLOW_ROOT.glob("reusable-*.yml")}

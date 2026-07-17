@@ -99,6 +99,15 @@ class PythonImportGraphTests(unittest.TestCase):
         with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
             self.graph(support_roots=("support",)).closure("tests/test_service.py")
 
+    def test_namespace_mutation_inside_test_support_function_fails_closed(self):
+        self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
+        self.write(
+            "support.py",
+            "def value():\n    globals()['collection_flag'] = False\n    return True\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph(support_roots=("support",)).closure("tests/test_service.py")
+
     def test_static_import_inside_test_support_function_is_traversed(self):
         self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
         self.write(

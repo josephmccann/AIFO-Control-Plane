@@ -24,7 +24,7 @@ from .consumption import ConsumptionBinding, consume_once
 from .records import verify_record_evidence
 from .commands import authenticate_event_history
 from .mission import validate_ready
-from .python_imports import PythonImportGraph
+from .python_imports import PythonImportGraph, has_dynamic_namespace_mutation
 from .risk import compute_tier
 from .scope import PathInputError, path_matches
 
@@ -667,8 +667,15 @@ def _bounded_definition_literal(value: Optional[ast.AST]) -> bool:
     return visit(value, 0)
 
 
-def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
-    """Reject dynamic module/class namespace behavior without resolving aliases."""
+def _has_dynamic_namespace_mutation(
+    tree: ast.AST, *, validate_collection_shapes: bool = False,
+) -> bool:
+    """Reject dynamic namespace behavior; optionally apply the legacy shape gate."""
+
+    if has_dynamic_namespace_mutation(tree):
+        return True
+    if not validate_collection_shapes:
+        return False
 
     primitives = {
         "globals", "locals", "vars", "exec", "eval", "getattr", "setattr",
@@ -831,6 +838,8 @@ def _python_stats(
     allow_pytest_parametrize: bool, import_fingerprint: str,
 ) -> _FileStats:
     tree = ast.parse(text)
+    if _has_dynamic_namespace_mutation(tree):
+        raise SyntaxError("dynamic Python namespace mutation")
     if not import_fingerprint or _SHA256.fullmatch(import_fingerprint) is None:
         raise SyntaxError("Python import closure is unavailable")
     for statement in tree.body:

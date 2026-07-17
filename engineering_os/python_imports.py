@@ -33,6 +33,14 @@ _SAFE_BUILTINS = frozenset((
     "staticmethod", "str", "tuple", "type",
 ))
 _SAFE_CALLS = frozenset(("dataclass", "field", "frozenset", "list", "set", "tuple"))
+_RUNTIME_DYNAMIC_NAMES = frozenset((
+    "__import__", "delattr", "eval", "exec", "globals", "locals", "setattr",
+    "vars",
+))
+_RUNTIME_REFLECTION_ATTRIBUTES = _RUNTIME_DYNAMIC_NAMES | frozenset((
+    "__builtins__", "__dict__", "__globals__", "__getattribute__",
+    "f_globals", "f_locals", "import_module", "modules",
+))
 
 
 class PythonImportError(SyntaxError):
@@ -48,6 +56,39 @@ class PythonImportClosure:
     fingerprint: str
     first_party_paths: Tuple[str, ...]
     stdlib_roots: Tuple[str, ...]
+
+
+def has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
+    """Detect runtime namespace mutation while allowing direct benign getattr."""
+
+    allowed_getattr = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) in (2, 3)
+            and not node.keywords
+        ):
+            allowed_getattr.add(id(node.func))
+            if (
+                isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, str)
+                and node.args[1].value in _RUNTIME_REFLECTION_ATTRIBUTES
+            ):
+                return True
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            if node.id in _RUNTIME_DYNAMIC_NAMES:
+                return True
+            if node.id == "getattr" and id(node) not in allowed_getattr:
+                return True
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr in _RUNTIME_REFLECTION_ATTRIBUTES | {"getattr"}
+        ):
+            return True
+    return False
 
 
 class _DefinitionProjector:
@@ -405,12 +446,8 @@ class PythonImportGraph:
             tree = ast.parse(payload.decode("utf-8"), filename=relative)
         except (SyntaxError, UnicodeDecodeError) as error:
             raise PythonImportError("PYTHON_IMPORT_UNPARSABLE") from error
-        if self._is_test_support(relative):
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Name) and node.id in {"__import__", "eval", "exec"}:
-                    raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
-                if isinstance(node, ast.Attribute) and node.attr == "import_module":
-                    raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+        if self._is_test_support(relative) and has_dynamic_namespace_mutation(tree):
+            raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
         projection = _DefinitionProjector().project(tree)
         self._loaded[relative] = (tree, projection)
         return tree, projection

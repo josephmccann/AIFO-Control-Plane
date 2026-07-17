@@ -108,6 +108,18 @@ class SchemaTests(unittest.TestCase):
         violations = validate_document("not-a-contract", {})
         self.assertEqual([item.code for item in violations], ["SCHEMA_KIND_UNKNOWN"])
 
+    def test_activation_schema_conditionals_are_enforced(self):
+        event = {
+            "schema_version": "1.0.0", "mission_id": "mission-26", "sequence": 1,
+            "type": "test_integrity.baseline.authorized", "actor": "founder",
+            "actor_role": "system", "occurred_at": "2026-07-17T20:00:00Z",
+            "source_url": "https://github.com/example", "previous_event_hash": None,
+            "event_hash": "a" * 64, "details": {},
+        }
+        codes = {item.code for item in validate_document("audit-event", event)}
+        self.assertIn("SCHEMA_CONST", codes)
+        self.assertIn("SCHEMA_FIELD_REQUIRED", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

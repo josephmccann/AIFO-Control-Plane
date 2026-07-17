@@ -208,7 +208,9 @@ jobs:
           comments.append({
               "body": body,
               "created_at": event["occurred_at"],
-              "html_url": event["source_url"],
+              "html_url": "https://github.com/%s/issues/%s#eos-preappend-%s" % (
+                  os.environ["GITHUB_REPOSITORY"], os.environ["ISSUE_NUMBER"], event["event_hash"]
+              ),
               "user": {"login": "github-actions[bot]"},
           })
           mission = parse_issue_body(issue.get("body", ""))

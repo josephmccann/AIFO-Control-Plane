@@ -59,4 +59,4 @@ jobs:
         with:
           expected_kernel_sha: 5dcb70302451f3d3bfc635caa76bccd2c26dcd61
       - name: Require authenticated merge adapter
-        run: scripts/engineering-os/validate-merge-authorization
+        run: kernel/scripts/engineering-os/validate-merge-authorization

@@ -115,6 +115,14 @@ class MergeTests(unittest.TestCase):
         self.assertNotIn("pull-requests: write", workflow)
         self.assertNotIn("gh pr merge", workflow)
         self.assertNotIn("auto-merge", workflow)
+        self.assertIn(
+            "run: kernel/scripts/engineering-os/validate-merge-authorization",
+            workflow,
+        )
+        self.assertNotIn(
+            "run: scripts/engineering-os/validate-merge-authorization",
+            workflow,
+        )
         self.assertTrue((
             ROOT / "scripts/engineering-os/validate-merge-authorization"
         ).is_file())

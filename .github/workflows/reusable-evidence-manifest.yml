@@ -130,9 +130,9 @@ jobs:
       pull-requests: read
     steps:
       - name: Materialize immutable evidence kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@5dcb70302451f3d3bfc635caa76bccd2c26dcd61
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@6a6cdcd326e9bbf980563b3815f7d47667c3755e
         with:
-          expected_kernel_sha: 5dcb70302451f3d3bfc635caa76bccd2c26dcd61
+          expected_kernel_sha: 6a6cdcd326e9bbf980563b3815f7d47667c3755e
 
       - name: Download producer-only evidence
         uses: actions/download-artifact@v4
@@ -158,6 +158,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Resolve immutable base policy or exact first-policy bootstrap
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          kernel/scripts/engineering-os/resolve-base-policy \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-root "$GITHUB_WORKSPACE/base" \
+            --head-root "$GITHUB_WORKSPACE/head" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --bootstrap-repository josephmccann/AI.FO-Demo \
+            --bootstrap-base-sha 438a68bf0b4f49ae15a04a69ad72c14cc43de0cb \
+            --bootstrap-policy-sha256 fabb771249074b1f012b59698068aef2ca3578644f25381f64ee31306c868699 \
+            --output "$RUNNER_TEMP/base-policy.json"
+
       - name: Validate source integrity with immutable kernel
         env:
           BASE_SHA: ${{ inputs.base_sha }}
@@ -174,7 +190,7 @@ jobs:
             --base-sha "$BASE_SHA" \
             --head-sha "$HEAD_SHA" \
             --repository "$GITHUB_REPOSITORY" \
-            --base-policy "$GITHUB_WORKSPACE/base/.aifo/engineering-os-policy.json" \
+            --base-policy "$RUNNER_TEMP/base-policy.json" \
             --pull-request "$PULL_REQUEST" \
             --evaluated-at "$EVALUATED_AT" \
             --output "$RUNNER_TEMP/eos-validated/test-integrity-report.json"

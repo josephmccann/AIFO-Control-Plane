@@ -13,7 +13,7 @@ KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.ym
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
-KERNEL_ACTION_SHA = "5dcb70302451f3d3bfc635caa76bccd2c26dcd61"
+KERNEL_ACTION_SHA = "6a6cdcd326e9bbf980563b3815f7d47667c3755e"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
     "engineering_os",
@@ -548,10 +548,37 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 self.assertEqual(cross_repository_boundary_errors(self.read(name)), [])
                 self.assertNotIn("repository: ${{ job.workflow_repository }}", self.read(name))
 
+    def test_first_policy_bootstrap_is_exact_and_shared_by_every_consumer(self):
+        consumers = (
+            "reusable-mission-validation.yml",
+            "reusable-tier-path-guard.yml",
+            "reusable-frozen-path-guard.yml",
+            "reusable-test-integrity.yml",
+            "reusable-evidence-manifest.yml",
+        )
+        expected = (
+            "kernel/scripts/engineering-os/resolve-base-policy",
+            "--bootstrap-repository josephmccann/AI.FO-Demo",
+            "--bootstrap-base-sha 438a68bf0b4f49ae15a04a69ad72c14cc43de0cb",
+            "--bootstrap-policy-sha256 "
+            "fabb771249074b1f012b59698068aef2ca3578644f25381f64ee31306c868699",
+            '--output "$RUNNER_TEMP/base-policy.json"',
+        )
+        for name in consumers:
+            with self.subTest(workflow=name):
+                workflow = self.read(name)
+                for value in expected:
+                    self.assertEqual(1, workflow.count(value), value)
+                self.assertNotIn(
+                    '--base-policy "$GITHUB_WORKSPACE/base/.aifo/'
+                    'engineering-os-policy.json"',
+                    workflow,
+                )
+
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
-          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@5dcb70302451f3d3bfc635caa76bccd2c26dcd61
-          expected_kernel_sha: 5dcb70302451f3d3bfc635caa76bccd2c26dcd61
+          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@6a6cdcd326e9bbf980563b3815f7d47667c3755e
+          expected_kernel_sha: 6a6cdcd326e9bbf980563b3815f7d47667c3755e
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           path: target
@@ -562,7 +589,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(cross_repository_boundary_errors(valid), [])
 
         no_kernel_identity = valid.replace(
-            "materialize-kernel@5dcb70302451f3d3bfc635caa76bccd2c26dcd61",
+            "materialize-kernel@6a6cdcd326e9bbf980563b3815f7d47667c3755e",
             "materialize-kernel@main",
             1,
         )

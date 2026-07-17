@@ -315,17 +315,18 @@ class TestIntegrityTests(unittest.TestCase):
         self.assertNotIn("issues: write", workflow)
         self.assertNotIn("pull-requests: write", workflow)
         self.assertIn(
-            "materialize-kernel@5dcb70302451f3d3bfc635caa76bccd2c26dcd61",
+            "materialize-kernel@6a6cdcd326e9bbf980563b3815f7d47667c3755e",
             workflow,
         )
         self.assertIn(
-            "expected_kernel_sha: 5dcb70302451f3d3bfc635caa76bccd2c26dcd61",
+            "expected_kernel_sha: 6a6cdcd326e9bbf980563b3815f7d47667c3755e",
             workflow,
         )
         self.assertIn("kernel/scripts/engineering-os/validate-test-integrity", workflow)
         self.assertNotIn("head/scripts/engineering-os/validate-test-integrity", workflow)
         self.assertNotIn("base/scripts/engineering-os/validate-test-integrity", workflow)
-        self.assertIn("base/.aifo/engineering-os-policy.json", workflow)
+        self.assertIn("kernel/scripts/engineering-os/resolve-base-policy", workflow)
+        self.assertIn('--base-policy "$RUNNER_TEMP/base-policy.json"', workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertIn("unittest discover", validation)

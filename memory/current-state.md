@@ -93,9 +93,12 @@ No AWS product runtime, production database, product secrets, QBO callback migra
 - Reviewed Demo telemetry prerequisite: `ca56ecc9740edce719df8584b3cd345286c3a777`
 - Independently reviewed Demo Package 8: `eddc1ca024305d222ef716a27005472590d0a087`
 - Independently reviewed Control Plane Package 9: `f422b5c704c34e0ed4ec939f91e36cf1b1bf58a9`
-- Final reconciled Demo `origin/master`: `438a68bf0b4f49ae15a04a69ad72c14cc43de0cb`
-- Final reconciliation found no intervening Demo commits after the reviewed baseline and required no conflict resolution.
-- Final cumulative validation passed against Demo head `eddc1ca024305d222ef716a27005472590d0a087` and Control Plane Package 9 head `f422b5c704c34e0ed4ec939f91e36cf1b1bf58a9`.
-- EOS callers remain inactive until exact private cross-repository GitHub Actions access is founder-approved.
+- Current independently reviewed Control Plane PR head: `30aca683544bd090d4a0b868fc9147eee9a7fd9e`
+- Current independently reviewed Demo PR head: `0dff3cb59013ccdf74058c3484936aaefd1934c6`
+- Final reconciled Demo `origin/master`: `52ca01c7c8b034b212feede58ddcc77d9c37c388`
+- Final reconciliation inspected Demo commits `83e76fd790ad94c040ebd6cd955f98ffb81cd4e5` and `52ca01c7c8b034b212feede58ddcc77d9c37c388`; they had no direct EOS file overlap and were merged without conflicts.
+- Control Plane PR 16 and Demo PR 202 are open and unmerged.
+- Private reusable-workflow transport uses the founder-approved `access_level=user` setting. Exact caller repository, owner, workflow identity, workflow provenance, and evidence checks are the fail-closed trust boundary.
+- Live Demo caller run `29557317793` passed caller authorization and then failed closed on the pre-reconciliation bootstrap tuple. The independently reviewed Control Plane repair binds the reconciled base and policy digest and awaits the required rerun.
 - Auto-merge, deployment, cloud mutation, live Airtable writes, orphan mutation, and EDGAR integration remain disabled.
-- No EOS branch has been merged and no EOS pull request has been opened by this program.
+- Neither EOS branch has been merged.

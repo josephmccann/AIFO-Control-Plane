@@ -42,6 +42,18 @@ class ActivationLedgerTests(unittest.TestCase):
         return {"type": "test_integrity.baseline.consumed", "actor_role": "system",
                 "details": details}
 
+    def attempt(self, auth):
+        details = copy.deepcopy(self.activation)
+        details.update({"authorization_event_hash": auth["event_hash"],
+                        "authorization_sequence": auth["sequence"],
+                        "consumer_identity": "github-actions[bot]/test-integrity",
+                        "consumed_at": "2026-07-17T20:00:00Z",
+                        "consumption_result": "attempted",
+                        "post_consumption_state": "locked",
+                        "attempt_event_hash": "0" * 64})
+        return {"type": "test_integrity.baseline.consumption_attempted", "actor_role": "system",
+                "event_hash": "c" * 64, "details": details}
+
     def test_authorization_is_valid_and_consumption_is_single_use(self):
         auth = self.auth()
         ok, code, details = validate_activation_ledger(
@@ -49,8 +61,11 @@ class ActivationLedgerTests(unittest.TestCase):
             current_commit=self.activation["remediation_head"], current_tree=self.activation["remediation_tree"])
         self.assertEqual((ok, code), (True, "ACTIVATION_AUTHORIZED"))
         self.assertFalse(details["consumed"])
+        attempt = self.attempt(auth)
+        consumed = self.consume(auth)
+        consumed["details"]["attempt_event_hash"] = attempt["event_hash"]
         ok, code, details = validate_activation_ledger(
-            [auth, self.consume(auth)], self.activation,
+            [auth, attempt, consumed], self.activation,
             repository=self.activation["repository"])
         self.assertEqual((ok, code), (True, "ACTIVATION_ALREADY_CONSUMED"))
         self.assertTrue(details["consumed"])
@@ -71,9 +86,11 @@ class ActivationLedgerTests(unittest.TestCase):
 
     def test_consumption_requires_the_authenticated_authorization(self):
         auth = self.auth()
+        attempt = self.attempt(auth)
         consumed = self.consume(auth)
+        consumed["details"]["attempt_event_hash"] = attempt["event_hash"]
         consumed["details"]["authorization_event_hash"] = "b" * 64
-        self.assertEqual(validate_activation_ledger([auth, consumed], self.activation,
+        self.assertEqual(validate_activation_ledger([auth, attempt, consumed], self.activation,
             repository=self.activation["repository"])[1], "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID")
         self.assertEqual(validate_activation_ledger([consumed], self.activation,
             repository=self.activation["repository"])[1], "ACTIVATION_ORPHAN_CONSUMPTION")

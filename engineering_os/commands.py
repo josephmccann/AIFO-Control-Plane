@@ -37,6 +37,9 @@ _COMMANDS = {
     "close": 0,
     "park": 0,
     "cancel": 0,
+    "authorize-baseline": 1,
+    "attempt-baseline": 1,
+    "consume-baseline": 1,
 }
 
 _COMMAND_EVENTS = {
@@ -52,6 +55,9 @@ _COMMAND_EVENTS = {
     "close": "mission.closed",
     "park": "mission.parked",
     "cancel": "mission.cancelled",
+    "authorize-baseline": "test_integrity.baseline.authorized",
+    "attempt-baseline": "test_integrity.baseline.consumption_attempted",
+    "consume-baseline": "test_integrity.baseline.consumed",
 }
 _EVENT_MARKER = re.compile(
     r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->",
@@ -75,7 +81,7 @@ _ACTIVATION_REQUIRED = frozenset({
 })
 _CONSUMPTION_REQUIRED = _ACTIVATION_REQUIRED | frozenset({
     "authorization_event_hash", "authorization_sequence", "consumer_identity",
-    "consumed_at", "consumption_result", "post_consumption_state",
+    "consumed_at", "consumption_result", "post_consumption_state", "attempt_event_hash",
 })
 
 
@@ -90,7 +96,9 @@ def _activation_tuple(details: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
         return None
     if details["mission_issue"] != 26 or not isinstance(details["single_use"], bool):
         return None
-    if not isinstance(details["founder_authorization_sequence"], int) or isinstance(details["founder_authorization_sequence"], bool):
+    if (not isinstance(details["founder_authorization_sequence"], int)
+            or isinstance(details["founder_authorization_sequence"], bool)
+            or details["founder_authorization_sequence"] < 1):
         return None
     if details["single_use"] is not True or details["activation_type"] != "initial_test_integrity_baseline":
         return None
@@ -106,6 +114,48 @@ def _activation_tuple(details: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     if len(details["activation_nonce"]) < 32:
         return None
     return dict(details)
+
+
+def build_activation_event(
+    event_type: str,
+    details: Mapping[str, Any],
+    *,
+    actor: str,
+    actor_role: str,
+    occurred_at: str,
+    source_url: str,
+    authorization_event: Optional[Mapping[str, Any]] = None,
+    attempt_event: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build one activation proposal; never appends or consumes it."""
+    if event_type not in _ACTIVATION_EVENTS or not isinstance(actor, str) or not actor.strip():
+        raise ValueError("activation event identity is invalid")
+    if event_type == _ACTIVATION_AUTHORIZED:
+        if actor_role != "founder" or _activation_tuple(details) is None:
+            raise ValueError("authorization requires the founder and exact activation tuple")
+    else:
+        if actor_role != "system" or not isinstance(details, Mapping):
+            raise ValueError("consumption events require the system actor")
+        tuple_value = {key: details.get(key) for key in _ACTIVATION_REQUIRED}
+        if _activation_tuple(tuple_value) is None:
+            raise ValueError("consumption event tuple is invalid")
+        if not isinstance(authorization_event, Mapping):
+            raise ValueError("consumption event requires an authorization event")
+        if details.get("authorization_event_hash") != authorization_event.get("event_hash"):
+            raise ValueError("authorization event reference is invalid")
+        if event_type == _ACTIVATION_CONSUMED and not isinstance(attempt_event, Mapping):
+            raise ValueError("consumed event requires an attempted-consumption event")
+        if attempt_event is not None and details.get("attempt_event_hash") != attempt_event.get("event_hash"):
+            raise ValueError("attempt event reference is invalid")
+    return {
+        "schema_version": "1.0.0",
+        "type": event_type,
+        "actor": actor.strip(),
+        "actor_role": actor_role,
+        "occurred_at": _rfc3339(occurred_at),
+        "source_url": source_url,
+        "details": dict(details),
+    }
 
 
 def validate_activation_ledger(
@@ -805,6 +855,7 @@ def authorize_command_proposal(
     command_comment_url: str,
     actions_runs: Sequence[Mapping[str, Any]] = (),
     repository_lease_events: Sequence[Mapping[str, Any]] = (),
+    activation: Optional[Mapping[str, Any]] = None,
 ) -> ProposalDecision:
     """Authorize one authenticated command and return append-only audit events."""
 
@@ -925,7 +976,32 @@ def authorize_command_proposal(
             return ProposalDecision(False, lifecycle.code)
         proposals = list(lifecycle.events)
     else:
-        event_details = {"nonce": nonce}
+        if event_type in _ACTIVATION_EVENTS:
+            if not isinstance(activation, Mapping):
+                return ProposalDecision(False, "ACTIVATION_BINDING_REQUIRED")
+            event_details = dict(activation)
+            if event_type != _ACTIVATION_AUTHORIZED:
+                prior_auth = next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None)
+                if prior_auth is None:
+                    return ProposalDecision(False, "ACTIVATION_AUTHORIZATION_REQUIRED")
+                event_details.update({
+                    "authorization_event_hash": prior_auth.get("event_hash"),
+                    "authorization_sequence": prior_auth.get("sequence"),
+                    "consumer_identity": actor,
+                    "consumed_at": occurred_at,
+                    "consumption_result": "attempted" if event_type == _ACTIVATION_ATTEMPTED else "consumed",
+                    "post_consumption_state": "attempted" if event_type == _ACTIVATION_ATTEMPTED else "active",
+                    "attempt_event_hash": next((item.get("event_hash") for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), ""),
+                })
+            try:
+                build_activation_event(event_type, event_details, actor=actor, actor_role=role,
+                                       occurred_at=occurred_at, source_url=command_comment_url,
+                                       authorization_event=next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None),
+                                       attempt_event=next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None))
+            except ValueError as error:
+                return ProposalDecision(False, str(error))
+        else:
+            event_details = {"nonce": nonce}
         if event_type == "mission.ready":
             event_details["mission_sha256"] = content_sha256(mission)
         proposals = [{
@@ -1112,6 +1188,7 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--command-comment-url", required=True)
     parser.add_argument("--body-output", required=True)
     parser.add_argument("--repository-leases")
+    parser.add_argument("--activation")
     arguments = parser.parse_args(argv)
     try:
         with open(arguments.comments, encoding="utf-8") as stream:
@@ -1128,11 +1205,16 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
                 repository_lease_events = json.load(stream)
         else:
             repository_lease_events = []
+        activation = None
+        if arguments.activation:
+            with open(arguments.activation, encoding="utf-8") as stream:
+                activation = json.load(stream)
         decision = authorize_command_proposal(
             comments, mission, policy, repository=arguments.repository,
             command_comment_url=arguments.command_comment_url,
             actions_runs=actions_runs,
             repository_lease_events=repository_lease_events,
+            activation=activation,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.error(str(error))

@@ -71,6 +71,28 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_runtime_namespace_mutation_inside_test_body_fails_closed(self):
+        sources = (
+            "def test_value():\n    globals()['value'] = 1\n    assert True\n",
+            "def test_value():\n    setattr(test_value, '__test__', False)\n    assert True\n",
+            "def test_value():\n    reflect = getattr\n    assert reflect(test_value, '__name__')\n",
+            "def test_value():\n    assert getattr(__builtins__, '__import__')\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_direct_runtime_getattr_is_fingerprinted_without_collection_execution(self):
+        source = (
+            "def test_value(subject):\n"
+            "    assert getattr(subject, 'provenance', None) is not None\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_preimported_skip_alias_cannot_hide_new_decorator(self):
         base = "from unittest import skip as defer\ndef test_value():\n    assert 1 == 1\n"
         head = "from unittest import skip as defer\n@defer('later')\ndef test_value():\n    assert 1 == 1\n"

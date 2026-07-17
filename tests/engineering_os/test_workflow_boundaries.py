@@ -13,7 +13,7 @@ KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.ym
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
-KERNEL_ACTION_SHA = "672160e2e2e1bbf783e3b4ff5d5771a2806a4e35"
+KERNEL_ACTION_SHA = "5dcb70302451f3d3bfc635caa76bccd2c26dcd61"
 DEMO_CALLER_PATHS = {
     "reusable-airtable-mirror.yml": ".github/workflows/eos-airtable-mirror.yml",
     "reusable-orphan-recovery.yml": ".github/workflows/eos-orphan-recovery.yml",
@@ -481,8 +481,8 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
 
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
-          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
-          expected_kernel_sha: 672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
+          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@5dcb70302451f3d3bfc635caa76bccd2c26dcd61
+          expected_kernel_sha: 5dcb70302451f3d3bfc635caa76bccd2c26dcd61
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           path: target
@@ -493,7 +493,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(cross_repository_boundary_errors(valid), [])
 
         no_kernel_identity = valid.replace(
-            "materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35",
+            "materialize-kernel@5dcb70302451f3d3bfc635caa76bccd2c26dcd61",
             "materialize-kernel@main",
             1,
         )

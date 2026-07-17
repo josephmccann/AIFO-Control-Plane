@@ -34,7 +34,9 @@ Status values: `todo`, `in-progress`, `blocked`, `done`.
 
 ## In Progress
 
-None.
+| ID | Work Item | Validation | Notes |
+| --- | --- | --- | --- |
+| WQ-041 | Complete live EOS caller validation and merge sequence | Exact caller run, required checks, independent review, tree identity, post-merge validation | Control Plane package-detector repair awaiting review; Demo PR remains unmerged |
 
 ## Blocked
 
@@ -47,4 +49,4 @@ None.
 
 - Add periodic deployment-status documentation checks.
 - Add lightweight monthly cost evidence.
-- Resolve EOS private Actions access and required-check founder gates.
+- Complete EOS live caller validation and merge sequence without deployment.

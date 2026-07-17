@@ -107,9 +107,10 @@ checkout manifest; it does not import target code. Package initializers,
 recursive edges, and cycles are represented canonically, while unresolved,
 shadowed, stale, ambiguous, dynamic, or contradictory imports terminate
 analysis. Collection-time semantics are projected for every first-party
-module. Imported test-support modules under configuration-derived test roots
-also contribute their complete AST, including helper bodies and nested static
-imports, to each dependent test's semantic fingerprint. Import traversal uses
+module. Every manifest-resolved first-party module imported by a test also
+contributes its complete AST, including function bodies and nested static
+imports, to each dependent test's semantic fingerprint, independent of its
+repository path or directory placement. Import traversal uses
 the same non-resetting aggregate budget as checkout scanning and reporting.
 The immutable materialization action requires and byte-compares the dedicated
 `engineering_os/python_imports.py` kernel before a reusable workflow can use

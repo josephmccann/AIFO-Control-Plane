@@ -61,6 +61,30 @@ class DetectorEvasionTests(unittest.TestCase):
             "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
         )
 
+    def test_imported_product_function_mutation_changes_case_fingerprint(self):
+        source = "from product import value\ndef test_value():\n    assert value() == 1\n"
+        for root in (self.base, self.head):
+            (root / "product.py").write_text(
+                "def value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.head / "product.py").write_text(
+            "def value():\n    return 2\n", encoding="utf-8",
+        )
+        self.assertIn(
+            "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+        )
+
+    def test_namespace_mutation_inside_imported_product_fails_closed(self):
+        source = "from product import value\ndef test_value():\n    assert value()\n"
+        for root in (self.base, self.head):
+            (root / "product.py").write_text(
+                "def value():\n    globals()['collection_flag'] = False\n    return True\n",
+                encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_dynamic_import_inside_imported_test_support_fails_closed(self):
         source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
         for root in (self.base, self.head):

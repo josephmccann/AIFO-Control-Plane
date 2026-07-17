@@ -589,11 +589,12 @@ def _descendant_binding_names(node: ast.AST) -> Tuple[str, ...]:
             names.add(child.name)
         elif isinstance(child, (ast.Global, ast.Nonlocal)):
             names.update(child.names)
-        elif type(child).__name__.startswith("Match"):
-            for field in ("name", "rest"):
-                value = getattr(child, field, None)
-                if isinstance(value, str) and value:
-                    names.add(value)
+        elif type(child).__name__ in ("MatchAs", "MatchStar"):
+            if isinstance(child.name, str) and child.name:
+                names.add(child.name)
+        elif type(child).__name__ == "MatchMapping":
+            if isinstance(child.rest, str) and child.rest:
+                names.add(child.rest)
     return tuple(sorted(names))
 
 
@@ -1119,7 +1120,7 @@ def _python_stats(
                     return False
                 parametrized.update(names)
         return (
-            not getattr(node, "type_params", [])
+            not ("type_params" in node._fields and node.type_params)
             and (
                 node.name != "__init_subclass__"
                 or safe_init_subclass_body(node)
@@ -1189,7 +1190,7 @@ def _python_stats(
                 if (
                     position is None
                     or statement.keywords
-                    or getattr(statement, "type_params", [])
+                    or ("type_params" in statement._fields and statement.type_params)
                     or not all(
                         safe_collection_decorator(item, position)
                         for item in statement.decorator_list
@@ -1495,7 +1496,8 @@ def _python_stats(
             keywords=copy.deepcopy(node.keywords),
             body=copy.deepcopy(node.body),
             decorator_list=copy.deepcopy(node.decorator_list),
-            type_params=copy.deepcopy(getattr(node, "type_params", [])),
+            type_params=copy.deepcopy(node.type_params)
+            if "type_params" in node._fields else [],
         ))
 
     def direct_class_flags(node: ast.ClassDef) -> Dict[str, bool]:
@@ -2207,22 +2209,7 @@ def _test_stats(
         for path in repository_paths
     )
     result = {}
-    support_roots = set()
-    for pattern in config["test_globs"]:
-        wildcard = min(
-            (pattern.find(marker) for marker in ("*", "?", "[") if marker in pattern),
-            default=len(pattern),
-        )
-        raw_prefix = pattern[:wildcard]
-        prefix = raw_prefix.rstrip("/")
-        if prefix and not raw_prefix.endswith("/"):
-            prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
-        if prefix:
-            support_roots.add(prefix)
-    graph = PythonImportGraph(
-        root, repository_manifest, budget,
-        support_roots=tuple(support_roots), support_all=not support_roots,
-    )
+    graph = PythonImportGraph(root, repository_manifest, budget)
     for relative in sorted(paths):
         try:
             text = _source(root / relative, budget, phase="test-parsing")
@@ -2531,19 +2518,22 @@ def _analyze_test_integrity(
                     path, {"case": identity},
                 ))
 
-    totals = lambda values, field: sum(getattr(item, field) for item in values.values())
-    base_assertions = totals(base_stats, "assertions")
-    head_assertions = totals(head_stats, "assertions")
-    base_skips = totals(base_stats, "skips")
-    head_skips = totals(head_stats, "skips")
-    base_focuses = totals(base_stats, "focuses")
-    head_focuses = totals(head_stats, "focuses")
-    base_focus_declarations = totals(base_stats, "focus_declarations")
-    head_focus_declarations = totals(head_stats, "focus_declarations")
-    base_sourcing = totals(base_stats, "sourcing_assertions")
-    head_sourcing = totals(head_stats, "sourcing_assertions")
-    base_properties = totals(base_stats, "property_assertions")
-    head_properties = totals(head_stats, "property_assertions")
+    base_assertions = sum(item.assertions for item in base_stats.values())
+    head_assertions = sum(item.assertions for item in head_stats.values())
+    base_skips = sum(item.skips for item in base_stats.values())
+    head_skips = sum(item.skips for item in head_stats.values())
+    base_focuses = sum(item.focuses for item in base_stats.values())
+    head_focuses = sum(item.focuses for item in head_stats.values())
+    base_focus_declarations = sum(
+        item.focus_declarations for item in base_stats.values()
+    )
+    head_focus_declarations = sum(
+        item.focus_declarations for item in head_stats.values()
+    )
+    base_sourcing = sum(item.sourcing_assertions for item in base_stats.values())
+    head_sourcing = sum(item.sourcing_assertions for item in head_stats.values())
+    base_properties = sum(item.property_assertions for item in base_stats.values())
+    head_properties = sum(item.property_assertions for item in head_stats.values())
     if head_skips > base_skips:
         findings.append(IntegrityFinding("TEST_SKIP_ADDED", "New skipped or disabled tests were detected."))
     if (

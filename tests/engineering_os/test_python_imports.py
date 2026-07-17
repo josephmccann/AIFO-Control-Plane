@@ -48,12 +48,11 @@ class PythonImportGraphTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(source, encoding="utf-8")
 
-    def graph(self, *, limits=None, evidence=None, support_roots=()):
+    def graph(self, *, limits=None, evidence=None):
         return PythonImportGraph(
             self.root,
             evidence or manifest(self.root),
             ResourceBudget(limits or LIMITS),
-            support_roots=support_roots,
         )
 
     def test_recursive_cycle_is_resolved_once_and_fingerprinted_deterministically(self):
@@ -81,34 +80,30 @@ class PythonImportGraphTests(unittest.TestCase):
         after = self.graph().closure("tests/test_service.py").fingerprint
         self.assertNotEqual(before, after)
 
-    def test_imported_test_support_function_body_mutation_changes_fingerprint(self):
+    def test_imported_first_party_function_body_mutation_changes_fingerprint(self):
         self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
         self.write("support.py", "def value():\n    return 1\n")
-        before = self.graph(support_roots=("support",)).closure(
-            "tests/test_service.py",
-        ).fingerprint
+        before = self.graph().closure("tests/test_service.py").fingerprint
         self.write("support.py", "def value():\n    return 2\n")
-        after = self.graph(support_roots=("support",)).closure(
-            "tests/test_service.py",
-        ).fingerprint
+        after = self.graph().closure("tests/test_service.py").fingerprint
         self.assertNotEqual(before, after)
 
-    def test_dynamic_import_inside_test_support_function_fails_closed(self):
+    def test_dynamic_import_inside_first_party_function_fails_closed(self):
         self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
         self.write("support.py", "def value():\n    return __import__('os')\n")
         with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
-            self.graph(support_roots=("support",)).closure("tests/test_service.py")
+            self.graph().closure("tests/test_service.py")
 
-    def test_namespace_mutation_inside_test_support_function_fails_closed(self):
+    def test_namespace_mutation_inside_first_party_function_fails_closed(self):
         self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
         self.write(
             "support.py",
             "def value():\n    globals()['collection_flag'] = False\n    return True\n",
         )
         with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
-            self.graph(support_roots=("support",)).closure("tests/test_service.py")
+            self.graph().closure("tests/test_service.py")
 
-    def test_static_import_inside_test_support_function_is_traversed(self):
+    def test_static_import_inside_first_party_function_is_traversed(self):
         self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
         self.write(
             "support.py",
@@ -116,9 +111,7 @@ class PythonImportGraphTests(unittest.TestCase):
         )
         self.write("helpers/__init__.py", "NAME = 'helpers'\n")
         self.write("helpers/nested.py", "VALUE = 1\n")
-        closure = self.graph(support_roots=("support",)).closure(
-            "tests/test_service.py",
-        )
+        closure = self.graph().closure("tests/test_service.py")
         self.assertEqual(
             closure.first_party_paths,
             ("helpers/__init__.py", "helpers/nested.py", "support.py"),

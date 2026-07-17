@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import tempfile
 import unittest
@@ -147,6 +148,70 @@ class PolicyBootstrapTests(unittest.TestCase):
                     self.assertNotEqual(0, result.returncode)
                     self.assertIn("base policy resolution denied", result.stderr)
                     self.assertFalse(output.exists())
+
+    def test_missing_or_non_regular_head_policy_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, base_sha = self.repository(directory)
+            missing_output = Path(directory) / "missing.json"
+            missing = self.resolve(
+                repository,
+                base_sha,
+                base_sha,
+                missing_output,
+                bootstrap_digest="0" * 64,
+            )
+            self.assertNotEqual(0, missing.returncode)
+            self.assertIn("bootstrap policy", missing.stderr)
+            self.assertFalse(missing_output.exists())
+
+            (repository / ".aifo").mkdir()
+            os.symlink("../README.md", repository / ".aifo" / "engineering-os-policy.json")
+            head_sha = self.commit(repository, "symlink policy")
+            symlink_output = Path(directory) / "symlink.json"
+            symlink = self.resolve(
+                repository,
+                base_sha,
+                head_sha,
+                symlink_output,
+                bootstrap_digest="0" * 64,
+            )
+            self.assertNotEqual(0, symlink.returncode)
+            self.assertIn("policy object", symlink.stderr)
+            self.assertFalse(symlink_output.exists())
+
+    def test_malformed_revision_relative_output_and_unknown_flag_are_denied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, base_sha = self.repository(directory)
+            malformed = self.resolve(
+                repository,
+                "not-a-sha",
+                base_sha,
+                Path(directory) / "malformed.json",
+                bootstrap_digest="0" * 64,
+            )
+            self.assertNotEqual(0, malformed.returncode)
+            self.assertIn("revision evidence", malformed.stderr)
+
+            relative = self.resolve(
+                repository,
+                base_sha,
+                base_sha,
+                Path("relative-policy-output.json"),
+                bootstrap_digest="0" * 64,
+            )
+            self.assertNotEqual(0, relative.returncode)
+            self.assertIn("output path", relative.stderr)
+            self.assertFalse((ROOT / "relative-policy-output.json").exists())
+
+            unknown = subprocess.run(
+                [str(RESOLVER), "--unknown-bootstrap-flag"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, unknown.returncode)
+            self.assertIn(
+                "unknown argument: --unknown-bootstrap-flag", unknown.stderr
+            )
 
 
 if __name__ == "__main__":

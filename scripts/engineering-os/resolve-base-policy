@@ -27,7 +27,7 @@ while (($#)); do
     --bootstrap-base-sha) bootstrap_base_sha=${2-}; shift 2 ;;
     --bootstrap-policy-sha256) bootstrap_policy_sha256=${2-}; shift 2 ;;
     --output) output=${2-}; shift 2 ;;
-    *) deny "unknown argument" ;;
+    *) deny "unknown argument: $1" ;;
   esac
 done
 
@@ -62,7 +62,7 @@ output_parent=$(dirname "$output")
 umask 077
 temporary=$(mktemp "$output_parent/.base-policy.XXXXXX")
 trap 'rm -f "$temporary"' EXIT
-git -C "$selected_root" cat-file blob "$object_id" > "$temporary"
+git -C "$selected_root" cat-file blob "$object_id" > "$temporary" || deny "policy blob"
 
 if [[ -z "$base_record" ]]; then
   actual_sha256=$(python3 - "$temporary" <<'PY'

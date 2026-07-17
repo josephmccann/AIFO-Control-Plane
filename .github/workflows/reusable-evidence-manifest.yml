@@ -138,9 +138,9 @@ jobs:
       pull-requests: read
     steps:
       - name: Materialize immutable evidence kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21
         with:
-          expected_kernel_sha: 59dc1b0fa60786dfa32ac55c41029e2a485a7b11
+          expected_kernel_sha: 337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21
 
       - name: Download producer-only evidence
         uses: actions/download-artifact@v4
@@ -154,7 +154,7 @@ jobs:
           repository: ${{ github.event.pull_request.base.repo.full_name }}
           ref: ${{ inputs.base_sha }}
           path: base
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Check out immutable head for trusted analysis

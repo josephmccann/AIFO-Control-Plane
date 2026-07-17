@@ -121,6 +121,135 @@ class PolicyBootstrapTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual(policy_bytes, output.read_bytes())
 
+    def test_unchanged_descendant_base_accepts_exact_bootstrap_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, bootstrap_base_sha = self.repository(directory)
+            (repository / "README.md").write_text(
+                "base\nunrelated telemetry refresh\n", encoding="utf-8"
+            )
+            base_sha = self.commit(repository, "unrelated base advancement")
+            policy_bytes = b'{"source":"reviewed-bootstrap"}\n'
+            (repository / ".aifo").mkdir()
+            (repository / ".aifo" / "engineering-os-policy.json").write_bytes(
+                policy_bytes
+            )
+            head_sha = self.commit(repository, "head")
+            output = Path(directory) / "resolved-descendant.json"
+            result = self.resolve(
+                repository,
+                base_sha,
+                head_sha,
+                output,
+                bootstrap_base_sha=bootstrap_base_sha,
+                bootstrap_digest=hashlib.sha256(policy_bytes).hexdigest(),
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(policy_bytes, output.read_bytes())
+
+    def test_descendant_bootstrap_rejects_prior_policy_path_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, bootstrap_base_sha = self.repository(directory)
+            policy = repository / ".aifo" / "engineering-os-policy.json"
+            policy.parent.mkdir()
+            policy.write_text('{"source":"unreviewed"}\n', encoding="utf-8")
+            self.commit(repository, "introduce unreviewed policy")
+            policy.unlink()
+            base_sha = self.commit(repository, "remove unreviewed policy")
+            policy.write_text('{"source":"reviewed-bootstrap"}\n', encoding="utf-8")
+            head_sha = self.commit(repository, "head")
+            output = Path(directory) / "rejected-history.json"
+            result = self.resolve(
+                repository,
+                base_sha,
+                head_sha,
+                output,
+                bootstrap_base_sha=bootstrap_base_sha,
+                bootstrap_digest=hashlib.sha256(policy.read_bytes()).hexdigest(),
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("bootstrap policy history", result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_descendant_bootstrap_rejects_policy_changes_on_merged_branch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, bootstrap_base_sha = self.repository(directory)
+            main_branch = self.git(repository, "branch", "--show-current")
+            self.git(repository, "checkout", "-q", "-b", "policy-side-branch")
+            policy = repository / ".aifo" / "engineering-os-policy.json"
+            policy.parent.mkdir()
+            policy.write_text('{"source":"side-branch"}\n', encoding="utf-8")
+            self.commit(repository, "introduce side-branch policy")
+            policy.unlink()
+            self.commit(repository, "remove side-branch policy")
+            self.git(repository, "checkout", "-q", main_branch)
+            (repository / "README.md").write_text(
+                "base\nunrelated mainline change\n", encoding="utf-8"
+            )
+            self.commit(repository, "advance mainline")
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "merge",
+                    "--no-ff",
+                    "--no-edit",
+                    "policy-side-branch",
+                ],
+                check=True,
+                capture_output=True,
+            )
+            base_sha = self.git(repository, "rev-parse", "HEAD")
+            policy.write_text('{"source":"reviewed-bootstrap"}\n', encoding="utf-8")
+            head_sha = self.commit(repository, "head")
+            output = Path(directory) / "rejected-merged-history.json"
+            result = self.resolve(
+                repository,
+                base_sha,
+                head_sha,
+                output,
+                bootstrap_base_sha=bootstrap_base_sha,
+                bootstrap_digest=hashlib.sha256(policy.read_bytes()).hexdigest(),
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("bootstrap policy history", result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_bootstrap_rejects_base_outside_frozen_ancestry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, bootstrap_base_sha = self.repository(directory)
+            policy_bytes = b'{"source":"reviewed-bootstrap"}\n'
+            (repository / ".aifo").mkdir()
+            (repository / ".aifo" / "engineering-os-policy.json").write_bytes(
+                policy_bytes
+            )
+            head_sha = self.commit(repository, "head")
+            unrelated_base_sha = subprocess.check_output(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "commit-tree",
+                    f"{bootstrap_base_sha}^{{tree}}",
+                    "-m",
+                    "unrelated root",
+                ],
+                text=True,
+                encoding="utf-8",
+            ).strip()
+            output = Path(directory) / "rejected-ancestry.json"
+            result = self.resolve(
+                repository,
+                unrelated_base_sha,
+                head_sha,
+                output,
+                bootstrap_base_sha=bootstrap_base_sha,
+                bootstrap_digest=hashlib.sha256(policy_bytes).hexdigest(),
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("bootstrap ancestry", result.stderr)
+            self.assertFalse(output.exists())
+
     def test_bootstrap_mismatch_fails_closed_without_output(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, base_sha = self.repository(directory)

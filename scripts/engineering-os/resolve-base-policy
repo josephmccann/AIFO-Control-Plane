@@ -47,7 +47,10 @@ selected_record=$base_record
 
 if [[ -z "$base_record" ]]; then
   [[ "$repository" == "$bootstrap_repository" ]] || deny "bootstrap repository"
-  [[ "$base_sha" == "$bootstrap_base_sha" ]] || deny "bootstrap base"
+  git -C "$base_root" cat-file -e "$bootstrap_base_sha^{commit}" || deny "bootstrap base commit"
+  [[ -z "$(git -C "$base_root" ls-tree "$bootstrap_base_sha" -- "$policy_path")" ]] || deny "bootstrap base policy"
+  git -C "$base_root" merge-base --is-ancestor "$bootstrap_base_sha" "$base_sha" || deny "bootstrap ancestry"
+  [[ -z "$(git -C "$base_root" rev-list --full-history "$bootstrap_base_sha..$base_sha" -- "$policy_path")" ]] || deny "bootstrap policy history"
   selected_root=$head_root
   selected_record=$(git -C "$head_root" ls-tree "$head_sha" -- "$policy_path")
   [[ -n "$selected_record" ]] || deny "bootstrap policy"

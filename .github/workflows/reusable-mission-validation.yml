@@ -98,6 +98,7 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
+          set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
           cd "$GITHUB_WORKSPACE/kernel"
@@ -133,6 +134,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
+          set -euo pipefail
           cd "$GITHUB_WORKSPACE/kernel"
           python3 -m engineering_os.commands authenticate-event-history \
             --comments "$RUNNER_TEMP/comments.json" \

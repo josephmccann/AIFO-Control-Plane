@@ -483,6 +483,8 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                         self.assertTrue(launches)
                         first_launch = script.index("python3")
                         kernel_cwd = script.index('cd "$GITHUB_WORKSPACE/kernel"')
+                        strict_shell = script.index("set -euo pipefail")
+                        self.assertLess(strict_shell, kernel_cwd)
                         self.assertLess(kernel_cwd, first_launch)
 
         with tempfile.TemporaryDirectory() as directory:

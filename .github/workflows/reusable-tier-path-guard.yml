@@ -107,6 +107,7 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
+          set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/issues.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"

@@ -315,11 +315,11 @@ class TestIntegrityTests(unittest.TestCase):
         self.assertNotIn("issues: write", workflow)
         self.assertNotIn("pull-requests: write", workflow)
         self.assertIn(
-            "materialize-kernel@a512ad9d6372c03df9d7c02ff97ed710b99ed42c",
+            "materialize-kernel@8a20154390e76683871c0bc6b1fd27bafaff7cb3",
             workflow,
         )
         self.assertIn(
-            "expected_kernel_sha: a512ad9d6372c03df9d7c02ff97ed710b99ed42c",
+            "expected_kernel_sha: 8a20154390e76683871c0bc6b1fd27bafaff7cb3",
             workflow,
         )
         self.assertIn("kernel/scripts/engineering-os/validate-test-integrity", workflow)

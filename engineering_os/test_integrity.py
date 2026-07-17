@@ -814,6 +814,41 @@ def _python_stats(
                 bindings.append(False)
         return bindings == [True]
 
+    def exact_pytest_fixture_before(target: ast.AST, position: int) -> bool:
+        dotted = dotted_name(target)
+        if len(dotted) == 1:
+            local, form = dotted[0], "direct"
+        elif len(dotted) == 2 and dotted[1] == "fixture":
+            local, form = dotted[0], "module"
+        else:
+            return False
+        bindings = []
+        for statement in tree.body[:position]:
+            if isinstance(statement, ast.Import):
+                for item in statement.names:
+                    bound = item.asname or item.name.split(".")[0]
+                    if bound == local:
+                        bindings.append(form == "module" and item.name == "pytest")
+                continue
+            if isinstance(statement, ast.ImportFrom):
+                for item in statement.names:
+                    bound = item.asname or item.name
+                    if bound == local:
+                        bindings.append(
+                            form == "direct"
+                            and statement.level == 0
+                            and statement.module == "pytest"
+                            and item.name == "fixture"
+                        )
+                continue
+            if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                if statement.name == local:
+                    bindings.append(False)
+                continue
+            if local in _descendant_binding_names(statement):
+                bindings.append(False)
+        return bindings == [True]
+
     def exact_unittest_testcase(base: ast.AST, owner: ast.ClassDef) -> bool:
         return (
             allow_unittest_testcase
@@ -1047,9 +1082,8 @@ def _python_stats(
     def safe_pytest_fixture(decorator: ast.AST, position: int) -> bool:
         target = decorator.func if isinstance(decorator, ast.Call) else decorator
         if (
-            dotted_name(target) != ("pytest", "fixture")
-            or not allow_pytest_parametrize
-            or not exact_module_import_before("pytest", position)
+            not allow_pytest_parametrize
+            or not exact_pytest_fixture_before(target, position)
         ):
             return False
         if not isinstance(decorator, ast.Call):

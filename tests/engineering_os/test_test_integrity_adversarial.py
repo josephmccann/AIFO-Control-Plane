@@ -166,6 +166,34 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")
         self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_test_local_pytest_fixture_aliases_retain_exact_provenance(self):
+        imports_and_decorators = (
+            ("import pytest as framework", "@framework.fixture"),
+            ("from pytest import fixture", "@fixture"),
+            ("from pytest import fixture as bounded_fixture", "@bounded_fixture"),
+        )
+        for imported, decorator in imports_and_decorators:
+            source = (
+                f"{imported}\n{decorator}\n"
+                "def value():\n    return 1\n"
+                "def test_value(value):\n    assert value\n"
+            )
+            with self.subTest(imported=imported):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_test_local_pytest_fixture_alias_shadowing_fails_closed(self):
+        source = (
+            "from pytest import fixture as bounded_fixture\n"
+            "def bounded_fixture(definition):\n    return definition\n"
+            "@bounded_fixture\ndef value():\n    return 1\n"
+            "def test_value(value):\n    assert value\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_import_graph_recursion_error_is_a_structured_denial(self):
         with mock.patch(
             "engineering_os.test_integrity.PythonImportGraph.closure",

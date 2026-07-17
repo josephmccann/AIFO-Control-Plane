@@ -2641,16 +2641,20 @@ def _analyze_test_integrity(
                 before_command = before_scripts.get("test")
                 after_command = after_scripts.get("test")
                 if before_command is None and isinstance(after_command, str) and after_command:
-                    continue
-                if before_command is None and after_command is None:
-                    continue
-                weakened = (
-                    not isinstance(before_command, str) or not before_command
-                    or not isinstance(after_command, str) or not after_command
-                    or before_command != after_command
-                )
-                if not weakened:
-                    continue
+                    after_without_test = dict(after_package)
+                    after_without_test["scripts"] = dict(after_scripts)
+                    del after_without_test["scripts"]["test"]
+                    if before_package == after_without_test:
+                        continue
+                    weakened = False
+                elif before_command is None and after_command is None:
+                    weakened = False
+                else:
+                    weakened = (
+                        not isinstance(before_command, str) or not before_command
+                        or not isinstance(after_command, str) or not after_command
+                        or before_command != after_command
+                    )
             if weakened:
                 findings.append(IntegrityFinding(
                     "TEST_CONFIGURATION_WEAKENED", "Test configuration was weakened.", path,

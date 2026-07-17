@@ -1714,7 +1714,7 @@ class DetectorEvasionTests(unittest.TestCase):
         (self.head / "package.json").write_text(
             json.dumps({
                 "scripts": {
-                    "codegen": "orval && node normalize-generated.mjs",
+                    "codegen": "orval",
                     "test": "node --test ./test/*.test.mjs",
                 },
             }),
@@ -1723,6 +1723,35 @@ class DetectorEvasionTests(unittest.TestCase):
         found = codes(self.analyze())
         self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
         self.assertNotIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
+
+    def test_package_test_addition_cannot_hide_other_package_changes(self):
+        (self.base / "package.json").write_text(
+            json.dumps({"scripts": {"codegen": "orval"}, "dependencies": {"tool": "1.0.0"}}),
+            encoding="utf-8",
+        )
+        (self.head / "package.json").write_text(
+            json.dumps({
+                "scripts": {"codegen": "orval", "test": "node --test"},
+                "dependencies": {"tool": "2.0.0"},
+            }),
+            encoding="utf-8",
+        )
+        found = codes(self.analyze())
+        self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
+        self.assertIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
+
+    def test_unchanged_test_command_cannot_hide_other_package_changes(self):
+        for root, version in ((self.base, "1.0.0"), (self.head, "2.0.0")):
+            (root / "package.json").write_text(
+                json.dumps({
+                    "scripts": {"test": "vitest"},
+                    "dependencies": {"tool": version},
+                }),
+                encoding="utf-8",
+            )
+        found = codes(self.analyze())
+        self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
+        self.assertIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
 
     def test_package_test_command_removal_is_blocked(self):
         (self.base / "package.json").write_text(

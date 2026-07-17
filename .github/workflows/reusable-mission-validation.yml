@@ -63,9 +63,9 @@ jobs:
       issues: read
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@259b8a2110eda7f829f2357ef0234921d571439f
         with:
-          expected_kernel_sha: 337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21
+          expected_kernel_sha: 259b8a2110eda7f829f2357ef0234921d571439f
       - name: Check out immutable target head with complete history
         uses: actions/checkout@v4
         with:

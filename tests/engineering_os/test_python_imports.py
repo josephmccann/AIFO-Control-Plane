@@ -242,6 +242,97 @@ class PythonImportGraphTests(unittest.TestCase):
             ("dataclasses", "pathlib", "re", "typing"),
         )
 
+    def test_imported_custom_metaclass_fails_closed(self):
+        self.write("tests/test_service.py", "from support import Widget\n")
+        self.write(
+            "support.py",
+            "class Meta(type):\n    pass\n"
+            "class Widget(metaclass=Meta):\n    pass\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_imported_unsafe_init_subclass_fails_closed(self):
+        self.write("tests/test_service.py", "from support import Widget\n")
+        self.write(
+            "support.py",
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "class Widget(Base):\n    pass\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_imported_bounded_init_subclass_remains_parseable(self):
+        self.write("tests/test_service.py", "from support import Widget\n")
+        self.write(
+            "support.py",
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        cls.__test__ = True\n"
+            "class Widget(Base):\n    pass\n",
+        )
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(closure.first_party_paths, ("support.py",))
+
+    def test_imported_arbitrary_definition_decorator_fails_closed(self):
+        self.write("tests/test_service.py", "from support import value\n")
+        self.write(
+            "support.py",
+            "def execute(definition):\n"
+            "    import subprocess\n"
+            "    subprocess.run(['false'])\n"
+            "    return definition\n"
+            "@execute\ndef value():\n    return 1\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_audited_setup_names_cannot_be_shadowed(self):
+        sources = (
+            "def field():\n    return 1\nVALUE = field()\n",
+            "def Path(value):\n    return value\nROOT = Path(__file__)\n",
+            "def property(definition):\n    return definition\n"
+            "class Value:\n    @property\n    def item(self):\n        return 1\n",
+            "def dataclass(**options):\n"
+            "    return lambda definition: definition\n"
+            "@dataclass(frozen=True)\nclass Value:\n    pass\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                self.write("tests/test_service.py", "from support import Value\n")
+                self.write("support.py", source)
+                with self.assertRaisesRegex(
+                    PythonImportError,
+                    "PYTHON_IMPORT_(?:EXECUTION|DEFINITION)_UNSAFE",
+                ):
+                    self.graph().closure("tests/test_service.py")
+
+    def test_imported_frozen_dataclass_hooks_cannot_execute_during_setup(self):
+        self.write("tests/test_service.py", "from support import VALUE\n")
+        self.write(
+            "support.py",
+            "from dataclasses import dataclass\n"
+            "@dataclass(frozen=True)\n"
+            "class Value:\n"
+            "    def __post_init__(self):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "VALUE = Value()\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_EXECUTION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_import_parse_recursion_fails_closed(self):
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        with unittest.mock.patch(
+            "engineering_os.python_imports.ast.parse", side_effect=RecursionError,
+        ):
+            with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_UNPARSABLE"):
+                self.graph().closure("tests/test_service.py")
+
     def test_relative_first_party_import_is_manifest_bound(self):
         self.write("tests/test_service.py", "import support.package\n")
         self.write("support/__init__.py", "NAME = 'support'\n")

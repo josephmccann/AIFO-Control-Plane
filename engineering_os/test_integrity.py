@@ -2233,7 +2233,7 @@ def _test_stats(
             findings.append(IntegrityFinding(
                 "TEST_FILE_UNREADABLE", "Test file or imported support cannot be read.", relative,
             ))
-        except SyntaxError:
+        except (SyntaxError, RecursionError):
             findings.append(IntegrityFinding(
                 "TEST_FILE_UNPARSABLE", "Test file cannot be parsed deterministically.", relative,
             ))
@@ -2399,7 +2399,7 @@ def _analyze_test_integrity(
         )
     try:
         checked = _validate_policy(policy, resource_budget)
-    except (OverflowError, MemoryError):
+    except (OverflowError, MemoryError, RecursionError):
         return _invalid_report(policy, "TEST_RESOURCE_LIMIT", "Policy evidence exceeds deterministic resource limits.")
     except (PathInputError, TypeError, ValueError, re.error):
         return _invalid_report(policy, "TEST_INTEGRITY_POLICY_INVALID", "Test-integrity policy is invalid.")
@@ -2411,7 +2411,7 @@ def _analyze_test_integrity(
         budget = checked["_resource_budget"]
         actual_base = _scan(base, checked["configuration"], budget)
         actual_head = _scan(head, checked["configuration"], budget)
-    except (OverflowError, MemoryError):
+    except (OverflowError, MemoryError, RecursionError):
         return _invalid_report(checked, "TEST_RESOURCE_LIMIT", "Checkout exceeds deterministic resource limits.")
     except (OSError, TypeError, ValueError, UnicodeError):
         return _invalid_report(checked, "TEST_CHECKOUT_UNAVAILABLE", "A checkout cannot be read safely.")
@@ -2776,7 +2776,7 @@ def analyze_test_integrity(
         return _analyze_test_integrity(
             base_root, head_root, policy, resource_budget=resource_budget,
         )
-    except (OverflowError, MemoryError):
+    except (OverflowError, MemoryError, RecursionError):
         return _invalid_report(
             policy, "TEST_RESOURCE_LIMIT",
             "Integrity processing exceeded its shared deterministic resource budget.",

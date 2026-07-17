@@ -33,7 +33,10 @@ _SAFE_BUILTINS = frozenset((
     "float", "frozenset", "int", "list", "object", "property", "set",
     "staticmethod", "str", "tuple", "type",
 ))
-_SAFE_CALLS = frozenset(("dataclass", "field", "frozenset", "list", "set", "tuple"))
+_SAFE_CALLS = frozenset(("field", "frozenset", "list", "set", "tuple"))
+_IMPLICIT_CLASS_HOOKS = frozenset((
+    "__class_getitem__", "__mro_entries__", "__set_name__",
+))
 _RUNTIME_DYNAMIC_NAMES = frozenset((
     "__import__", "delattr", "eval", "exec", "globals", "locals", "setattr",
     "vars",
@@ -150,6 +153,11 @@ class _DefinitionProjector:
     def __init__(self):
         self.safe_names = set(_SAFE_BUILTINS) | {"__file__", "__name__"}
         self.path_names: Set[str] = set()
+        self.call_roots = {
+            name: (name,) for name in ("frozenset", "list", "set", "tuple")
+        }
+        self.definition_decorators = {"classmethod", "property", "staticmethod"}
+        self.dataclass_decorators: Set[str] = set()
         self.frozen_dataclasses: Set[str] = set()
 
     @staticmethod
@@ -174,6 +182,45 @@ class _DefinitionProjector:
             parent = _DefinitionProjector._dotted(value.value)
             return parent + (value.attr,) if parent else ()
         return ()
+
+    def _call_target(self, value: ast.AST) -> Tuple[str, ...]:
+        dotted = self._dotted(value)
+        if not dotted or dotted[0] not in self.call_roots:
+            return ()
+        return self.call_roots[dotted[0]] + dotted[1:]
+
+    def _shadow(self, name: str) -> None:
+        self.safe_names.add(name)
+        self.call_roots.pop(name, None)
+        self.definition_decorators.discard(name)
+        self.dataclass_decorators.discard(name)
+        self.frozen_dataclasses.discard(name)
+
+    def _bind_import(self, statement: Any) -> None:
+        for item in statement.names:
+            local = item.asname or (
+                item.name if isinstance(statement, ast.ImportFrom)
+                else item.name.split(".")[0]
+            )
+            self._shadow(local)
+            if isinstance(statement, ast.Import):
+                if item.name in {"pytest", "re", "unittest"}:
+                    self.call_roots[local] = (item.name,)
+                continue
+            module = statement.module or ""
+            canonical = {
+                ("dataclasses", "field"): ("field",),
+                ("pathlib", "Path"): ("Path",),
+                ("re", "compile"): ("re", "compile"),
+                ("pytest", "mark"): ("pytest", "mark"),
+                ("unittest", "skip"): ("unittest", "skip"),
+                ("unittest", "skipIf"): ("unittest", "skipIf"),
+                ("unittest", "skipUnless"): ("unittest", "skipUnless"),
+            }.get((module, item.name))
+            if canonical is not None:
+                self.call_roots[local] = canonical
+            if module == "dataclasses" and item.name == "dataclass":
+                self.dataclass_decorators.add(local)
 
     @staticmethod
     def _bounded(value: ast.AST) -> bool:
@@ -200,7 +247,7 @@ class _DefinitionProjector:
             and not value.keywords
             and len(value.args) == 1
             and isinstance(value.func, ast.Name)
-            and value.func.id == "Path"
+            and self._call_target(value.func) == ("Path",)
             and isinstance(value.args[0], ast.Name)
             and value.args[0].id == "__file__"
         ):
@@ -246,7 +293,11 @@ class _DefinitionProjector:
             child.id for child in ast.walk(generator.target)
             if isinstance(child, ast.Name)
         }
-        if not target_names or any(not name.isidentifier() for name in target_names):
+        if (
+            not target_names
+            or any(not name.isidentifier() for name in target_names)
+            or target_names & set(self.call_roots)
+        ):
             return False
         if not (
             isinstance(generator.iter, ast.Call)
@@ -307,7 +358,8 @@ class _DefinitionProjector:
         if isinstance(value, ast.Subscript):
             return self.safe_expression(value.value) and self.safe_expression(value.slice)
         if isinstance(value, ast.Call):
-            name = self._dotted(value.func)
+            name = self._call_target(value.func)
+            direct = self._dotted(value.func)
             if self._path_expression(value):
                 return True
             allowed = (
@@ -318,7 +370,10 @@ class _DefinitionProjector:
                     ("pytest", "mark", "parametrize"),
                 }
                 or (len(name) == 1 and name[0] in _SAFE_CALLS)
-                or (len(name) == 1 and name[0] in self.frozen_dataclasses)
+                or (
+                    len(direct) == 1
+                    and direct[0] in self.frozen_dataclasses
+                )
             )
             return allowed and all(self.safe_expression(item) for item in value.args) and all(
                 item.arg is not None and self.safe_expression(item.value)
@@ -328,8 +383,137 @@ class _DefinitionProjector:
             return self._safe_comprehension(value)
         return False
 
-    def _project_function(self, statement: Any) -> ast.AST:
-        expressions = list(statement.decorator_list) + list(statement.args.defaults)
+    def _safe_function_decorator(self, value: ast.AST) -> bool:
+        if isinstance(value, ast.Name):
+            return value.id in self.definition_decorators
+        if not isinstance(value, ast.Call):
+            return False
+        return (
+            self._call_target(value.func) in {
+                ("pytest", "mark", "parametrize"),
+                ("unittest", "skip"),
+                ("unittest", "skipIf"),
+                ("unittest", "skipUnless"),
+            }
+            and self.safe_expression(value)
+        )
+
+    def _frozen_dataclass_decorator(self, value: ast.AST) -> bool:
+        return (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id in self.dataclass_decorators
+            and not value.args
+            and len(value.keywords) == 1
+            and value.keywords[0].arg == "frozen"
+            and isinstance(value.keywords[0].value, ast.Constant)
+            and value.keywords[0].value.value is True
+        )
+
+    def _safe_class_decorator(self, value: ast.AST) -> bool:
+        if self._frozen_dataclass_decorator(value):
+            return True
+        return (
+            isinstance(value, ast.Call)
+            and self._call_target(value.func) in {
+                ("pytest", "mark", "parametrize"),
+                ("unittest", "skip"),
+                ("unittest", "skipIf"),
+                ("unittest", "skipUnless"),
+            }
+            and self.safe_expression(value)
+        )
+
+    def _safe_frozen_instantiation(self, statement: ast.ClassDef) -> bool:
+        if (
+            statement.bases
+            or len(statement.decorator_list) != 1
+            or not self._frozen_dataclass_decorator(statement.decorator_list[0])
+        ):
+            return False
+        lifecycle = _IMPLICIT_CLASS_HOOKS | {
+            "__init__", "__init_subclass__", "__new__", "__post_init__",
+        }
+        for item in statement.body:
+            if (
+                isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and item.name in lifecycle
+            ):
+                return False
+            if isinstance(item, (ast.Import, ast.ImportFrom)) and any(
+                (alias.asname or alias.name.split(".")[0]) in lifecycle
+                for alias in item.names
+            ):
+                return False
+            targets = (
+                item.targets if isinstance(item, ast.Assign)
+                else [item.target] if isinstance(item, (ast.AnnAssign, ast.AugAssign))
+                else []
+            )
+            if any(
+                isinstance(target, ast.Name) and target.id in lifecycle
+                for target in targets
+            ):
+                return False
+            for call in (
+                node for node in ast.walk(item) if isinstance(node, ast.Call)
+            ):
+                if (
+                    self._call_target(call.func) == ("field",)
+                    and any(keyword.arg == "default_factory" for keyword in call.keywords)
+                ):
+                    return False
+        return True
+
+    @staticmethod
+    def _safe_init_subclass_body(statement: Any) -> bool:
+        positional = list(statement.args.posonlyargs) + list(statement.args.args)
+        if not positional:
+            return False
+        receiver = positional[0].arg
+        for item in statement.body:
+            if isinstance(item, ast.Pass):
+                continue
+            if isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant):
+                continue
+            if not isinstance(item, (ast.Assign, ast.AnnAssign)):
+                return False
+            targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+            if len(targets) != 1 or item.value is None:
+                return False
+            target = targets[0]
+            if (
+                not isinstance(target, ast.Attribute)
+                or not isinstance(target.value, ast.Name)
+                or target.value.id != receiver
+            ):
+                return False
+            value = item.value
+            if target.attr in {"__test__", "__unittest_skip__"}:
+                if not (
+                    isinstance(value, ast.Constant)
+                    and isinstance(value.value, bool)
+                ):
+                    return False
+            elif target.attr == "__unittest_skip_why__":
+                if not (
+                    isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                    and len(value.value.encode("utf-8")) <= 16_384
+                ):
+                    return False
+            else:
+                return False
+        return True
+
+    def _project_function(self, statement: Any, *, class_scope: bool) -> ast.AST:
+        if class_scope and statement.name in _IMPLICIT_CLASS_HOOKS:
+            raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
+        if not all(
+            self._safe_function_decorator(item) for item in statement.decorator_list
+        ):
+            raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
+        expressions = list(statement.args.defaults)
         expressions += [item for item in statement.args.kw_defaults if item is not None]
         expressions += [item.annotation for item in (
             list(statement.args.posonlyargs) + list(statement.args.args)
@@ -344,43 +528,66 @@ class _DefinitionProjector:
         if not all(self.safe_expression(item) for item in expressions):
             raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
         projected = copy.deepcopy(statement)
-        projected.body = [ast.Pass()]
-        self.safe_names.add(statement.name)
+        if class_scope and statement.name == "__init_subclass__":
+            if not self._safe_init_subclass_body(statement):
+                raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
+        else:
+            projected.body = [ast.Pass()]
+        self._shadow(statement.name)
         return projected
 
     def _project_class(self, statement: ast.ClassDef) -> ast.ClassDef:
-        expressions = list(statement.decorator_list) + list(statement.bases)
-        expressions += [item.value for item in statement.keywords]
-        if not all(self.safe_expression(item) for item in expressions):
-            raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
-        projected = copy.deepcopy(statement)
-        projected.body = self.project_body(statement.body, class_scope=True)
-        if any(
-            isinstance(item, ast.Call)
-            and self._dotted(item.func) == ("dataclass",)
-            and any(
-                keyword.arg == "frozen" and isinstance(keyword.value, ast.Constant)
-                and keyword.value.value is True
-                for keyword in item.keywords
-            )
-            for item in statement.decorator_list
+        if statement.keywords or not all(
+            self._safe_class_decorator(item) for item in statement.decorator_list
         ):
+            raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
+        if not all(self.safe_expression(item) for item in statement.bases):
+            raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
+        outer_names = set(self.safe_names)
+        outer_paths = set(self.path_names)
+        outer_calls = dict(self.call_roots)
+        outer_definition_decorators = set(self.definition_decorators)
+        outer_dataclass_decorators = set(self.dataclass_decorators)
+        outer_frozen_dataclasses = set(self.frozen_dataclasses)
+        safe_instantiation = self._safe_frozen_instantiation(statement)
+        projected = copy.deepcopy(statement)
+        try:
+            projected.body = self.project_body(statement.body, class_scope=True)
+        finally:
+            self.safe_names = outer_names
+            self.path_names = outer_paths
+            self.call_roots = outer_calls
+            self.definition_decorators = outer_definition_decorators
+            self.dataclass_decorators = outer_dataclass_decorators
+            self.frozen_dataclasses = outer_frozen_dataclasses
+        self._shadow(statement.name)
+        if safe_instantiation:
             self.frozen_dataclasses.add(statement.name)
-        self.safe_names.add(statement.name)
         return projected
 
     def project_body(self, body: Sequence[ast.stmt], *, class_scope: bool = False) -> list:
         projected = []
         for statement in body:
             if isinstance(statement, (ast.Import, ast.ImportFrom)):
+                if class_scope and any(
+                    (item.asname or item.name.split(".")[0])
+                    in _IMPLICIT_CLASS_HOOKS | {"__init_subclass__"}
+                    for item in statement.names
+                ):
+                    raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
                 projected.append(copy.deepcopy(statement))
-                for item in statement.names:
-                    self.safe_names.add(item.asname or item.name.split(".")[0])
+                self._bind_import(statement)
                 continue
             if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                projected.append(self._project_function(statement))
+                projected.append(
+                    self._project_function(statement, class_scope=class_scope)
+                )
                 continue
             if isinstance(statement, ast.ClassDef):
+                if class_scope and statement.name in (
+                    _IMPLICIT_CLASS_HOOKS | {"__init_subclass__"}
+                ):
+                    raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
                 projected.append(self._project_class(statement))
                 continue
             if isinstance(statement, ast.Assign):
@@ -402,9 +609,13 @@ class _DefinitionProjector:
                 ):
                     raise PythonImportError("PYTHON_IMPORT_EXECUTION_UNSAFE")
                 name = statement.targets[0].id
+                if class_scope and name in (
+                    _IMPLICIT_CLASS_HOOKS | {"__init_subclass__"}
+                ):
+                    raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
                 if self._path_expression(statement.value):
                     self.path_names.add(name)
-                self.safe_names.add(name)
+                self._shadow(name)
                 projected.append(copy.deepcopy(statement))
                 continue
             if isinstance(statement, ast.AnnAssign):
@@ -415,9 +626,13 @@ class _DefinitionProjector:
                 ):
                     raise PythonImportError("PYTHON_IMPORT_EXECUTION_UNSAFE")
                 name = statement.target.id
+                if class_scope and name in (
+                    _IMPLICIT_CLASS_HOOKS | {"__init_subclass__"}
+                ):
+                    raise PythonImportError("PYTHON_IMPORT_DEFINITION_UNSAFE")
                 if statement.value is not None and self._path_expression(statement.value):
                     self.path_names.add(name)
-                self.safe_names.add(name)
+                self._shadow(name)
                 projected.append(copy.deepcopy(statement))
                 continue
             if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
@@ -476,7 +691,7 @@ class PythonImportGraph:
             raise PythonImportError("PYTHON_IMPORT_MANIFEST_STALE")
         try:
             tree = ast.parse(payload.decode("utf-8"), filename=relative)
-        except (SyntaxError, UnicodeDecodeError) as error:
+        except (SyntaxError, UnicodeDecodeError, RecursionError) as error:
             raise PythonImportError("PYTHON_IMPORT_UNPARSABLE") from error
         if has_dynamic_namespace_mutation(tree):
             raise PythonImportError("PYTHON_IMPORT_DYNAMIC")

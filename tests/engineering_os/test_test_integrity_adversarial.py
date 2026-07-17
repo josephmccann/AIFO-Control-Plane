@@ -110,6 +110,58 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_imported_definition_time_execution_hooks_fail_closed(self):
+        support_sources = (
+            "class Meta(type):\n"
+            "    def __new__(meta, name, bases, namespace):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "        return super().__new__(meta, name, bases, namespace)\n"
+            "class Value(metaclass=Meta):\n    pass\n",
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "class Value(Base):\n    pass\n",
+            "def execute(definition):\n"
+            "    import subprocess\n"
+            "    subprocess.run(['false'])\n"
+            "    return definition\n"
+            "@execute\nclass Value:\n    pass\n",
+            "from dataclasses import dataclass\n"
+            "@dataclass(frozen=True)\n"
+            "class Descriptor:\n"
+            "    def __set_name__(self, owner, name):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "DESCRIPTOR = Descriptor()\n"
+            "class Value:\n    item = DESCRIPTOR\n",
+            "class Base:\n"
+            "    def __class_getitem__(cls, item):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "        return cls\n"
+            "class Value(Base[int]):\n    pass\n",
+        )
+        for support_source in support_sources:
+            with self.subTest(support_source=support_source):
+                for root in (self.base, self.head):
+                    (root / "support.py").write_text(
+                        support_source, encoding="utf-8",
+                    )
+                    (root / "tests/test_service.py").write_text(
+                        "from support import Value\ndef test_value():\n    assert Value\n",
+                        encoding="utf-8",
+                    )
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_import_graph_recursion_error_is_a_structured_denial(self):
+        with mock.patch(
+            "engineering_os.test_integrity.PythonImportGraph.closure",
+            side_effect=RecursionError,
+        ):
+            self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_dynamic_import_inside_imported_test_support_fails_closed(self):
         source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
         for root in (self.base, self.head):

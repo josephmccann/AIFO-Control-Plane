@@ -276,11 +276,21 @@ def validate_activation_ledger(
                 return False, "ACTIVATION_ORDER_INVALID", {}
             if attempts[0].get("details", {}).get("authorization_event_hash") != auth.get("event_hash"):
                 return False, "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID", {}
+            attempt_details = attempts[0].get("details", {})
+            if (attempt_details.get("founder_authorization_identity") != auth.get("actor")
+                    or attempt_details.get("consumption_result") != "attempted"
+                    or attempt_details.get("post_consumption_state") != "locked"):
+                return False, "ACTIVATION_ATTEMPT_BINDING_INVALID", {}
         if consumptions:
             if not attempts or consumptions[0].get("sequence") != attempts[0].get("sequence") + 1:
                 return False, "ACTIVATION_ORDER_INVALID", {}
             if consumptions[0].get("details", {}).get("attempt_event_hash") != attempts[0].get("event_hash"):
                 return False, "ACTIVATION_ATTEMPT_REFERENCE_INVALID", {}
+            consumed_details = consumptions[0].get("details", {})
+            if (consumed_details.get("founder_authorization_identity") != auth.get("actor")
+                    or consumed_details.get("consumption_result") != "activated"
+                    or consumed_details.get("post_consumption_state") != "active"):
+                return False, "ACTIVATION_CONSUMPTION_BINDING_INVALID", {}
         if attempts and not consumptions:
             return True, "ACTIVATION_ATTEMPTED", {"consumed": False, "locked": True}
         return True, "ACTIVATION_ALREADY_CONSUMED", {"consumed": True}

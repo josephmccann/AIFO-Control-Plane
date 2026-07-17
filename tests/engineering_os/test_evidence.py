@@ -180,6 +180,12 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn(
             "kernel/scripts/engineering-os/validate-evidence-bundle", workflow
         )
+        artifact_boundary = workflow.split(
+            "- name: Validate producer artifact boundary with immutable kernel", 1
+        )[1].split("- name: Retain validated evidence boundary", 1)[0]
+        self.assertIn(
+            "PYTHONPATH: ${{ github.workspace }}/kernel", artifact_boundary
+        )
         self.assertIn("path: base", workflow)
         self.assertIn("path: head", workflow)
         trusted = workflow.split(

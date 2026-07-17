@@ -208,6 +208,7 @@ jobs:
           BASE_SHA: ${{ inputs.base_sha }}
           HEAD_SHA: ${{ inputs.head_sha }}
           PULL_REQUEST: ${{ inputs.pull_request }}
+          PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
           set -euo pipefail
           kernel/scripts/engineering-os/validate-evidence-bundle \

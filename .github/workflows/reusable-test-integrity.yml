@@ -118,7 +118,7 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --bootstrap-repository josephmccann/AI.FO-Demo \
             --bootstrap-base-sha 52ca01c7c8b034b212feede58ddcc77d9c37c388 \
-            --bootstrap-policy-sha256 60bc2bdb34359062af092934e19dd75fb363d8672ebe70bdabfd204609e3c42f \
+            --bootstrap-policy-sha256 27f04a05fece1cfb8e85b7da641f8d3c98592ebc1d7b943be5b99fd0e3b8cf81 \
             --output "$RUNNER_TEMP/base-policy.json"
 
       - name: Derive complete test-integrity evidence

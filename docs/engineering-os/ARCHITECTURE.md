@@ -109,8 +109,11 @@ shadowed, stale, ambiguous, dynamic, or contradictory imports terminate
 analysis. Collection-time semantics are projected for every first-party
 module. Every manifest-resolved first-party module imported by a test also
 contributes its complete AST, including function bodies and nested static
-imports, to each dependent test's semantic fingerprint, independent of its
-repository path or directory placement. Import traversal uses
+imports, to each dependent test's semantic fingerprint. Mandatory implicit
+edges include ancestor `conftest.py` files, package initializers, and literal
+`pytest_plugins` declarations that pytest executes without ordinary test-file
+imports. Computed plugin declarations fail closed. These rules are independent
+of repository path or directory placement. Import traversal uses
 the same non-resetting aggregate budget as checkout scanning and reporting.
 The immutable materialization action requires and byte-compares the dedicated
 `engineering_os/python_imports.py` kernel before a reusable workflow can use

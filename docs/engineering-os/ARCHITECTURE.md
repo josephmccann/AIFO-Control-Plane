@@ -102,6 +102,19 @@ wrappers always run from the immutable kernel. If either repository identity,
 revision, transport, checkout, pin consistency, or required policy cannot be
 established, validation fails closed.
 
+Test Integrity resolves Python imports statically against each authenticated
+checkout manifest; it does not import target code. Package initializers,
+recursive edges, and cycles are represented canonically, while unresolved,
+shadowed, stale, ambiguous, dynamic, or contradictory imports terminate
+analysis. Collection-time semantics are projected for every first-party
+module. Imported test-support modules under configuration-derived test roots
+also contribute their complete AST, including helper bodies and nested static
+imports, to each dependent test's semantic fingerprint. Import traversal uses
+the same non-resetting aggregate budget as checkout scanning and reporting.
+The immutable materialization action requires and byte-compares the dedicated
+`engineering_os/python_imports.py` kernel before a reusable workflow can use
+it.
+
 GitHub's personal-account sharing setting is coarse-grained, so every
 Demo-only reusable workflow enforces a repository-level caller boundary before
 any functional job runs. The caller must be exactly

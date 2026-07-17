@@ -33,6 +33,44 @@ class DetectorEvasionTests(unittest.TestCase):
             self.base, self.head, configured or policy(self.base, self.head),
         )
 
+    def test_manifest_bound_stdlib_first_party_and_path_setup_are_parseable(self):
+        source = (
+            "import json\nfrom pathlib import Path\nfrom product import value\n"
+            "ROOT = Path(__file__).resolve().parents[1]\n"
+            "def test_value():\n    assert json.loads('1') == value()\n"
+        )
+        for root in (self.base, self.head):
+            (root / "product.py").write_text(
+                "def value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_imported_test_support_function_mutation_changes_case_fingerprint(self):
+        source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
+        for root in (self.base, self.head):
+            (root / "tests/__init__.py").write_text("", encoding="utf-8")
+            (root / "tests/helpers.py").write_text(
+                "def value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.head / "tests/helpers.py").write_text(
+            "def value():\n    return 2\n", encoding="utf-8",
+        )
+        self.assertIn(
+            "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+        )
+
+    def test_dynamic_import_inside_imported_test_support_fails_closed(self):
+        source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
+        for root in (self.base, self.head):
+            (root / "tests/__init__.py").write_text("", encoding="utf-8")
+            (root / "tests/helpers.py").write_text(
+                "def value():\n    return __import__('os').getcwd\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_preimported_skip_alias_cannot_hide_new_decorator(self):
         base = "from unittest import skip as defer\ndef test_value():\n    assert 1 == 1\n"
         head = "from unittest import skip as defer\n@defer('later')\ndef test_value():\n    assert 1 == 1\n"
@@ -1299,9 +1337,9 @@ class DetectorEvasionTests(unittest.TestCase):
         )
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
-    def test_python_module_import_forms_are_exactly_allowlisted(self):
-        denied = (
-            "import support\n",
+    def test_python_module_import_forms_are_manifest_bound(self):
+        denied = ("import support\n",)
+        allowed = (
             "import typing\n",
             "import unittest as unit\n",
             "from unittest import TestCase\n",
@@ -1315,10 +1353,12 @@ class DetectorEvasionTests(unittest.TestCase):
                 for root in (self.base, self.head):
                     (root / "tests/test_service.py").write_text(source, encoding="utf-8")
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
-        source = "import unittest\nimport pytest\ndef test_x():\n    assert True\n"
-        for root in (self.base, self.head):
-            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
-        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        for imported in allowed:
+            source = imported + "def test_x():\n    assert True\n"
+            with self.subTest(imported=imported):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_python_direct_class_collection_flags_affect_skip_state(self):
         existing_base = (

@@ -24,6 +24,7 @@ from .consumption import ConsumptionBinding, consume_once
 from .records import verify_record_evidence
 from .commands import authenticate_event_history
 from .mission import validate_ready
+from .python_imports import PythonImportGraph
 from .risk import compute_tier
 from .scope import PathInputError, path_matches
 
@@ -827,11 +828,11 @@ class _SafeConstantFolder(ast.NodeTransformer):
 
 def _python_stats(
     text: str, module: str, *, allow_unittest_testcase: bool,
-    allow_pytest_parametrize: bool,
+    allow_pytest_parametrize: bool, import_fingerprint: str,
 ) -> _FileStats:
     tree = ast.parse(text)
-    if _has_dynamic_namespace_mutation(tree):
-        raise SyntaxError("dynamic Python namespace mutation")
+    if not import_fingerprint or _SHA256.fullmatch(import_fingerprint) is None:
+        raise SyntaxError("Python import closure is unavailable")
     for statement in tree.body:
         if not isinstance(statement, ast.Import):
             continue
@@ -1342,7 +1343,7 @@ def _python_stats(
             isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
             and statement.name.startswith("test")
         ) and not isinstance(statement, ast.ClassDef)
-    )
+    ) + (("python_import_closure", import_fingerprint),)
     module_disabled = any(false_assignment(statement, "__test__") for statement in tree.body)
     class_statements = [
         (index, statement) for index, statement in enumerate(tree.body)
@@ -2247,9 +2248,10 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
 
 
 def _test_stats(
-    root: Path, paths: Iterable[str], repository_paths: Iterable[str], findings: list,
-    config: Mapping[str, Any], budget: Optional[ResourceBudget] = None,
+    root: Path, paths: Iterable[str], repository_manifest: Mapping[str, Mapping[str, str]],
+    findings: list, config: Mapping[str, Any], budget: Optional[ResourceBudget] = None,
 ) -> Dict[str, _FileStats]:
+    repository_paths = tuple(repository_manifest)
     unittest_shadowed = any(
         path == "unittest.py" or path.endswith("/unittest.py")
         or path == "unittest/__init__.py" or path.endswith("/unittest/__init__.py")
@@ -2261,6 +2263,22 @@ def _test_stats(
         for path in repository_paths
     )
     result = {}
+    support_roots = set()
+    for pattern in config["test_globs"]:
+        wildcard = min(
+            (pattern.find(marker) for marker in ("*", "?", "[") if marker in pattern),
+            default=len(pattern),
+        )
+        raw_prefix = pattern[:wildcard]
+        prefix = raw_prefix.rstrip("/")
+        if prefix and not raw_prefix.endswith("/"):
+            prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
+        if prefix:
+            support_roots.add(prefix)
+    graph = PythonImportGraph(
+        root, repository_manifest, budget,
+        support_roots=tuple(support_roots), support_all=not support_roots,
+    )
     for relative in sorted(paths):
         try:
             text = _source(root / relative, budget, phase="test-parsing")
@@ -2268,6 +2286,7 @@ def _test_stats(
                 _python_stats(
                     text, relative, allow_unittest_testcase=not unittest_shadowed,
                     allow_pytest_parametrize=not pytest_shadowed,
+                    import_fingerprint=graph.closure(relative).fingerprint,
                 ) if relative.endswith(".py")
                 else _javascript_stats(text, relative)
             )
@@ -2278,6 +2297,10 @@ def _test_stats(
         except UnicodeDecodeError:
             findings.append(IntegrityFinding(
                 "TEST_FILE_UNREADABLE", "Test file is not valid UTF-8.", relative,
+            ))
+        except OSError:
+            findings.append(IntegrityFinding(
+                "TEST_FILE_UNREADABLE", "Test file or imported support cannot be read.", relative,
             ))
         except SyntaxError:
             findings.append(IntegrityFinding(

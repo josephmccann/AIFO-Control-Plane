@@ -155,6 +155,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn('[[ "$ACTION_REF" == "$EXPECTED_KERNEL_SHA" ]]', step["run"])
         self.assertIn('"$GITHUB_WORKSPACE/kernel"', step["run"])
         self.assertIn("engineering_os", step["run"])
+        self.assertIn("engineering_os/python_imports.py", step["run"])
         self.assertIn("scripts/engineering-os", step["run"])
         self.assertIn("docs/engineering-os/ENGINEERING_CONSTITUTION.md", step["run"])
         with tempfile.TemporaryDirectory() as directory:
@@ -181,6 +182,10 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(0, accepted.returncode, accepted.stderr)
             self.assertTrue((Path(directory) / "kernel" / "engineering_os").is_dir())
+            self.assertEqual(
+                (ROOT / "engineering_os/python_imports.py").read_bytes(),
+                (Path(directory) / "kernel/engineering_os/python_imports.py").read_bytes(),
+            )
             materialized_constitution = (
                 Path(directory)
                 / "kernel"

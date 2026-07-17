@@ -581,6 +581,7 @@ def main(argv: Sequence[str] = None) -> int:
     parser.add_argument("--pull-request", required=True, type=int)
     parser.add_argument("--evaluated-at")
     parser.add_argument("--output", required=True)
+    args = None
     try:
         args = parser.parse_args(values)
         if re.fullmatch(r"[^/]+/[^/]+", args.repository) is None:
@@ -657,9 +658,9 @@ def main(argv: Sequence[str] = None) -> int:
     except (OverflowError, MemoryError) as error:
         value = {
             "schema_version": "1.0.0",
-            "repository": getattr(locals().get("args"), "repository", ""),
-            "base_sha": getattr(locals().get("args"), "base_sha", ""),
-            "head_sha": getattr(locals().get("args"), "head_sha", ""),
+            "repository": args.repository if args is not None else "",
+            "base_sha": args.base_sha if args is not None else "",
+            "head_sha": args.head_sha if args is not None else "",
             "allowed": False,
             "findings": [{
                 "code": "TEST_RESOURCE_LIMIT",

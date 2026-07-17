@@ -439,7 +439,6 @@ class PythonImportGraph:
 
     def __init__(
         self, root: Any, manifest: Mapping[str, Mapping[str, str]], budget: Any,
-        *, support_roots: Sequence[str] = (), support_all: bool = False,
     ):
         self.root = Path(root).resolve(strict=True)
         self.manifest = {str(path): dict(evidence) for path, evidence in manifest.items()}
@@ -453,30 +452,10 @@ class PythonImportGraph:
                 or PurePosixPath(relative).as_posix() != relative
             ):
                 raise PythonImportError("PYTHON_IMPORT_MANIFEST_INVALID")
-        self.support_roots = tuple(sorted(set(support_roots)))
-        self.support_all = support_all
-        for relative in self.support_roots:
-            parts = PurePosixPath(relative).parts
-            if (
-                not relative
-                or relative.startswith("/")
-                or "\\" in relative
-                or any(part in ("", ".", "..") for part in parts)
-                or PurePosixPath(relative).as_posix() != relative
-            ):
-                raise PythonImportError("PYTHON_IMPORT_MANIFEST_INVALID")
         self.budget = budget
         self._loaded: Dict[str, Tuple[ast.Module, str]] = {}
         self._edges: Dict[str, Set[str]] = {}
         self._stdlib: Dict[str, Set[str]] = {}
-
-    def _is_test_support(self, relative: str) -> bool:
-        return self.support_all or any(
-            relative == root
-            or relative == root + ".py"
-            or relative.startswith(root + "/")
-            for root in self.support_roots
-        )
 
     def _read(self, relative: str) -> Tuple[ast.Module, str]:
         if relative in self._loaded:
@@ -496,7 +475,7 @@ class PythonImportGraph:
             tree = ast.parse(payload.decode("utf-8"), filename=relative)
         except (SyntaxError, UnicodeDecodeError) as error:
             raise PythonImportError("PYTHON_IMPORT_UNPARSABLE") from error
-        if self._is_test_support(relative) and has_dynamic_namespace_mutation(tree):
+        if has_dynamic_namespace_mutation(tree):
             raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
         projection = _DefinitionProjector().project(tree)
         self._loaded[relative] = (tree, projection)
@@ -557,36 +536,23 @@ class PythonImportGraph:
             return "external", (root,)
         return "first-party", self._package_chain(module)
 
-    @staticmethod
-    def _definition_bodies(body: Sequence[ast.stmt]) -> Sequence[ast.stmt]:
-        result = []
-        for statement in body:
-            result.append(statement)
-            if isinstance(statement, ast.ClassDef):
-                result.extend(PythonImportGraph._definition_bodies(statement.body))
-        return result
-
     def _imports(self, path: str, tree: ast.Module) -> Tuple[Tuple[str, Tuple[str, ...]], ...]:
         resolved = []
-        statements = (
-            tuple(node for node in ast.walk(tree) if isinstance(node, ast.stmt))
-            if self._is_test_support(path)
-            else self._definition_bodies(tree.body)
-        )
+        statements = tuple(node for node in ast.walk(tree) if isinstance(node, ast.stmt))
         for statement in statements:
             if isinstance(statement, ast.Import):
-                modules = [item.name for item in statement.names]
+                imported_modules = [item.name for item in statement.names]
             elif isinstance(statement, ast.ImportFrom):
                 base = self._absolute_module(statement, path)
-                modules = [base]
+                imported_modules = [base]
                 for item in statement.names:
                     if item.name != "*":
                         optional = base + "." + item.name
                         if self._local_candidates(optional):
-                            modules.append(optional)
+                            imported_modules.append(optional)
             else:
                 continue
-            for module in modules:
+            for module in imported_modules:
                 kind, evidence = self._resolve(module)
                 resolved.append((kind, evidence))
         return tuple(resolved)
@@ -624,7 +590,7 @@ class PythonImportGraph:
             tree, projection = self._loaded[path]
             semantic = (
                 ast.dump(tree, include_attributes=False)
-                if path != test_path and self._is_test_support(path)
+                if path != test_path
                 else projection
             )
             nodes.append({

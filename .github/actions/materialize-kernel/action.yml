@@ -56,14 +56,25 @@ runs:
         [[ -d "$source_root/engineering_os" ]] || deny "Python kernel"
         [[ -d "$source_root/scripts/engineering-os" ]] || deny "command kernel"
         [[ -d "$source_root/schemas/engineering-os" ]] || deny "schema kernel"
+        constitution="$source_root/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
+        [[ -f "$constitution" && ! -L "$constitution" ]] || deny "Engineering Constitution"
 
         destination="$GITHUB_WORKSPACE/kernel"
         [[ ! -e "$destination" && ! -L "$destination" ]] || deny "destination"
-        mkdir -p "$destination/scripts" "$destination/schemas"
+        mkdir -p \
+          "$destination/scripts" \
+          "$destination/schemas" \
+          "$destination/docs/engineering-os"
         cp -R "$source_root/engineering_os" "$destination/engineering_os"
         cp -R "$source_root/scripts/engineering-os" "$destination/scripts/engineering-os"
         cp -R "$source_root/schemas/engineering-os" "$destination/schemas/engineering-os"
+        cp "$constitution" "$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
 
         [[ -d "$destination/engineering_os" ]] || deny "materialized Python kernel"
         [[ -d "$destination/scripts/engineering-os" ]] || deny "materialized command kernel"
         [[ -d "$destination/schemas/engineering-os" ]] || deny "materialized schema kernel"
+        materialized_constitution="$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
+        [[ -f "$materialized_constitution" && ! -L "$materialized_constitution" ]] || \
+          deny "materialized Engineering Constitution"
+        cmp -s "$constitution" "$materialized_constitution" || \
+          deny "Engineering Constitution integrity"

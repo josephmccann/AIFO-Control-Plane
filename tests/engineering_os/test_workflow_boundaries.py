@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
 KERNEL_ACTION_SHA = "32f37e247700ca5b8ef52b2a9844f8af21088d1f"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
+    "docs/engineering-os/ENGINEERING_CONSTITUTION.md",
     "engineering_os",
     "scripts/engineering-os",
     "schemas/engineering-os",
@@ -155,6 +157,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn('"$GITHUB_WORKSPACE/kernel"', step["run"])
         self.assertIn("engineering_os", step["run"])
         self.assertIn("scripts/engineering-os", step["run"])
+        self.assertIn("docs/engineering-os/ENGINEERING_CONSTITUTION.md", step["run"])
         with tempfile.TemporaryDirectory() as directory:
             environment = {
                 **os.environ,
@@ -179,7 +182,19 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(0, accepted.returncode, accepted.stderr)
             self.assertTrue((Path(directory) / "kernel" / "engineering_os").is_dir())
-            self.assertFalse((Path(directory) / "kernel" / "docs").exists())
+            materialized_constitution = (
+                Path(directory)
+                / "kernel"
+                / "docs"
+                / "engineering-os"
+                / "ENGINEERING_CONSTITUTION.md"
+            )
+            self.assertTrue(materialized_constitution.is_file())
+            self.assertFalse(materialized_constitution.is_symlink())
+            self.assertEqual(
+                (ROOT / "docs/engineering-os/ENGINEERING_CONSTITUTION.md").read_bytes(),
+                materialized_constitution.read_bytes(),
+            )
         with tempfile.TemporaryDirectory() as directory:
             rejected = subprocess.run(
                 ["bash", "-c", step["run"]],
@@ -297,6 +312,93 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                     self.assertNotEqual(0, rejected.returncode)
                     self.assertIn("kernel materialization denied", rejected.stderr)
                     self.assertFalse((Path(directory) / "kernel").exists())
+
+    def test_private_kernel_action_rejects_missing_or_symlinked_constitution(self):
+        action = json.loads(
+            subprocess.check_output(
+                [
+                    "ruby",
+                    "-ryaml",
+                    "-rjson",
+                    "-e",
+                    "print JSON.generate(YAML.load_file(ARGV.fetch(0)))",
+                    str(KERNEL_ACTION),
+                ],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+            )
+        )
+        step = action["runs"]["steps"][0]
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_root = Path(directory) / "source"
+            action_path = temporary_root / ".github/actions/materialize-kernel"
+            action_path.mkdir(parents=True)
+            shutil.copytree(ROOT / "engineering_os", temporary_root / "engineering_os")
+            shutil.copytree(
+                ROOT / "scripts/engineering-os",
+                temporary_root / "scripts/engineering-os",
+            )
+            shutil.copytree(
+                ROOT / "schemas/engineering-os",
+                temporary_root / "schemas/engineering-os",
+            )
+            workspace = Path(directory) / "workspace"
+            workspace.mkdir()
+            rejected = subprocess.run(
+                ["bash", "-c", step["run"]],
+                env={
+                    **os.environ,
+                    "ACTION_REF": "a" * 40,
+                    "EXPECTED_KERNEL_SHA": "a" * 40,
+                    "GITHUB_ACTION_PATH": str(action_path),
+                    "GITHUB_WORKSPACE": str(workspace),
+                    "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                    "CALLER_OWNER": AUTHORIZED_OWNER,
+                    "CALLER_EVENT_NAME": "pull_request",
+                    "CALLER_REF": "refs/pull/17/merge",
+                    "CALLER_WORKFLOW_REF": (
+                        AUTHORIZED_CALLER
+                        + "/.github/workflows/eos-pull-request.yml@refs/pull/17/merge"
+                    ),
+                },
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, rejected.returncode)
+            self.assertIn("Engineering Constitution", rejected.stderr)
+            self.assertFalse((workspace / "kernel").exists())
+
+            constitution_directory = temporary_root / "docs/engineering-os"
+            constitution_directory.mkdir(parents=True)
+            (constitution_directory / "ENGINEERING_CONSTITUTION.md").symlink_to(
+                ROOT / "docs/engineering-os/ENGINEERING_CONSTITUTION.md"
+            )
+            symlink_workspace = Path(directory) / "symlink-workspace"
+            symlink_workspace.mkdir()
+            symlink_rejected = subprocess.run(
+                ["bash", "-c", step["run"]],
+                env={
+                    **os.environ,
+                    "ACTION_REF": "a" * 40,
+                    "EXPECTED_KERNEL_SHA": "a" * 40,
+                    "GITHUB_ACTION_PATH": str(action_path),
+                    "GITHUB_WORKSPACE": str(symlink_workspace),
+                    "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                    "CALLER_OWNER": AUTHORIZED_OWNER,
+                    "CALLER_EVENT_NAME": "pull_request",
+                    "CALLER_REF": "refs/pull/17/merge",
+                    "CALLER_WORKFLOW_REF": (
+                        AUTHORIZED_CALLER
+                        + "/.github/workflows/eos-pull-request.yml@refs/pull/17/merge"
+                    ),
+                },
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, symlink_rejected.returncode)
+            self.assertIn("Engineering Constitution", symlink_rejected.stderr)
+            self.assertFalse((symlink_workspace / "kernel").exists())
 
     def test_demo_only_reusable_workflows_authenticate_caller_and_provenance(self):
         expected_names = {path.name for path in WORKFLOW_ROOT.glob("reusable-*.yml")}

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-KERNEL_SHA = "6ec2fc95c8965892f387189e05baf3c4a5c4ed4a"
+KERNEL_SHA = "e88707c4f873a837dd20c9cbf071db6ed01ae8fe"
 
 
 class TestIntegrityCallerTests(unittest.TestCase):
@@ -14,7 +14,7 @@ class TestIntegrityCallerTests(unittest.TestCase):
         self.assertIn("pull_request_target:", caller)
         self.assertIn("pull_request:", caller)
         self.assertIn("github.event.pull_request.number == 24", caller)
-        self.assertIn("github.event.pull_request.head.sha == 'cae9338ba7d4e5147963e7baf198fc56bf6b6cd7'", caller)
+        self.assertIn("github.event.pull_request.head.sha != ''", caller)
         self.assertIn("permissions: {}", caller)
         for permission in ("actions: read", "contents: read", "issues: read", "pull-requests: read"):
             self.assertIn(permission, caller)

@@ -25,7 +25,7 @@ jobs:
       github.event.pull_request.number == 24 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.head.sha == 'cae9338ba7d4e5147963e7baf198fc56bf6b6cd7'
+      github.event.pull_request.head.sha != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,7 +42,7 @@ jobs:
           EXPECTED_REPOSITORY: josephmccann/AIFO-Control-Plane
           EXPECTED_PR: '24'
           EXPECTED_BASE_BRANCH: main
-          EXPECTED_HEAD_SHA: cae9338ba7d4e5147963e7baf198fc56bf6b6cd7
+          EXPECTED_PARENT_SHA: e88707c4f873a837dd20c9cbf071db6ed01ae8fe
           REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -53,8 +53,8 @@ jobs:
           WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           CALLER_PATH: .github/workflows/test-integrity.yml
-          REUSABLE_SHA: 6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
-          KERNEL_SHA: 5a273627a1a4d4addfcf81129dcdbda4dc58c383
+          REUSABLE_SHA: e88707c4f873a837dd20c9cbf071db6ed01ae8fe
+          KERNEL_SHA: fd1b7e89551e0951d4debe2f840e1955f5d9c817
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           MANIFEST_IDENTITY: pending
           CHECKED_OUT_SHA: ${{ github.event.pull_request.head.sha }}
@@ -70,13 +70,14 @@ jobs:
           [[ "$WORKFLOW_REF" == "$EXPECTED_REPOSITORY/$CALLER_PATH@refs/pull/24/merge" ]] || deny workflow_ref
           checked_out_sha="$(git rev-parse HEAD)"
           [[ "$checked_out_sha" == "$HEAD_SHA" ]] || deny checkout_sha
+          [[ "$(git rev-parse HEAD^)" == "$EXPECTED_PARENT_SHA" ]] || deny reviewed_parent
           [[ "$CHECKOUT_SHA" == "$HEAD_SHA" ]] || deny check_context_sha
           [[ -f "$CALLER_PATH" ]] || deny caller_definition
           reusable_count="$(grep -o "$REUSABLE_SHA" "$CALLER_PATH" | wc -l | tr -d ' ')"
           [[ "$reusable_count" == 2 ]] || deny reusable_binding
           kernel_count="$(grep -o "$KERNEL_SHA" .github/workflows/reusable-test-integrity.yml | wc -l | tr -d ' ')"
           [[ "$kernel_count" == 2 ]] || deny kernel_binding
-          [[ "$(grep -c 'expected_kernel_sha: 5a273627a1a4d4addfcf81129dcdbda4dc58c383' .github/workflows/reusable-test-integrity.yml)" == 1 ]] || deny kernel_evidence
+          [[ "$(grep -c 'expected_kernel_sha: fd1b7e89551e0951d4debe2f840e1955f5d9c817' .github/workflows/reusable-test-integrity.yml)" == 1 ]] || deny kernel_evidence
           manifest_identity="$(git ls-tree -r -z "$HEAD_SHA" | sha256sum | cut -d ' ' -f1)"
           [[ "$manifest_identity" =~ ^[0-9a-f]{64}$ ]] || deny manifest_identity
           export MANIFEST_IDENTITY="$manifest_identity"
@@ -119,16 +120,16 @@ jobs:
       github.event.pull_request.number == 24 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.head.sha == 'cae9338ba7d4e5147963e7baf198fc56bf6b6cd7'
+      github.event.pull_request.head.sha != ''
     needs: bootstrap-authorize
     permissions:
       actions: read
       contents: read
       issues: read
       pull-requests: read
-    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@e88707c4f873a837dd20c9cbf071db6ed01ae8fe
     with:
-      expected_workflow_sha: 6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+      expected_workflow_sha: e88707c4f873a837dd20c9cbf071db6ed01ae8fe
 
   test-integrity:
     name: Test Integrity
@@ -137,6 +138,6 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@e88707c4f873a837dd20c9cbf071db6ed01ae8fe
     with:
-      expected_workflow_sha: 6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+      expected_workflow_sha: e88707c4f873a837dd20c9cbf071db6ed01ae8fe

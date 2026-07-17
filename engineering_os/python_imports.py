@@ -114,7 +114,7 @@ def has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
                 allowed_getattr.add(id(node.func))
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):
-            if node.id in _RUNTIME_DYNAMIC_NAMES:
+            if node.id in _RUNTIME_REFLECTION_ATTRIBUTES:
                 return True
             if node.id == "getattr" and id(node) not in allowed_getattr:
                 return True

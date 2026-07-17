@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-KERNEL_SHA = "78608eb9c1b433c155e4f8645820450d2701499e"
+KERNEL_SHA = "e88707c4f873a837dd20c9cbf071db6ed01ae8fe"
 
 
 class TestIntegrityCallerTests(unittest.TestCase):
@@ -12,13 +12,15 @@ class TestIntegrityCallerTests(unittest.TestCase):
         caller = (ROOT / ".github/workflows/test-integrity.yml").read_text(encoding="utf-8")
         documentation = (ROOT / "docs/engineering-os/TEST_INTEGRITY.md").read_text(encoding="utf-8")
         self.assertIn("pull_request_target:", caller)
-        self.assertNotRegex(caller, r"(?m)^\s+pull_request:\s*$")
+        self.assertIn("pull_request:", caller)
+        self.assertIn("github.event.pull_request.number == 24", caller)
+        self.assertIn("github.event.pull_request.head.sha != ''", caller)
         self.assertIn("permissions: {}", caller)
         for permission in ("actions: read", "contents: read", "issues: read", "pull-requests: read"):
             self.assertIn(permission, caller)
-        self.assertNotIn("write", caller)
-        self.assertNotIn("actions/checkout", caller)
-        self.assertNotRegex(caller, r"(?m)^\s+run:")
+        self.assertNotRegex(caller, r"(?m)^\s+[A-Za-z-]+:\s+write\s*$")
+        self.assertIn("actions/checkout@v4", caller)
+        self.assertIn("run:", caller)
         expected = (
             "uses: josephmccann/AIFO-Control-Plane/.github/workflows/"
             "reusable-test-integrity.yml@" + KERNEL_SHA

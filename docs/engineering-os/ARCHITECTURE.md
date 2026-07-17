@@ -102,6 +102,31 @@ wrappers always run from the immutable kernel. If either repository identity,
 revision, transport, checkout, pin consistency, or required policy cannot be
 established, validation fails closed.
 
+Test Integrity resolves Python imports statically against each authenticated
+checkout manifest; it does not import target code. Package initializers,
+recursive edges, and cycles are represented canonically, while unresolved,
+shadowed, stale, ambiguous, dynamic, or contradictory imports terminate
+analysis. Collection-time semantics are projected for every first-party
+module. Every manifest-resolved first-party module imported by a test also
+contributes its complete AST, including function bodies and nested static
+imports, to each dependent test's semantic fingerprint. Mandatory implicit
+edges include ancestor `conftest.py` files, package initializers, and literal
+`pytest_plugins` declarations that pytest executes without ordinary test-file
+imports. Computed plugin declarations fail closed. These rules are independent
+of repository path or directory placement. Import traversal uses
+the same non-resetting aggregate budget as checkout scanning and reporting.
+Definition-time execution is separately bounded: callable setup helpers and
+decorators retain audited import or built-in provenance, custom metaclasses and
+implicit class hooks are denied, and only constant pytest/unittest collection
+assignments are admitted in `__init_subclass__`. Proven-safe frozen dataclasses
+may be instantiated only without inheritance, lifecycle hooks, implicit hooks,
+or default factories. Exact-provenance `pytest.fixture` supports only closed,
+bounded literal options; shadowed, computed, callable, or unknown fixture
+configuration is denied. Recursion exhaustion produces a structured denial.
+The immutable materialization action requires and byte-compares the dedicated
+`engineering_os/python_imports.py` kernel before a reusable workflow can use
+it.
+
 GitHub's personal-account sharing setting is coarse-grained, so every
 Demo-only reusable workflow enforces a repository-level caller boundary before
 any functional job runs. The caller must be exactly

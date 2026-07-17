@@ -39,7 +39,10 @@ runs:
             deny "Demo caller workflow"
           fi
         elif [[ "$CALLER_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]]; then
-          if [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@refs/heads/main" ]]; then
+          if [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@refs/pull/24/merge" ]]; then
+            [[ "$CALLER_EVENT_NAME" == "pull_request" ]] || deny "Control Plane bootstrap event"
+            [[ "$CALLER_REF" == "refs/pull/24/merge" ]] || deny "Control Plane bootstrap ref"
+          elif [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@refs/heads/main" ]]; then
             [[ "$CALLER_EVENT_NAME" == "pull_request_target" ]] || deny "Control Plane test event"
             [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "Control Plane test ref"
           elif [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/reusable-orphan-recovery.yml@refs/heads/main" ]]; then
@@ -54,6 +57,8 @@ runs:
 
         source_root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd -P)"
         [[ -d "$source_root/engineering_os" ]] || deny "Python kernel"
+        import_graph="$source_root/engineering_os/python_imports.py"
+        [[ -f "$import_graph" && ! -L "$import_graph" ]] || deny "Python import graph kernel"
         [[ -d "$source_root/scripts/engineering-os" ]] || deny "command kernel"
         [[ -d "$source_root/schemas/engineering-os" ]] || deny "schema kernel"
         constitution="$source_root/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
@@ -71,6 +76,11 @@ runs:
         cp "$constitution" "$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
 
         [[ -d "$destination/engineering_os" ]] || deny "materialized Python kernel"
+        materialized_import_graph="$destination/engineering_os/python_imports.py"
+        [[ -f "$materialized_import_graph" && ! -L "$materialized_import_graph" ]] || \
+          deny "materialized Python import graph kernel"
+        cmp -s "$import_graph" "$materialized_import_graph" || \
+          deny "Python import graph kernel integrity"
         [[ -d "$destination/scripts/engineering-os" ]] || deny "materialized command kernel"
         [[ -d "$destination/schemas/engineering-os" ]] || deny "materialized schema kernel"
         materialized_constitution="$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"

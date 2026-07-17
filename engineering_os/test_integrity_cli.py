@@ -11,7 +11,7 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .commands import authenticate_event_history
 from .mission import parse_issue_body
@@ -25,6 +25,9 @@ from .canonical import content_sha256
 
 _SHA40 = re.compile(r"[0-9a-f]{40}")
 _MISSION_MARKER = re.compile(r"<!-- AIFO-EOS-MISSION-ISSUE: ([1-9][0-9]*) -->")
+_INITIAL_READY_REPOSITORY = "josephmccann/AI.FO-Demo"
+_INITIAL_READY_BASE_SHA = "438a68bf0b4f49ae15a04a69ad72c14cc43de0cb"
+_INITIAL_READY_MISSION_SHA256 = "9a9c6b751c45732d108d0f833f6096df1558c9d546761fc03a922489dfa0240a"
 _DEFAULT_LIMITS = {
     "max_files": 10000, "max_total_bytes": 256 * 1024 * 1024,
     "max_path_bytes": 1024, "max_git_record_bytes": 4096,
@@ -32,6 +35,46 @@ _DEFAULT_LIMITS = {
     "max_github_response_bytes": 8 * 1024 * 1024,
     "max_coverage_bytes": 1024 * 1024,
 }
+
+
+def _initial_ready_attestation(
+    pr: Mapping[str, Any], issue: Mapping[str, Any], mission_sha256: str,
+    comments: Sequence[Mapping[str, Any]], policy: Mapping[str, Any], *,
+    repository: str, pull_request: int, base_sha: str, head_sha: str,
+) -> Optional[str]:
+    """Bind the one authorized pre-activation mission to GitHub evidence."""
+
+    if not (
+        repository == _INITIAL_READY_REPOSITORY
+        and pull_request == 202
+        and base_sha == _INITIAL_READY_BASE_SHA
+        and _SHA40.fullmatch(head_sha or "") is not None
+        and mission_sha256 == _INITIAL_READY_MISSION_SHA256
+        and comments == []
+        and pr.get("number") == pull_request
+        and pr.get("state") == "open"
+        and pr.get("user", {}).get("login") == "josephmccann"
+        and pr.get("head", {}).get("ref") == "codex/eos-package-8"
+        and pr.get("head", {}).get("sha") == head_sha
+        and pr.get("head", {}).get("repo", {}).get("full_name") == repository
+        and issue.get("number") == 201
+        and issue.get("state") == "open"
+        and issue.get("user", {}).get("login") == "josephmccann"
+        and policy.get("repository") == repository
+        and "josephmccann" in policy.get("founder_identities", [])
+    ):
+        return None
+    return content_sha256({
+        "schema_version": "1.0.0",
+        "type": "initial-ready-attestation",
+        "repository": repository,
+        "pull_request": pull_request,
+        "mission_issue": 201,
+        "base_sha": base_sha,
+        "head_sha": head_sha,
+        "mission_sha256": mission_sha256,
+        "founder": "josephmccann",
+    })
 
 
 def _bounded_file_bytes(
@@ -344,10 +387,23 @@ def _github_mission(
         actions_runs.extend(page["workflow_runs"])
     if resource_budget is not None:
         resource_budget.consume_github(pages=len(run_pages), items=len(actions_runs))
+    mission_sha256 = content_sha256(mission)
+    initial_ready_attestation = _initial_ready_attestation(
+        pr,
+        issue,
+        mission_sha256,
+        comments,
+        policy,
+        repository=repository,
+        pull_request=pull_request,
+        base_sha=base_sha,
+        head_sha=head_sha,
+    )
     return authenticate_integrity_context(
         mission, comments, policy, changed_files, repository=repository,
         mission_issue=issue_number, pull_request=pull_request,
         base_sha=base_sha, head_sha=head_sha, actions_runs=actions_runs,
+        initial_ready_attestation_sha256=initial_ready_attestation,
     )
 
 

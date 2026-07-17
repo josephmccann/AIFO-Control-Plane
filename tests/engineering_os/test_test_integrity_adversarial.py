@@ -1707,6 +1707,16 @@ class DetectorEvasionTests(unittest.TestCase):
             )
         self.assertIn("TEST_CONFIGURATION_WEAKENED", codes(self.analyze()))
 
+    def test_unchanged_package_without_test_command_is_not_weakened(self):
+        for root in (self.base, self.head):
+            (root / "package.json").write_text(
+                json.dumps({"scripts": {"typecheck": "tsc --noEmit"}}),
+                encoding="utf-8",
+            )
+        found = codes(self.analyze())
+        self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
+        self.assertNotIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
+
     def test_unknown_test_config_or_workflow_change_requires_review(self):
         for root, value in ((self.base, "addopts = -q\n"), (self.head, "addopts = --tb=no\n")):
             (root / "pytest.ini").write_text(value, encoding="utf-8")
@@ -1918,8 +1928,101 @@ class DetectorEvasionTests(unittest.TestCase):
                 pull_request=42, base_sha="1" * 40, head_sha="2" * 40,
             )
 
+    def test_initial_ready_attestation_is_explicit_and_hash_bound(self):
+        from engineering_os.test_integrity import authenticate_integrity_context
+        from tests.engineering_os.test_commands import valid_context
+
+        mission, repository_policy = valid_context()
+        arguments = {
+            "repository": repository_policy["repository"],
+            "mission_issue": 101,
+            "pull_request": 42,
+            "base_sha": "1" * 40,
+            "head_sha": "2" * 40,
+        }
+        with self.assertRaisesRegex(ValueError, "TEST_MISSION_READY_EVENT_REQUIRED"):
+            authenticate_integrity_context(
+                mission,
+                [],
+                repository_policy,
+                ["engineering_os/test_integrity.py"],
+                **arguments,
+            )
+        attested = authenticate_integrity_context(
+            mission,
+            [],
+            repository_policy,
+            ["engineering_os/test_integrity.py"],
+            initial_ready_attestation_sha256="5" * 64,
+            **arguments,
+        )
+        self.assertEqual("5" * 64, attested["mission_event_hash"])
+        with self.assertRaisesRegex(ValueError, "TEST_MISSION_READY_EVENT_REQUIRED"):
+            authenticate_integrity_context(
+                mission,
+                [],
+                repository_policy,
+                ["engineering_os/test_integrity.py"],
+                initial_ready_attestation_sha256="not-a-hash",
+                **arguments,
+            )
+
 
 class CliFailureArtifactTests(unittest.TestCase):
+    def test_initial_ready_bootstrap_requires_exact_founder_github_evidence(self):
+        from engineering_os.test_integrity_cli import (
+            _INITIAL_READY_BASE_SHA,
+            _INITIAL_READY_MISSION_SHA256,
+            _INITIAL_READY_REPOSITORY,
+            _initial_ready_attestation,
+        )
+
+        head_sha = "a" * 40
+        pr = {
+            "number": 202,
+            "state": "open",
+            "user": {"login": "josephmccann"},
+            "head": {
+                "ref": "codex/eos-package-8",
+                "sha": head_sha,
+                "repo": {"full_name": _INITIAL_READY_REPOSITORY},
+            },
+        }
+        issue = {
+            "number": 201,
+            "state": "open",
+            "user": {"login": "josephmccann"},
+        }
+        policy = {
+            "repository": _INITIAL_READY_REPOSITORY,
+            "founder_identities": ["josephmccann"],
+        }
+        arguments = {
+            "repository": _INITIAL_READY_REPOSITORY,
+            "pull_request": 202,
+            "base_sha": _INITIAL_READY_BASE_SHA,
+            "head_sha": head_sha,
+        }
+        attestation = _initial_ready_attestation(
+            pr,
+            issue,
+            _INITIAL_READY_MISSION_SHA256,
+            [],
+            policy,
+            **arguments,
+        )
+        self.assertRegex(attestation, r"^[0-9a-f]{64}$")
+        mutations = (
+            (pr, issue, "0" * 64, [], policy, arguments),
+            (pr, issue, _INITIAL_READY_MISSION_SHA256, [{}], policy, arguments),
+            ({**pr, "state": "closed"}, issue, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            (pr, {**issue, "user": {"login": "other"}}, _INITIAL_READY_MISSION_SHA256, [], policy, arguments),
+            (pr, issue, _INITIAL_READY_MISSION_SHA256, [], policy, {**arguments, "base_sha": "0" * 40}),
+        )
+        for values in mutations:
+            with self.subTest(values=values):
+                self.assertIsNone(_initial_ready_attestation(*values[:5], **values[5]))
+
     def test_default_aggregate_budget_covers_measured_demo_envelope(self):
         from engineering_os.test_integrity_cli import _DEFAULT_LIMITS
 

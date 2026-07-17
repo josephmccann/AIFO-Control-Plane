@@ -252,6 +252,7 @@ def authenticate_integrity_context(
     policy: Mapping[str, Any], changed_files: Sequence[str], *, repository: str,
     mission_issue: int, pull_request: int, base_sha: str, head_sha: str,
     actions_runs: Sequence[Mapping[str, Any]] = (),
+    initial_ready_attestation_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Derive immutable report truth from an authenticated mission history."""
 
@@ -263,7 +264,13 @@ def authenticate_integrity_context(
     if not history.allowed or history.projection.violations:
         raise ValueError("TEST_MISSION_HISTORY_INVALID")
     ready_events = [item for item in history.events if item.get("type") == "mission.ready"]
-    if not ready_events:
+    if ready_events and initial_ready_attestation_sha256 is not None:
+        raise ValueError("TEST_MISSION_READY_EVIDENCE_CONTRADICTORY")
+    if not ready_events and (
+        history.events
+        or not isinstance(initial_ready_attestation_sha256, str)
+        or _SHA256.fullmatch(initial_ready_attestation_sha256) is None
+    ):
         raise ValueError("TEST_MISSION_READY_EVENT_REQUIRED")
     risk = compute_tier(mission, policy, changed_files)
     if not risk.allowed:
@@ -276,7 +283,11 @@ def authenticate_integrity_context(
         or _SHA40.fullmatch(base_sha or "") is None or _SHA40.fullmatch(head_sha or "") is None
     ):
         raise ValueError("TEST_MISSION_BINDING_INVALID")
-    event_hash = history.events[-1].get("event_hash")
+    event_hash = (
+        history.events[-1].get("event_hash")
+        if ready_events
+        else initial_ready_attestation_sha256
+    )
     if not isinstance(event_hash, str) or _SHA256.fullmatch(event_hash) is None:
         raise ValueError("TEST_MISSION_EVENT_HASH_INVALID")
     return {
@@ -2620,6 +2631,8 @@ def _analyze_test_integrity(
             after_text = _source(head / path, budget, phase="configuration-comparison")
             weakened = _weakened(before_text, after_text)
             if path == "package.json" or path.endswith("/package.json"):
+                if before_text == after_text:
+                    continue
                 before_package, after_package = json.loads(before_text), json.loads(after_text)
                 before_command = before_package.get("scripts", {}).get("test") if isinstance(before_package, Mapping) else None
                 after_command = after_package.get("scripts", {}).get("test") if isinstance(after_package, Mapping) else None

@@ -531,6 +531,53 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn('--base-sha "$BASE_SHA"', step["run"])
         self.assertNotIn("${{ github.event.pull_request.base.sha }}", step["run"])
 
+    def test_orphan_discovery_paths_survive_immutable_kernel_cwd(self):
+        workflow = load_workflow("reusable-orphan-recovery.yml")
+        step = next(
+            item
+            for item in workflow["jobs"]["discover"]["steps"]
+            if item.get("name") == "Scheduled and default dry-run discovery"
+        )
+        script = step["run"]
+        self.assertIn("set -euo pipefail", script)
+        self.assertIn(
+            '--policy "$GITHUB_WORKSPACE/target/.aifo/engineering-os-policy.json"',
+            script,
+        )
+        self.assertIn(
+            "scripts/engineering-os/recover-orphaned-mission", script
+        )
+        self.assertNotIn(
+            "kernel/scripts/engineering-os/recover-orphaned-mission", script
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "kernel").symlink_to(ROOT, target_is_directory=True)
+            policy = workspace / "target/.aifo/engineering-os-policy.json"
+            policy.parent.mkdir(parents=True)
+            policy.write_text("{}\n", encoding="utf-8")
+            checked = subprocess.run(
+                [
+                    "bash",
+                    "-euo",
+                    "pipefail",
+                    "-c",
+                    (
+                        'cd "$GITHUB_WORKSPACE/kernel"\n'
+                        'test -f "$GITHUB_WORKSPACE/target/.aifo/'
+                        'engineering-os-policy.json"\n'
+                        "test -x scripts/engineering-os/recover-orphaned-mission"
+                    ),
+                ],
+                cwd=workspace,
+                env={**os.environ, "GITHUB_WORKSPACE": str(workspace)},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, checked.returncode, checked.stderr)
+
     def test_caller_authorization_script_fails_closed(self):
         workflow = load_workflow("reusable-mission-validation.yml")
         self.assertIn("caller-authorization", workflow["jobs"])

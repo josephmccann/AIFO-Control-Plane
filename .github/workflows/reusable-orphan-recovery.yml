@@ -106,6 +106,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
+          set -euo pipefail
           cd "$GITHUB_WORKSPACE/kernel"
           python3 - <<'PY'
           import json
@@ -148,6 +149,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/kernel
           REQUESTED_ISSUE: ${{ inputs.issue_number }}
         run: |
+          set -euo pipefail
           cd "$GITHUB_WORKSPACE/kernel"
           if [[ -n "$REQUESTED_ISSUE" && "$REQUESTED_ISSUE" != "0" ]]; then
             [[ "$REQUESTED_ISSUE" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
@@ -194,11 +196,11 @@ jobs:
             python3 -m engineering_os.commands authenticate-event-history \
               --comments "$RUNNER_TEMP/comments-${issue}.json" \
               --mission "$RUNNER_TEMP/mission-${issue}.json" \
-              --policy target/.aifo/engineering-os-policy.json \
+              --policy "$GITHUB_WORKSPACE/target/.aifo/engineering-os-policy.json" \
               --runs "$RUNNER_TEMP/runs-${issue}.json" \
               --repository "$GITHUB_REPOSITORY" \
               --events-output "$RUNNER_TEMP/events-${issue}.json"
-            kernel/scripts/engineering-os/recover-orphaned-mission \
+            scripts/engineering-os/recover-orphaned-mission \
               --events "$RUNNER_TEMP/events-${issue}.json" \
               --now "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_STEP_SUMMARY"
           done
@@ -234,6 +236,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/kernel
           SOURCE_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -euo pipefail
           cd "$GITHUB_WORKSPACE/kernel"
           [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"

@@ -91,6 +91,18 @@ checkout must never supply executable EOS code. Python imports and EOS command w
 from the immutable kernel. If either repository identity, revision, checkout,
 or required policy cannot be established, validation fails closed.
 
+GitHub's personal-account sharing setting is coarse-grained, so every
+Demo-only reusable workflow enforces a repository-level caller boundary before
+any functional job runs. The caller must be exactly
+`josephmccann/AI.FO-Demo` under owner `josephmccann`; the executing workflow
+must come from `josephmccann/AIFO-Control-Plane`; `job.workflow_file_path` must
+match the expected workflow identity; and `job.workflow_sha` must equal the
+40-hex `expected_workflow_sha` supplied by the caller. Missing, malformed,
+stale, or contradictory caller evidence terminates the workflow. The orphan
+workflow additionally permits its existing direct schedule or dispatch only
+from the Control Plane `main` branch; it never treats a direct run as an
+external caller.
+
 ## Current limitations
 
 GitHub does not provide path-scoped Git credentials, authenticated comments

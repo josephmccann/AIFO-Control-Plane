@@ -34,16 +34,17 @@ Unverifiable state fails closed at the EOS decision boundary.
 
 ## Temporary actionlint compatibility
 
-GitHub documents `job.workflow_repository` and `job.workflow_sha` as supported
-job-context properties for checking out the source of a reusable workflow. See
+GitHub documents `job.workflow_repository`, `job.workflow_sha`, and
+`job.workflow_file_path` as supported job-context properties for identifying
+and checking out the source of a reusable workflow. See
 the [GitHub Actions contexts reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts).
 Pinned actionlint 1.7.12 predates those properties; upstream support is tracked
 in [actionlint pull request 661](https://github.com/rhysd/actionlint/pull/661).
 
 > This compatibility rule exists solely because the currently pinned actionlint version does not yet recognize officially supported GitHub reusable-workflow context fields.
 
-The rule is limited to reusable workflows that use those two properties and
-suppresses only the two corresponding unknown-property messages. Every other
+The rule is limited to reusable workflows that use those three properties and
+suppresses only the three corresponding unknown-property messages. Every other
 actionlint diagnostic remains fail-closed.
 
 > The compatibility rule must be removed once the pinned actionlint release supports these properties.

@@ -199,6 +199,7 @@ class DocumentationContractTests(unittest.TestCase):
         expected_ignores = [
             '^property "workflow_repository" is not defined in object type ',
             '^property "workflow_sha" is not defined in object type ',
+            '^property "workflow_file_path" is not defined in object type ',
         ]
         self.assertEqual({"paths"}, set(config))
         self.assertEqual(expected_paths, set(config["paths"]))
@@ -221,6 +222,7 @@ class DocumentationContractTests(unittest.TestCase):
         )
         self.assertIn("job.workflow_repository", register)
         self.assertIn("job.workflow_sha", register)
+        self.assertIn("job.workflow_file_path", register)
         self.assertIn(
             "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts",
             register,

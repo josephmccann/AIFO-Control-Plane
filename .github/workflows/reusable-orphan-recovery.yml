@@ -13,6 +13,10 @@ on:
         required: false
         default: true
         type: boolean
+      expected_workflow_sha:
+        description: Exact reviewed Control Plane workflow revision
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       issue_number:
@@ -34,7 +38,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  caller-authorization:
+    name: Authorize exact caller and workflow provenance
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail closed unless caller and workflow are authorized
+        env:
+          CALLER_EVENT_NAME: ${{ github.event_name }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_OWNER: ${{ github.repository_owner }}
+          CALLER_REF: ${{ github.ref }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+          EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
+          EXPECTED_WORKFLOW_FILE_PATH: .github/workflows/reusable-orphan-recovery.yml
+        run: |
+          set -euo pipefail
+          deny() { echo "caller authorization denied: $1" >&2; exit 1; }
+          [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+          [[ "$WORKFLOW_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "workflow repository"
+          [[ "$WORKFLOW_FILE_PATH" == "$EXPECTED_WORKFLOW_FILE_PATH" ]] || deny "workflow identity"
+          [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "workflow revision"
+          if [[ "$CALLER_EVENT_NAME" == "workflow_call" ]]; then
+            [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
+            [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
+            [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
+          elif [[ "$EXPECTED_WORKFLOW_FILE_PATH" == ".github/workflows/reusable-orphan-recovery.yml" &&
+                  ( "$CALLER_EVENT_NAME" == "schedule" || "$CALLER_EVENT_NAME" == "workflow_dispatch" ) ]]; then
+            [[ "$CALLER_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "direct repository"
+            [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "direct ref"
+            [[ -z "$EXPECTED_WORKFLOW_SHA" ]] || deny "unexpected direct evidence"
+          else
+            deny "event"
+          fi
+
   policy:
+    needs: caller-authorization
     runs-on: ubuntu-latest
     permissions:
       contents: read

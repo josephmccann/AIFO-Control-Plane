@@ -17,7 +17,7 @@ class ActivationLedgerTests(unittest.TestCase):
             "analyzer_identity": "engineering_os.test_integrity_cli:b3c0a2c7",
             "workflow_identity": "reusable-test-integrity@b3142f5bbed547a97a70f29bda33682294948aed",
             "caller_identity": "test-integrity-caller@80256915bdca989edc7580898971dbad1b199170",
-            "immutable_kernel_identity": "4e9f8b27e274db0f53a35f1864dadea9317036dd",
+            "immutable_kernel_identity": "5a273627a1a4d4addfcf81129dcdbda4dc58c383",
             "manifest_identity": "db1f444bad41ecf1db5057c8cbbae6390ffb7f5f7477e0c7a3bd8ae35a7a6dab",
             "rollback_sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
             "activation_nonce": "n-0123456789abcdef0123456789abcdef0123456789abcdef",

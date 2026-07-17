@@ -62,9 +62,9 @@ jobs:
       pull-requests: read
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@32f37e247700ca5b8ef52b2a9844f8af21088d1f
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@59dc1b0fa60786dfa32ac55c41029e2a485a7b11
         with:
-          expected_kernel_sha: 32f37e247700ca5b8ef52b2a9844f8af21088d1f
+          expected_kernel_sha: 59dc1b0fa60786dfa32ac55c41029e2a485a7b11
       - name: Check out target repository head with complete history
         uses: actions/checkout@v4
         with:

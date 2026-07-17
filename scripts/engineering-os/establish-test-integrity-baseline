@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: establish-test-integrity-baseline --root ROOT --commit SHA --output PATH --canonical-inventory-sha256 SHA256" >&2
+  exit 2
+}
+
+root=""
+commit=""
+output=""
+canonical=""
+while (($#)); do
+  case "$1" in
+    --root) root=${2-}; shift 2 ;;
+    --commit) commit=${2-}; shift 2 ;;
+    --output) output=${2-}; shift 2 ;;
+    --canonical-inventory-sha256) canonical=${2-}; shift 2 ;;
+    *) usage ;;
+  esac
+done
+[[ -n "$root" && -n "$commit" && -n "$output" && -n "$canonical" ]] || usage
+
+PYTHONPATH="$(cd "$(dirname "$0")/../.." && pwd)" \
+python3 - "$root" "$commit" "$output" "$canonical" <<'PY'
+import sys
+from pathlib import Path
+from engineering_os.test_integrity_cli import establish_initial_baseline
+
+establish_initial_baseline(
+    Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]),
+    canonical_inventory_sha256=sys.argv[4],
+)
+PY

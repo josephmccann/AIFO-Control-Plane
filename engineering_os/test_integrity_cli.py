@@ -36,6 +36,87 @@ _DEFAULT_LIMITS = {
     "max_coverage_bytes": 1024 * 1024,
 }
 
+_BASELINE_GOVERNED_PREFIXES = (
+    ".github/actions/",
+    ".github/workflows/",
+    "engineering_os/",
+    "scripts/engineering-os/",
+    "tests/engineering_os/",
+    "docs/engineering-os/",
+)
+
+
+def establish_initial_baseline(
+    root: Path, commit_sha: str, output: Path, *, canonical_inventory_sha256: str,
+    mission_issue: int = 26, resource_budget: ResourceBudget = None,
+) -> Dict[str, Any]:
+    """Create a complete, exact-commit inventory for one-time activation.
+
+    This produces evidence; it does not authorize a merge or suppress an
+    integrity finding. The caller must independently review this artifact and
+    consume it through a separately bound activation transition.
+    """
+    limits = dict(_DEFAULT_LIMITS)
+    budget = resource_budget or ResourceBudget(limits)
+    budget.require_limits(limits)
+    if not _SHA40.fullmatch(commit_sha or ""):
+        raise ValueError("TEST_BASELINE_COMMIT_INVALID")
+    if not isinstance(mission_issue, int) or isinstance(mission_issue, bool) or mission_issue != 26:
+        raise ValueError("TEST_BASELINE_MISSION_INVALID")
+    if not re.fullmatch(r"[0-9a-f]{64}", canonical_inventory_sha256 or ""):
+        raise ValueError("TEST_BASELINE_CANONICAL_INVALID")
+    actual = _git(root, "rev-parse", "--verify", "HEAD^{commit}", max_bytes=64, resource_budget=budget).decode("ascii").strip()
+    if actual != commit_sha:
+        raise ValueError("TEST_BASELINE_HEAD_MISMATCH")
+    tree_sha = _git(root, "rev-parse", "--verify", "HEAD^{tree}", max_bytes=64, resource_budget=budget).decode("ascii").strip()
+    records = []
+    for raw in _git_zero_records(
+        root, ("ls-tree", "-r", "-z", "--full-tree", "HEAD"),
+        max_record_bytes=limits["max_git_record_bytes"],
+        max_total_bytes=limits["max_total_bytes"], resource_budget=budget,
+    ):
+        decoded = raw.decode("utf-8")
+        header, path = decoded.split("\t", 1)
+        mode, kind, blob_sha = header.split(" ", 2)
+        if not path.startswith(_BASELINE_GOVERNED_PREFIXES):
+            continue
+        if kind != "blob" or not _SHA40.fullmatch(blob_sha):
+            raise ValueError("TEST_BASELINE_GOVERNED_ENTRY_INVALID")
+        records.append({"mode": mode, "path": path, "blob_sha": blob_sha})
+    records.sort(key=lambda item: item["path"])
+    required = {
+        ".github/workflows/test-integrity.yml",
+        ".github/workflows/reusable-test-integrity.yml",
+        ".github/actions/materialize-kernel/action.yml",
+        "engineering_os/test_integrity.py",
+        "engineering_os/test_integrity_cli.py",
+        "engineering_os/python_imports.py",
+        "scripts/engineering-os/validate-test-integrity",
+    }
+    present = {item["path"] for item in records}
+    if not required <= present:
+        raise ValueError("TEST_BASELINE_GOVERNED_SURFACE_INCOMPLETE")
+    canonical = next((item for item in records if item["path"] == "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json"), None)
+    if canonical is None:
+        raise ValueError("TEST_BASELINE_CANONICAL_MISSING")
+    value = {
+        "schema_version": "1.0.0",
+        "type": "test-integrity-initial-baseline",
+        "activation_state": "pending_independent_review",
+        "single_use": True,
+        "mission_issue": mission_issue,
+        "repository": "josephmccann/AIFO-Control-Plane",
+        "commit_sha": commit_sha,
+        "tree_sha": tree_sha,
+        "canonical_inventory_sha256": canonical_inventory_sha256,
+        "governed_prefixes": list(_BASELINE_GOVERNED_PREFIXES),
+        "records": records,
+        "resource_usage": budget.usage,
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    return value
+
 
 def _initial_ready_attestation(
     pr: Mapping[str, Any], issue: Mapping[str, Any], mission_sha256: str,

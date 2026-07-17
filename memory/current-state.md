@@ -93,12 +93,12 @@ No AWS product runtime, production database, product secrets, QBO callback migra
 - Reviewed Demo telemetry prerequisite: `ca56ecc9740edce719df8584b3cd345286c3a777`
 - Independently reviewed Demo Package 8: `eddc1ca024305d222ef716a27005472590d0a087`
 - Independently reviewed Control Plane Package 9: `f422b5c704c34e0ed4ec939f91e36cf1b1bf58a9`
-- Current Control Plane PR head awaiting repair review: `373a2fe77ed227432eb33d64749d8cb626043f30`
+- Current Control Plane repair kernel awaiting independent review: `32f37e247700ca5b8ef52b2a9844f8af21088d1f`
 - Current independently reviewed Demo PR head: `be58012c3df00302c65cadcb3b7012b608445bc7`
 - Final reconciled Demo `origin/master`: `52ca01c7c8b034b212feede58ddcc77d9c37c388`
 - Final reconciliation inspected Demo commits `83e76fd790ad94c040ebd6cd955f98ffb81cd4e5` and `52ca01c7c8b034b212feede58ddcc77d9c37c388`; they had no direct EOS file overlap and were merged without conflicts.
 - Control Plane PR 16 and Demo PR 202 are open and unmerged.
 - Private reusable-workflow transport uses the founder-approved `access_level=user` setting. Exact caller repository, owner, workflow identity, workflow provenance, and evidence checks are the fail-closed trust boundary.
-- Live Demo caller run `29558117893` passed exact caller authorization, the reconciled first-policy bootstrap, mission history, and the frozen-path gate. It then failed closed because the mission omitted three exact generated-client validation paths and because the package detector treated a newly added test command as weakening. Mission issue 201 now includes only those three exact paths, with declaration SHA-256 `b91e5315d29c8ba40134efd6d38e366781f30d2070cd18c8739c2ffd3ced8e23`; the regression-tested detector repair is pinned by every reusable workflow at `ca80f29eb2204fc4f3e15690f499705f3222c2ce` and awaits independent review and a live rerun.
+- Live Demo caller run `29558117893` passed exact caller authorization, the reconciled first-policy bootstrap, mission history, and the frozen-path gate. It then failed closed because the mission omitted three exact generated-client validation paths and because the package detector treated a newly added test command as weakening. Mission issue 201 now includes only those three exact paths, with declaration SHA-256 `b91e5315d29c8ba40134efd6d38e366781f30d2070cd18c8739c2ffd3ced8e23`. The detector repair at `32f37e247700ca5b8ef52b2a9844f8af21088d1f` permits only a test-command-only strengthening, while unrelated package changes remain ambiguous and removals or changes remain fail-closed; every reusable workflow now pins that exact kernel pending another review and live rerun.
 - Auto-merge, deployment, cloud mutation, live Airtable writes, orphan mutation, and EDGAR integration remain disabled.
 - Neither EOS branch has been merged.

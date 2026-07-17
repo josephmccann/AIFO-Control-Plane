@@ -200,7 +200,7 @@ jobs:
 
   recover:
     needs: [policy, discover]
-    if: ${{ github.event_name != 'schedule' && inputs.dry_run == false && inputs.issue_number != 0 && inputs.issue_number != '' && needs.policy.outputs.enabled == 'true' }}
+    if: ${{ success() && github.event_name != 'schedule' && inputs.dry_run == false && inputs.issue_number != 0 && inputs.issue_number != '' && needs.policy.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

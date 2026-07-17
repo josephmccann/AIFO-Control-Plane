@@ -60,7 +60,7 @@ jobs:
   dry-run:
     name: Airtable mirror dry run
     needs: caller-authorization
-    if: ${{ inputs.mode == 'dry-run' }}
+    if: ${{ success() && inputs.mode == 'dry-run' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -104,7 +104,7 @@ jobs:
   live-disabled:
     name: Airtable live mirror is not activated
     needs: caller-authorization
-    if: ${{ inputs.mode != 'dry-run' }}
+    if: ${{ success() && inputs.mode != 'dry-run' }}
     runs-on: ubuntu-latest
     permissions: {}
     steps:

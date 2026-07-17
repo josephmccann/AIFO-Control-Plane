@@ -107,6 +107,9 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 for job_name in jobs:
                     with self.subTest(workflow=name, job=job_name):
                         self.assertTrue(reaches_authorization(job_name, set()))
+                        job_condition = jobs[job_name].get("if")
+                        if job_condition:
+                            self.assertIn("success()", job_condition)
         self.assertEqual(1, len(scripts))
 
     def test_caller_authorization_script_fails_closed(self):

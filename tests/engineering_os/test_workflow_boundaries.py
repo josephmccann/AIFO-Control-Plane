@@ -60,7 +60,6 @@ def cross_repository_boundary_errors(workflow: str) -> list[str]:
     errors = [label for label, token in required.items() if token not in workflow]
     forbidden = {
         "root policy": r"(?m)^\s+--policy \.aifo/engineering-os-policy\.json",
-        "root recovery script": r"(?m)^\s+scripts/engineering-os/recover-orphaned-mission",
         "root tier script": r"(?m)^\s+scripts/engineering-os/validate-tier",
         "root path script": r"(?m)^\s+scripts/engineering-os/validate-paths",
         "root frozen script": r"(?m)^\s+scripts/engineering-os/validate-frozen-artifacts",

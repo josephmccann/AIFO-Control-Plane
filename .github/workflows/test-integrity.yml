@@ -1,6 +1,12 @@
 name: Engineering OS Test Integrity
 
 on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   pull_request_target:
     types:
       - opened
@@ -11,6 +17,119 @@ on:
 permissions: {}
 
 jobs:
+  bootstrap-authorize:
+    name: Bootstrap authorization and evidence
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository == 'josephmccann/AIFO-Control-Plane' &&
+      github.event.pull_request.number == 24 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.sha == 'cae9338ba7d4e5147963e7baf198fc56bf6b6cd7'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact pull-request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify bootstrap boundary and emit evidence
+        env:
+          EXPECTED_REPOSITORY: josephmccann/AIFO-Control-Plane
+          EXPECTED_PR: '24'
+          EXPECTED_BASE_BRANCH: main
+          EXPECTED_HEAD_SHA: cae9338ba7d4e5147963e7baf198fc56bf6b6cd7
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SOURCE_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_PATH: .github/workflows/test-integrity.yml
+          REUSABLE_SHA: 6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+          KERNEL_SHA: 5a273627a1a4d4addfcf81129dcdbda4dc58c383
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MANIFEST_IDENTITY: pending
+          CHECKED_OUT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deny() { echo "bootstrap authorization denied: $1" >&2; exit 1; }
+          [[ "$REPOSITORY" == "$EXPECTED_REPOSITORY" ]] || deny repository
+          [[ "$EVENT_NAME" == pull_request ]] || deny event
+          [[ "$PR_NUMBER" == "$EXPECTED_PR" ]] || deny pull_request
+          [[ "$HEAD_REPOSITORY" == "$EXPECTED_REPOSITORY" ]] || deny fork
+          [[ "$BASE_BRANCH" == "$EXPECTED_BASE_BRANCH" ]] || deny base_branch
+          [[ "$HEAD_SHA" == "$EXPECTED_HEAD_SHA" ]] || deny head_sha
+          [[ "$WORKFLOW_REF" == "$EXPECTED_REPOSITORY/$CALLER_PATH@refs/pull/24/merge" ]] || deny workflow_ref
+          checked_out_sha="$(git rev-parse HEAD)"
+          [[ "$checked_out_sha" == "$HEAD_SHA" ]] || deny checkout_sha
+          [[ "$CHECKOUT_SHA" == "$HEAD_SHA" ]] || deny check_context_sha
+          [[ -f "$CALLER_PATH" ]] || deny caller_definition
+          reusable_count="$(grep -o "$REUSABLE_SHA" "$CALLER_PATH" | wc -l | tr -d ' ')"
+          [[ "$reusable_count" == 2 ]] || deny reusable_binding
+          kernel_count="$(grep -o "$KERNEL_SHA" .github/workflows/reusable-test-integrity.yml | wc -l | tr -d ' ')"
+          [[ "$kernel_count" == 2 ]] || deny kernel_binding
+          [[ "$(grep -c 'expected_kernel_sha: 5a273627a1a4d4addfcf81129dcdbda4dc58c383' .github/workflows/reusable-test-integrity.yml)" == 1 ]] || deny kernel_evidence
+          manifest_identity="$(git ls-tree -r -z "$HEAD_SHA" | sha256sum | cut -d ' ' -f1)"
+          [[ "$manifest_identity" =~ ^[0-9a-f]{64}$ ]] || deny manifest_identity
+          export MANIFEST_IDENTITY="$manifest_identity"
+          python3 - <<'PY'
+          import json, os
+          evidence = {
+              "schema_version": "1.0.0",
+              "repository": os.environ["REPOSITORY"],
+              "pull_request": int(os.environ["PR_NUMBER"]),
+              "base_branch": os.environ["BASE_BRANCH"],
+              "base_sha": os.environ["BASE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "checked_out_sha": os.environ["CHECKED_OUT_SHA"],
+              "workflow_source_sha": os.environ["WORKFLOW_SOURCE_SHA"],
+              "caller_identity": os.environ["WORKFLOW_REF"],
+              "reusable_workflow_sha": os.environ["REUSABLE_SHA"],
+              "immutable_kernel_sha": os.environ["KERNEL_SHA"],
+              "manifest_identity": os.environ["MANIFEST_IDENTITY"],
+              "full_corpus_accounting": "delegated_to_sha_bound_reusable_test_integrity",
+              "test_integrity_outcome": "pending_reusable_workflow",
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "test-integrity-bootstrap-evidence.json"), "w", encoding="utf-8") as handle:
+              json.dump(evidence, handle, sort_keys=True, separators=(",", ":"))
+              handle.write("\n")
+          PY
+      - name: Retain bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eos-test-integrity-bootstrap-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/test-integrity-bootstrap-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+
+  test-integrity-bootstrap:
+    name: Test Integrity Bootstrap
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository == 'josephmccann/AIFO-Control-Plane' &&
+      github.event.pull_request.number == 24 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.sha == 'cae9338ba7d4e5147963e7baf198fc56bf6b6cd7'
+    needs: bootstrap-authorize
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: josephmccann/AIFO-Control-Plane/.github/workflows/reusable-test-integrity.yml@6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+    with:
+      expected_workflow_sha: 6ec2fc95c8965892f387189e05baf3c4a5c4ed4a
+
   test-integrity:
     name: Test Integrity
     permissions:

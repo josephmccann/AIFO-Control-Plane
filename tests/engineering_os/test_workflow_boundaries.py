@@ -16,7 +16,6 @@ AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
 KERNEL_ACTION_SHA = "5a273627a1a4d4addfcf81129dcdbda4dc58c383"
 PINNED_TRANSPORT_PATHS = (
-    ".github/actions/materialize-kernel/action.yml",
     "docs/engineering-os/ENGINEERING_CONSTITUTION.md",
     "engineering_os",
     "scripts/engineering-os",
@@ -433,6 +432,14 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                     "EXPECTED_WORKFLOW_FILE_PATH": ".github/workflows/%s" % name,
                     "EXPECTED_CALLER_WORKFLOW_PATH": expected_caller_path,
                 }
+                if name == "reusable-test-integrity.yml":
+                    expected_environment.update(
+                        {
+                            "CALLER_PR_NUMBER": "${{ github.event.pull_request.number }}",
+                            "CALLER_HEAD_REPOSITORY": "${{ github.event.pull_request.head.repo.full_name }}",
+                            "CALLER_BASE_BRANCH": "${{ github.event.pull_request.base.ref }}",
+                        }
+                    )
                 self.assertEqual(expected_environment, step["env"])
                 scripts.add(step["run"])
                 direct_event_check = 'deny "direct workflow provenance"'

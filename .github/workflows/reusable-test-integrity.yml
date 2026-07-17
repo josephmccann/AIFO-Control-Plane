@@ -24,6 +24,9 @@ jobs:
           CALLER_REF: ${{ github.ref }}
           CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
           CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CALLER_PR_NUMBER: ${{ github.event.pull_request.number }}
+          CALLER_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          CALLER_BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
           WORKFLOW_SHA: ${{ job.workflow_sha }}
           WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
@@ -45,9 +48,17 @@ jobs:
             [[ "$CALLER_REF" =~ ^refs/pull/[1-9][0-9]*/merge$ ]] || deny "caller ref"
             [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/$EXPECTED_CALLER_WORKFLOW_PATH@$CALLER_REF" ]] || deny "caller workflow identity"
           elif [[ "$CALLER_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]]; then
-            [[ "$CALLER_EVENT_NAME" == "pull_request_target" ]] || deny "control-plane event"
-            [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "control-plane ref"
-            [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@$CALLER_REF" ]] || deny "control-plane caller identity"
+            if [[ "$CALLER_EVENT_NAME" == "pull_request" ]]; then
+              [[ "$CALLER_PR_NUMBER" == "24" ]] || deny "bootstrap pull request"
+              [[ "$CALLER_HEAD_REPOSITORY" == "$CALLER_REPOSITORY" ]] || deny "bootstrap fork"
+              [[ "$CALLER_BASE_BRANCH" == "main" ]] || deny "bootstrap base branch"
+              [[ "$CALLER_REF" == "refs/pull/24/merge" ]] || deny "bootstrap ref"
+              [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@$CALLER_REF" ]] || deny "bootstrap caller identity"
+            else
+              [[ "$CALLER_EVENT_NAME" == "pull_request_target" ]] || deny "control-plane event"
+              [[ "$CALLER_REF" == "refs/heads/main" ]] || deny "control-plane ref"
+              [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/.github/workflows/test-integrity.yml@$CALLER_REF" ]] || deny "control-plane caller identity"
+            fi
           else
             deny "calling repository"
           fi

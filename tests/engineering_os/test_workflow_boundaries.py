@@ -117,8 +117,13 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual("", untracked)
 
     def test_canonical_ci_fetches_pinned_kernel_history(self):
-        workflow = self.read("terraform-validate.yml")
-        self.assertIn("uses: actions/checkout@v4\n        with:\n          fetch-depth: 0", workflow)
+        workflow = load_workflow("terraform-validate.yml")
+        checkout = next(
+            step
+            for step in workflow["jobs"]["validate"]["steps"]
+            if step.get("uses") == "actions/checkout@v4"
+        )
+        self.assertEqual(0, checkout["with"]["fetch-depth"])
 
     def test_private_kernel_action_materializes_only_authenticated_source(self):
         rendered = subprocess.check_output(

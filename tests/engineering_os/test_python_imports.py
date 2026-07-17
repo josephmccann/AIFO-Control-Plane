@@ -169,6 +169,25 @@ class PythonImportGraphTests(unittest.TestCase):
             ),
         )
 
+    def test_nested_cyclic_pytest_plugins_terminate_deterministically(self):
+        self.write("tests/conftest.py", "pytest_plugins = 'plugins.alpha'\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        self.write("plugins/__init__.py", "PLUGIN_PACKAGE = True\n")
+        self.write("plugins/alpha.py", "pytest_plugins = 'plugins.beta'\n")
+        self.write("plugins/beta.py", "pytest_plugins = 'plugins.alpha'\n")
+        first = self.graph().closure("tests/test_service.py")
+        second = self.graph().closure("tests/test_service.py")
+        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertEqual(
+            first.first_party_paths,
+            (
+                "plugins/__init__.py",
+                "plugins/alpha.py",
+                "plugins/beta.py",
+                "tests/conftest.py",
+            ),
+        )
+
     def test_dynamic_pytest_plugins_declaration_fails_closed(self):
         self.write("tests/conftest.py", "pytest_plugins = plugin_names()\n")
         self.write("tests/test_service.py", "def test_x():\n    assert True\n")

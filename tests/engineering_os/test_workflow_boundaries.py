@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_ROOT = ROOT / ".github" / "workflows"
+KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.yml"
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
@@ -67,6 +68,64 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
 
     def read(self, name: str) -> str:
         return (WORKFLOW_ROOT / name).read_text(encoding="utf-8")
+
+    def test_private_kernel_action_materializes_only_authenticated_source(self):
+        rendered = subprocess.check_output(
+            [
+                "ruby",
+                "-ryaml",
+                "-rjson",
+                "-e",
+                "print JSON.generate(YAML.load_file(ARGV.fetch(0)))",
+                str(KERNEL_ACTION),
+            ],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+        )
+        action = json.loads(rendered)
+        self.assertEqual("composite", action["runs"]["using"])
+        self.assertTrue(action["inputs"]["expected_kernel_sha"]["required"])
+        step = action["runs"]["steps"][0]
+        self.assertEqual("${{ github.action_ref }}", step["env"]["ACTION_REF"])
+        self.assertEqual(
+            "${{ inputs.expected_kernel_sha }}", step["env"]["EXPECTED_KERNEL_SHA"]
+        )
+        self.assertIn('[[ "$ACTION_REF" == "$EXPECTED_KERNEL_SHA" ]]', step["run"])
+        self.assertIn('"$GITHUB_WORKSPACE/kernel"', step["run"])
+        self.assertIn("engineering_os", step["run"])
+        self.assertIn("scripts/engineering-os", step["run"])
+        with tempfile.TemporaryDirectory() as directory:
+            environment = {
+                **os.environ,
+                "ACTION_REF": "a" * 40,
+                "EXPECTED_KERNEL_SHA": "a" * 40,
+                "GITHUB_ACTION_PATH": str(KERNEL_ACTION.parent),
+                "GITHUB_WORKSPACE": directory,
+            }
+            accepted = subprocess.run(
+                ["bash", "-c", step["run"]],
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, accepted.returncode, accepted.stderr)
+            self.assertTrue((Path(directory) / "kernel" / "engineering_os").is_dir())
+        with tempfile.TemporaryDirectory() as directory:
+            rejected = subprocess.run(
+                ["bash", "-c", step["run"]],
+                env={
+                    **os.environ,
+                    "ACTION_REF": "a" * 40,
+                    "EXPECTED_KERNEL_SHA": "b" * 40,
+                    "GITHUB_ACTION_PATH": str(KERNEL_ACTION.parent),
+                    "GITHUB_WORKSPACE": directory,
+                },
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, rejected.returncode)
+            self.assertIn("kernel materialization denied", rejected.stderr)
 
     def test_demo_only_reusable_workflows_authenticate_caller_and_provenance(self):
         expected_names = {path.name for path in WORKFLOW_ROOT.glob("reusable-*.yml")}

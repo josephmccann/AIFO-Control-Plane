@@ -1,0 +1,36 @@
+name: Materialize immutable Engineering OS kernel
+description: Copy the exact private-action revision into the caller workspace.
+
+inputs:
+  expected_kernel_sha:
+    description: Exact reviewed private-action revision
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Verify and materialize immutable kernel
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+        EXPECTED_KERNEL_SHA: ${{ inputs.expected_kernel_sha }}
+      run: |
+        set -euo pipefail
+        deny() { echo "kernel materialization denied: $1" >&2; exit 1; }
+        [[ "$ACTION_REF" =~ ^[0-9a-f]{40}$ ]] || deny "action revision"
+        [[ "$EXPECTED_KERNEL_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected revision"
+        [[ "$ACTION_REF" == "$EXPECTED_KERNEL_SHA" ]] || deny "kernel provenance"
+
+        source_root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd -P)"
+        [[ -d "$source_root/engineering_os" ]] || deny "Python kernel"
+        [[ -d "$source_root/scripts/engineering-os" ]] || deny "command kernel"
+        [[ -d "$source_root/schemas/engineering-os" ]] || deny "schema kernel"
+
+        destination="$GITHUB_WORKSPACE/kernel"
+        [[ ! -e "$destination" && ! -L "$destination" ]] || deny "destination"
+        mkdir -p "$destination"
+        cp -R "$source_root"/. "$destination"/
+
+        [[ -d "$destination/engineering_os" ]] || deny "materialized Python kernel"
+        [[ -d "$destination/scripts/engineering-os" ]] || deny "materialized command kernel"
+        [[ -d "$destination/schemas/engineering-os" ]] || deny "materialized schema kernel"

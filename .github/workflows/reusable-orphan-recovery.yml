@@ -90,9 +90,9 @@ jobs:
       enabled: ${{ steps.policy.outputs.enabled }}
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@4e9f8b27e274db0f53a35f1864dadea9317036dd
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@507d6ea5758661aab25013fc317fd93dfcf5445d
         with:
-          expected_kernel_sha: 4e9f8b27e274db0f53a35f1864dadea9317036dd
+          expected_kernel_sha: 507d6ea5758661aab25013fc317fd93dfcf5445d
       - name: Check out target repository default branch
         uses: actions/checkout@v4
         with:
@@ -132,9 +132,9 @@ jobs:
       issues: read
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@4e9f8b27e274db0f53a35f1864dadea9317036dd
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@507d6ea5758661aab25013fc317fd93dfcf5445d
         with:
-          expected_kernel_sha: 4e9f8b27e274db0f53a35f1864dadea9317036dd
+          expected_kernel_sha: 507d6ea5758661aab25013fc317fd93dfcf5445d
       - name: Check out target repository default branch
         uses: actions/checkout@v4
         with:
@@ -215,9 +215,9 @@ jobs:
       issues: write
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@4e9f8b27e274db0f53a35f1864dadea9317036dd
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@507d6ea5758661aab25013fc317fd93dfcf5445d
         with:
-          expected_kernel_sha: 4e9f8b27e274db0f53a35f1864dadea9317036dd
+          expected_kernel_sha: 507d6ea5758661aab25013fc317fd93dfcf5445d
       - name: Check out target repository default branch
         uses: actions/checkout@v4
         with:

@@ -1,6 +1,7 @@
 import copy
 import unittest
 
+from engineering_os.canonical import content_sha256
 from engineering_os.commands import validate_activation_ledger
 
 
@@ -29,7 +30,11 @@ class ActivationLedgerTests(unittest.TestCase):
 
     def auth(self):
         return {"type": "test_integrity.baseline.authorized", "actor_role": "founder",
-                "event_hash": "a" * 64, "sequence": 7, "details": copy.deepcopy(self.activation)}
+                "schema_version": "1.0.0", "mission_id": "mission-26",
+                "actor": "founder@example.test", "occurred_at": "2026-07-17T20:00:00Z",
+                "source_url": "https://github.com/josephmccann/AIFO-Control-Plane/issues/26#issuecomment-1",
+                "previous_event_hash": None, "sequence": 1,
+                "details": copy.deepcopy(self.activation), "event_hash": ""}
 
     def consume(self, auth):
         details = copy.deepcopy(self.activation)
@@ -40,7 +45,10 @@ class ActivationLedgerTests(unittest.TestCase):
                         "consumption_result": "activated",
                         "post_consumption_state": "active"})
         return {"type": "test_integrity.baseline.consumed", "actor_role": "system",
-                "details": details}
+                "schema_version": "1.0.0", "mission_id": "mission-26",
+                "actor": "system", "occurred_at": "2026-07-17T20:00:00Z",
+                "source_url": "https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/1",
+                "previous_event_hash": "", "event_hash": "", "sequence": 3, "details": details}
 
     def attempt(self, auth):
         details = copy.deepcopy(self.activation)
@@ -52,10 +60,23 @@ class ActivationLedgerTests(unittest.TestCase):
                         "post_consumption_state": "locked",
                         "attempt_event_hash": "0" * 64})
         return {"type": "test_integrity.baseline.consumption_attempted", "actor_role": "system",
-                "event_hash": "c" * 64, "details": details}
+                "schema_version": "1.0.0", "mission_id": "mission-26",
+                "actor": "system", "occurred_at": "2026-07-17T20:00:00Z",
+                "source_url": "https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/1",
+                "previous_event_hash": "", "event_hash": "", "sequence": 2, "details": details}
+
+    def chain(self, events):
+        previous = None
+        for event in events:
+            if event["type"] == "test_integrity.baseline.consumed" and previous:
+                event["details"]["attempt_event_hash"] = previous
+            event["previous_event_hash"] = previous
+            event["event_hash"] = content_sha256(event)
+            previous = event["event_hash"]
+        return events
 
     def test_authorization_is_valid_and_consumption_is_single_use(self):
-        auth = self.auth()
+        auth = self.chain([self.auth()])[0]
         ok, code, details = validate_activation_ledger(
             [auth], self.activation, repository=self.activation["repository"],
             current_commit=self.activation["remediation_head"], current_tree=self.activation["remediation_tree"])
@@ -64,6 +85,7 @@ class ActivationLedgerTests(unittest.TestCase):
         attempt = self.attempt(auth)
         consumed = self.consume(auth)
         consumed["details"]["attempt_event_hash"] = attempt["event_hash"]
+        self.chain([auth, attempt, consumed])
         ok, code, details = validate_activation_ledger(
             [auth, attempt, consumed], self.activation,
             repository=self.activation["repository"])
@@ -71,7 +93,7 @@ class ActivationLedgerTests(unittest.TestCase):
         self.assertTrue(details["consumed"])
 
     def test_replay_mismatch_and_context_changes_fail_closed(self):
-        auth = self.auth()
+        auth = self.chain([self.auth()])[0]
         for mutation, expected in (({"activation_nonce": "different-nonce-012345678901234567890123"}, "ACTIVATION_TUPLE_MISMATCH"),
                                    ({"remediation_head": "0" * 40}, "ACTIVATION_COMMIT_MISMATCH"),
                                    ({"remediation_tree": "0" * 40}, "ACTIVATION_TREE_MISMATCH")):
@@ -82,27 +104,43 @@ class ActivationLedgerTests(unittest.TestCase):
             if expected == "ACTIVATION_TREE_MISMATCH": args["current_tree"] = self.activation["remediation_tree"]
             self.assertEqual(validate_activation_ledger([auth], candidate, **args)[1], expected)
         self.assertEqual(validate_activation_ledger([auth, auth], self.activation,
-            repository=self.activation["repository"])[1], "ACTIVATION_AUTHORIZATION_REPLAY")
+            repository=self.activation["repository"])[1], "ACTIVATION_HISTORY_INVALID")
 
     def test_consumption_requires_the_authenticated_authorization(self):
-        auth = self.auth()
+        auth = self.chain([self.auth()])[0]
         attempt = self.attempt(auth)
         consumed = self.consume(auth)
         consumed["details"]["attempt_event_hash"] = attempt["event_hash"]
         consumed["details"]["authorization_event_hash"] = "b" * 64
         self.assertEqual(validate_activation_ledger([auth, attempt, consumed], self.activation,
-            repository=self.activation["repository"])[1], "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID")
+            repository=self.activation["repository"])[1], "ACTIVATION_HISTORY_INVALID")
         self.assertEqual(validate_activation_ledger([consumed], self.activation,
-            repository=self.activation["repository"])[1], "ACTIVATION_ORPHAN_CONSUMPTION")
+            repository=self.activation["repository"])[1], "ACTIVATION_HISTORY_INVALID")
 
     def test_wrong_repository_or_malformed_tuple_fails_closed(self):
-        auth = self.auth()
+        auth = self.chain([self.auth()])[0]
         self.assertEqual(validate_activation_ledger([auth], self.activation,
             repository="attacker/example")[1], "ACTIVATION_TUPLE_INVALID")
         malformed = copy.deepcopy(self.activation)
         malformed["unexpected"] = True
         self.assertEqual(validate_activation_ledger([auth], malformed,
             repository=self.activation["repository"])[1], "ACTIVATION_TUPLE_INVALID")
+
+    def test_direct_validator_rejects_unauthenticated_or_unknown_activation_history(self):
+        auth = self.auth()
+        unknown = {"type": "test_integrity.baseline.unknown", "details": {}}
+        self.assertEqual(
+            validate_activation_ledger([auth, unknown], self.activation,
+                                       repository=self.activation["repository"])[1],
+            "ACTIVATION_HISTORY_INVALID",
+        )
+        malformed = copy.deepcopy(auth)
+        malformed["sequence"] = 0
+        self.assertEqual(
+            validate_activation_ledger([malformed], self.activation,
+                                       repository=self.activation["repository"])[1],
+            "ACTIVATION_HISTORY_INVALID",
+        )
 
 
 if __name__ == "__main__":

@@ -189,9 +189,30 @@ def validate_activation_ledger(
     attempts = []
     consumptions = []
     nonces = set()
+    strict_chain = all(
+        isinstance(event, Mapping)
+        and isinstance(event.get("mission_id"), str)
+        and event.get("schema_version") == "1.0.0"
+        and isinstance(event.get("occurred_at"), str)
+        and isinstance(event.get("source_url"), str)
+        and "previous_event_hash" in event
+        for event in events
+    )
+    if not strict_chain:
+        return False, "ACTIVATION_HISTORY_INVALID", {}
+    activation_events = []
     for event in events:
-        if not isinstance(event, Mapping) or event.get("type") not in _ACTIVATION_EVENTS:
+        if event.get("type") not in _ACTIVATION_EVENTS:
+            if isinstance(event.get("type"), str) and event["type"].startswith("test_integrity.baseline."):
+                return False, "ACTIVATION_HISTORY_INVALID", {}
             continue
+        activation_events.append(event)
+        if (not isinstance(event.get("sequence"), int)
+                or isinstance(event.get("sequence"), bool)
+                or event["sequence"] < 1
+                or not isinstance(event.get("event_hash"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", event["event_hash"]) is None):
+            return False, "ACTIVATION_HISTORY_INVALID", {}
         details = event.get("details")
         if event.get("type") == _ACTIVATION_AUTHORIZED:
             tuple_value = _activation_tuple(details)
@@ -228,6 +249,11 @@ def validate_activation_ledger(
             if event.get("actor_role") != "system":
                 return False, "ACTIVATION_CONSUMER_INVALID", {}
             consumptions.append(event)
+    valid_chain, _chain_code = validate_event_chain([dict(event) for event in events])
+    if not valid_chain:
+        return False, "ACTIVATION_HISTORY_INVALID", {}
+    if len({event.get("sequence") for event in events}) != len(events):
+        return False, "ACTIVATION_HISTORY_INVALID", {}
     if len(authorizations) > 1:
         return False, "ACTIVATION_AUTHORIZATION_REPLAY", {}
     if len(nonces) != len(authorizations):
@@ -245,8 +271,18 @@ def validate_activation_ledger(
             return False, "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID", {}
         if consumed.get("details", {}).get("authorization_sequence") != auth.get("sequence"):
             return False, "ACTIVATION_AUTHORIZATION_SEQUENCE_INVALID", {}
+        if attempts:
+            if attempts[0].get("sequence") != auth.get("sequence") + 1:
+                return False, "ACTIVATION_ORDER_INVALID", {}
+            if attempts[0].get("details", {}).get("authorization_event_hash") != auth.get("event_hash"):
+                return False, "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID", {}
+        if consumptions:
+            if not attempts or consumptions[0].get("sequence") != attempts[0].get("sequence") + 1:
+                return False, "ACTIVATION_ORDER_INVALID", {}
+            if consumptions[0].get("details", {}).get("attempt_event_hash") != attempts[0].get("event_hash"):
+                return False, "ACTIVATION_ATTEMPT_REFERENCE_INVALID", {}
         if attempts and not consumptions:
-            return False, "ACTIVATION_ATTEMPT_LOCKED", {"consumed": False}
+            return True, "ACTIVATION_ATTEMPTED", {"consumed": False, "locked": True}
         return True, "ACTIVATION_ALREADY_CONSUMED", {"consumed": True}
     return bool(authorizations), ("ACTIVATION_AUTHORIZED" if authorizations else "ACTIVATION_NOT_AUTHORIZED"), {
         "consumed": False,
@@ -290,7 +326,7 @@ class RepositoryDiscoveryDecision:
 def parse_command(text: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
     """Parse only a complete, single-line, lower-case ``/eos`` command."""
 
-    if not isinstance(text, str) or re.fullmatch(r"/eos [a-z]+(?: [A-Za-z0-9._:-]+)?", text) is None:
+    if not isinstance(text, str) or re.fullmatch(r"/eos [a-z]+(?:-[a-z]+)*(?: [A-Za-z0-9._:-]+)?", text) is None:
         return None
     fields = text.split(" ")
     name, arguments = fields[1], tuple(fields[2:])
@@ -856,6 +892,7 @@ def authorize_command_proposal(
     actions_runs: Sequence[Mapping[str, Any]] = (),
     repository_lease_events: Sequence[Mapping[str, Any]] = (),
     activation: Optional[Mapping[str, Any]] = None,
+    activation_source_url: Optional[str] = None,
 ) -> ProposalDecision:
     """Authorize one authenticated command and return append-only audit events."""
 
@@ -900,9 +937,14 @@ def authorize_command_proposal(
         })
     roles = _actor_roles(actor, mission, policy) if isinstance(actor, str) else set()
     role = None
-    for candidate in ("founder", "producer", "adversary"):
+    activation_system_event = event_type in {_ACTIVATION_ATTEMPTED, _ACTIVATION_CONSUMED}
+    command_authority_roles = ("founder",) if activation_system_event else ("founder", "producer", "adversary")
+    for candidate in command_authority_roles:
         if candidate not in roles:
             continue
+        if activation_system_event and candidate == "founder":
+            role = candidate
+            break
         decision = authorize_transition(
             history.projection,
             {"type": event_type, "actor_role": candidate},
@@ -918,6 +960,17 @@ def authorize_command_proposal(
             policy,
         )
         return ProposalDecision(False, denied.code)
+    if activation_system_event:
+        # The founder command authorizes intent; only the authenticated current
+        # mission-command run may emit the system lifecycle event.
+        if "founder" not in roles:
+            return ProposalDecision(False, "ACTIVATION_AUTHORITY_INVALID")
+        if not isinstance(activation_source_url, str) or not any(
+            validate_activation_run(run, repository, activation_source_url)
+            for run in actions_runs
+        ):
+            return ProposalDecision(False, "ACTIVATION_WORKFLOW_PROVENANCE_INVALID")
+        role = "system"
     if event_type in {"mission.ready", "mission.claimed"} and validate_ready(dict(mission)):
         return ProposalDecision(False, "MISSION_NOT_READY")
 
@@ -980,10 +1033,21 @@ def authorize_command_proposal(
             if not isinstance(activation, Mapping):
                 return ProposalDecision(False, "ACTIVATION_BINDING_REQUIRED")
             event_details = dict(activation)
+            existing_authorization = next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None)
+            existing_attempt = next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None)
+            existing_consumption = next((item for item in history.events if item.get("type") == _ACTIVATION_CONSUMED), None)
+            if event_type == _ACTIVATION_AUTHORIZED and existing_authorization:
+                return ProposalDecision(False, "ACTIVATION_AUTHORIZATION_REPLAY")
+            if event_type == _ACTIVATION_ATTEMPTED and (existing_attempt or existing_consumption):
+                return ProposalDecision(False, "ACTIVATION_ATTEMPT_REPLAY")
+            if event_type == _ACTIVATION_CONSUMED and existing_consumption:
+                return ProposalDecision(False, "ACTIVATION_CONSUMPTION_REPLAY")
             if event_type != _ACTIVATION_AUTHORIZED:
-                prior_auth = next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None)
+                prior_auth = existing_authorization
                 if prior_auth is None:
                     return ProposalDecision(False, "ACTIVATION_AUTHORIZATION_REQUIRED")
+                if event_type == _ACTIVATION_CONSUMED and existing_attempt is None:
+                    return ProposalDecision(False, "ACTIVATION_ATTEMPT_REQUIRED")
                 event_details.update({
                     "authorization_event_hash": prior_auth.get("event_hash"),
                     "authorization_sequence": prior_auth.get("sequence"),
@@ -994,8 +1058,8 @@ def authorize_command_proposal(
                     "attempt_event_hash": next((item.get("event_hash") for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), ""),
                 })
             try:
-                build_activation_event(event_type, event_details, actor=actor, actor_role=role,
-                                       occurred_at=occurred_at, source_url=command_comment_url,
+                build_activation_event(event_type, event_details, actor="system", actor_role=role,
+                                       occurred_at=occurred_at, source_url=activation_source_url,
                                        authorization_event=next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None),
                                        attempt_event=next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None))
             except ValueError as error:
@@ -1007,9 +1071,10 @@ def authorize_command_proposal(
         proposals = [{
             "mission_id": mission["mission_id"],
             "type": event_type,
-            "actor": actor,
+            "actor": "system" if activation_system_event else actor,
             "actor_role": role,
             "occurred_at": occurred_at,
+            "source_url": activation_source_url if activation_system_event else command_comment_url,
             "details": event_details,
         }]
 
@@ -1020,7 +1085,7 @@ def authorize_command_proposal(
         event.update({
             "schema_version": "1.0.0",
             "sequence": len(history.events) + offset,
-            "source_url": command_comment_url,
+            "source_url": activation_source_url if activation_system_event else command_comment_url,
             "previous_event_hash": previous,
         })
         event["event_hash"] = content_sha256(event)
@@ -1189,6 +1254,7 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--body-output", required=True)
     parser.add_argument("--repository-leases")
     parser.add_argument("--activation")
+    parser.add_argument("--activation-source-url")
     arguments = parser.parse_args(argv)
     try:
         with open(arguments.comments, encoding="utf-8") as stream:
@@ -1215,6 +1281,7 @@ def _propose_command(argv: Optional[Sequence[str]] = None) -> int:
             actions_runs=actions_runs,
             repository_lease_events=repository_lease_events,
             activation=activation,
+            activation_source_url=arguments.activation_source_url,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.error(str(error))

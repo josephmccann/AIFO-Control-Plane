@@ -277,6 +277,38 @@ class CommandTests(unittest.TestCase):
             "2026-07-15T10:01:00.125Z",
         )
 
+    def test_activation_consumption_command_requires_authenticated_workflow_run(self):
+        mission, policy = valid_context()
+        ready_source = source_comment(23, "agent-a", "/eos ready")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-23"),
+        )
+        command = source_comment(24, "josephmccann", "/eos attempt-baseline nonce-012345678901234567890123456789")
+        activation = {
+            "repository": REPOSITORY, "mission_issue": 26,
+            "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
+            "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
+            "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
+            "analyzer_identity": "engineering_os.test_integrity_cli:b3c0a2c7",
+            "workflow_identity": "reusable-test-integrity@b3142f5bbed547a97a70f29bda33682294948aed",
+            "caller_identity": "test-integrity-caller@80256915bdca989edc7580898971dbad1b199170",
+            "immutable_kernel_identity": "5a273627a1a4d4addfcf81129dcdbda4dc58c383",
+            "manifest_identity": "db1f444bad41ecf1db5057c8cbbae6390ffb7f5f7477e0c7a3bd8ae35a7a6dab",
+            "rollback_sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+            "activation_nonce": "nonce-012345678901234567890123456789",
+            "activation_type": "initial_test_integrity_baseline", "single_use": True,
+            "founder_authorization_identity": "josephmccann", "founder_authorization_sequence": 1,
+        }
+        proposal = authorize_command_proposal(
+            [ready_source, event_comment(25, [ready]), command], mission, policy,
+            repository=REPOSITORY, command_comment_url=command["html_url"], activation=activation,
+        )
+        self.assertFalse(proposal.allowed)
+        self.assertEqual(proposal.code, "ACTIVATION_WORKFLOW_PROVENANCE_INVALID")
+
     def test_forged_founder_event_and_wrong_source_command_are_rejected(self):
         mission, policy = valid_context()
         source = source_comment(3, "agent-a", "/eos ready")

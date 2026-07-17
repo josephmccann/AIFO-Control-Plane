@@ -78,6 +78,7 @@ jobs:
           with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
               stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY
+          printf '%s\n' "$GITHUB_RUN_ID" >> "$RUNNER_TEMP/run-ids.txt"
           : > "$RUNNER_TEMP/runs.ndjson"
           while read -r run_id; do
             gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs.ndjson"
@@ -108,6 +109,7 @@ jobs:
                   raise SystemExit(code)
           PY
           activation_args=()
+          activation_source_args=()
           if [[ "$COMMAND_BODY" == /eos\ authorize-baseline\ * || "$COMMAND_BODY" == /eos\ attempt-baseline\ * || "$COMMAND_BODY" == /eos\ consume-baseline\ * ]]; then
             COMMAND_BODY="$COMMAND_BODY" python3 - <<'PY'
           import json, os
@@ -136,6 +138,7 @@ jobs:
           json.dump(details, open(os.path.join(os.environ["RUNNER_TEMP"], "activation.json"), "w"), sort_keys=True)
           PY
             activation_args=(--activation "$RUNNER_TEMP/activation.json")
+            activation_source_args=(--activation-source-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")
           fi
           python3 -m engineering_os.commands propose-command \
             --comments "$RUNNER_TEMP/comments.json" \
@@ -145,7 +148,8 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --command-comment-url "$COMMAND_URL" \
             --body-output "$RUNNER_TEMP/event-body.txt" \
-            "${activation_args[@]}"
+            "${activation_args[@]}" \
+            "${activation_source_args[@]}"
           {
             printf 'append=true\n'
             printf 'encoded_body=%s\n' "$(base64 < "$RUNNER_TEMP/event-body.txt" | tr -d '\n')"
@@ -156,15 +160,69 @@ jobs:
     if: ${{ needs.prepare.outputs.append == 'true' }}
     runs-on: ubuntu-latest
     permissions:
+      actions: read
+      contents: read
       issues: write
     steps:
-      - name: Append only the authenticated authorized event
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Re-fetch and re-authenticate the complete history before append
         env:
           ENCODED_BODY: ${{ needs.prepare.outputs.encoded_body }}
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           body="$(printf '%s' "$ENCODED_BODY" | base64 --decode)"
+          printf '%s' "$body" > "$RUNNER_TEMP/proposed-event.txt"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from engineering_os.commands import authenticate_event_history, validate_activation_ledger
+          from engineering_os.mission import parse_issue_body
+
+          root = os.environ["RUNNER_TEMP"]
+          issue = json.load(open(os.path.join(root, "issue.json"), encoding="utf-8"))
+          comments = json.load(open(os.path.join(root, "comments.json"), encoding="utf-8"))
+          runs = json.load(open(os.path.join(root, "runs.json"), encoding="utf-8"))
+          body = open(os.path.join(root, "proposed-event.txt"), encoding="utf-8").read()
+          events = []
+          import re
+          for match in re.finditer(r"<!-- EOS:EVENT:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:EVENT:END -->", body, re.S):
+              events.append(json.loads(match.group(1)))
+          if len(events) != 1:
+              raise SystemExit("append proposal must contain exactly one event")
+          event = events[0]
+          comments.append({
+              "body": body,
+              "created_at": event["occurred_at"],
+              "html_url": event["source_url"],
+              "user": {"login": "github-actions[bot]"},
+          })
+          mission = parse_issue_body(issue.get("body", ""))
+          policy = json.load(open(".aifo/engineering-os-policy.json", encoding="utf-8"))
+          decision = authenticate_event_history(
+              comments, mission, policy,
+              repository=os.environ["GITHUB_REPOSITORY"], actions_runs=runs,
+          )
+          if not decision.allowed or decision.projection.violations:
+              raise SystemExit("pre-append history rejected: %s" % decision.code)
+          if event["type"].startswith("test_integrity.baseline."):
+              activation = next((item for item in decision.events if item.get("type") == "test_integrity.baseline.authorized"), None)
+              if event["type"] != "test_integrity.baseline.authorized" and activation is None:
+                  raise SystemExit("activation authorization missing at append boundary")
+              if activation:
+                  ok, code, _ = validate_activation_ledger(
+                      list(decision.events), activation["details"],
+                      repository=os.environ["GITHUB_REPOSITORY"],
+                  )
+                  if event["type"] == "test_integrity.baseline.authorized" and not ok:
+                      raise SystemExit(code)
+          PY
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$body" >/dev/null
 
   claim:

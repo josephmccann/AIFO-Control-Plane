@@ -38,7 +38,7 @@ _RUNTIME_DYNAMIC_NAMES = frozenset((
     "vars",
 ))
 _RUNTIME_REFLECTION_ATTRIBUTES = _RUNTIME_DYNAMIC_NAMES | frozenset((
-    "__builtins__", "__dict__", "__globals__", "__getattribute__",
+    "__builtins__", "__dict__", "__getattr__", "__globals__", "__getattribute__",
     "f_globals", "f_locals", "import_module", "modules",
 ))
 

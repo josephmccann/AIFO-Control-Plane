@@ -79,6 +79,7 @@ class DetectorEvasionTests(unittest.TestCase):
             "def test_value():\n    assert getattr(__builtins__, '__import__')\n",
             "def test_value(subject):\n    name = '__dict__'\n    assert getattr(subject, name)\n",
             "def test_value(subject):\n    name = '__glo' + 'bals__'\n    assert getattr(subject, name)\n",
+            "def test_value(proxy):\n    name = '__dict__'\n    assert proxy.__getattr__(name)\n",
         )
         for source in sources:
             with self.subTest(source=source):

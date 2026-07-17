@@ -94,6 +94,9 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(
             "${{ inputs.expected_kernel_sha }}", step["env"]["EXPECTED_KERNEL_SHA"]
         )
+        self.assertEqual("${{ github.repository }}", step["env"]["CALLER_REPOSITORY"])
+        self.assertEqual("${{ github.repository_owner }}", step["env"]["CALLER_OWNER"])
+        self.assertEqual("${{ github.workflow_ref }}", step["env"]["CALLER_WORKFLOW_REF"])
         self.assertIn('[[ "$ACTION_REF" == "$EXPECTED_KERNEL_SHA" ]]', step["run"])
         self.assertIn('"$GITHUB_WORKSPACE/kernel"', step["run"])
         self.assertIn("engineering_os", step["run"])
@@ -105,6 +108,14 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 "EXPECTED_KERNEL_SHA": "a" * 40,
                 "GITHUB_ACTION_PATH": str(KERNEL_ACTION.parent),
                 "GITHUB_WORKSPACE": directory,
+                "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                "CALLER_OWNER": AUTHORIZED_OWNER,
+                "CALLER_EVENT_NAME": "pull_request",
+                "CALLER_REF": "refs/pull/17/merge",
+                "CALLER_WORKFLOW_REF": (
+                    AUTHORIZED_CALLER
+                    + "/.github/workflows/eos-pull-request.yml@refs/pull/17/merge"
+                ),
             }
             accepted = subprocess.run(
                 ["bash", "-c", step["run"]],
@@ -114,6 +125,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(0, accepted.returncode, accepted.stderr)
             self.assertTrue((Path(directory) / "kernel" / "engineering_os").is_dir())
+            self.assertFalse((Path(directory) / "kernel" / "docs").exists())
         with tempfile.TemporaryDirectory() as directory:
             rejected = subprocess.run(
                 ["bash", "-c", step["run"]],
@@ -123,12 +135,89 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                     "EXPECTED_KERNEL_SHA": "b" * 40,
                     "GITHUB_ACTION_PATH": str(KERNEL_ACTION.parent),
                     "GITHUB_WORKSPACE": directory,
+                    "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                    "CALLER_OWNER": AUTHORIZED_OWNER,
+                    "CALLER_EVENT_NAME": "pull_request",
+                    "CALLER_REF": "refs/pull/17/merge",
+                    "CALLER_WORKFLOW_REF": (
+                        AUTHORIZED_CALLER
+                        + "/.github/workflows/eos-pull-request.yml@refs/pull/17/merge"
+                    ),
                 },
                 capture_output=True,
                 text=True,
             )
             self.assertNotEqual(0, rejected.returncode)
             self.assertIn("kernel materialization denied", rejected.stderr)
+        with tempfile.TemporaryDirectory() as directory:
+            unauthorized = subprocess.run(
+                ["bash", "-c", step["run"]],
+                env={
+                    **environment,
+                    "GITHUB_WORKSPACE": directory,
+                    "CALLER_REPOSITORY": "josephmccann/AI-CFO",
+                    "CALLER_WORKFLOW_REF": (
+                        "josephmccann/AI-CFO/.github/workflows/eos-pull-request.yml@"
+                        "refs/pull/17/merge"
+                    ),
+                },
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, unauthorized.returncode)
+            self.assertFalse((Path(directory) / "kernel").exists())
+        allowed_callers = (
+            {
+                "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                "CALLER_EVENT_NAME": "schedule",
+                "CALLER_REF": "refs/heads/master",
+                "CALLER_WORKFLOW_REF": (
+                    AUTHORIZED_CALLER
+                    + "/.github/workflows/eos-airtable-mirror.yml@refs/heads/master"
+                ),
+            },
+            {
+                "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                "CALLER_EVENT_NAME": "workflow_dispatch",
+                "CALLER_REF": "refs/heads/master",
+                "CALLER_WORKFLOW_REF": (
+                    AUTHORIZED_CALLER
+                    + "/.github/workflows/eos-orphan-recovery.yml@refs/heads/master"
+                ),
+            },
+            {
+                "CALLER_REPOSITORY": KERNEL_REPOSITORY,
+                "CALLER_EVENT_NAME": "pull_request_target",
+                "CALLER_REF": "refs/heads/main",
+                "CALLER_WORKFLOW_REF": (
+                    KERNEL_REPOSITORY
+                    + "/.github/workflows/test-integrity.yml@refs/heads/main"
+                ),
+            },
+            {
+                "CALLER_REPOSITORY": KERNEL_REPOSITORY,
+                "CALLER_EVENT_NAME": "schedule",
+                "CALLER_REF": "refs/heads/main",
+                "CALLER_WORKFLOW_REF": (
+                    KERNEL_REPOSITORY
+                    + "/.github/workflows/reusable-orphan-recovery.yml@refs/heads/main"
+                ),
+            },
+        )
+        for caller in allowed_callers:
+            with self.subTest(caller=caller["CALLER_WORKFLOW_REF"]):
+                with tempfile.TemporaryDirectory() as directory:
+                    accepted = subprocess.run(
+                        ["bash", "-c", step["run"]],
+                        env={
+                            **environment,
+                            **caller,
+                            "GITHUB_WORKSPACE": directory,
+                        },
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(0, accepted.returncode, accepted.stderr)
 
     def test_demo_only_reusable_workflows_authenticate_caller_and_provenance(self):
         expected_names = {path.name for path in WORKFLOW_ROOT.glob("reusable-*.yml")}

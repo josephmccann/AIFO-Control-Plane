@@ -117,6 +117,82 @@ class PythonImportGraphTests(unittest.TestCase):
             ("helpers/__init__.py", "helpers/nested.py", "support.py"),
         )
 
+    def test_ancestor_conftest_and_package_initializers_are_implicit_support(self):
+        self.write("conftest.py", "ROOT_FIXTURE = 1\n")
+        self.write("tests/__init__.py", "PACKAGE_FIXTURE = 2\n")
+        self.write("tests/unit/__init__.py", "UNIT_FIXTURE = 3\n")
+        self.write("tests/unit/conftest.py", "UNIT_HOOK = 4\n")
+        self.write("tests/unit/test_service.py", "def test_x():\n    assert True\n")
+        closure = self.graph().closure("tests/unit/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "conftest.py",
+                "tests/__init__.py",
+                "tests/unit/__init__.py",
+                "tests/unit/conftest.py",
+            ),
+        )
+
+    def test_implicit_conftest_body_mutation_changes_fingerprint(self):
+        self.write("tests/conftest.py", "def fixture_value():\n    return 1\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        before = self.graph().closure("tests/test_service.py").fingerprint
+        self.write("tests/conftest.py", "def fixture_value():\n    return 2\n")
+        after = self.graph().closure("tests/test_service.py").fingerprint
+        self.assertNotEqual(before, after)
+
+    def test_implicit_conftest_dynamic_namespace_fails_closed(self):
+        self.write(
+            "tests/conftest.py",
+            "def pytest_collection_modifyitems(items):\n"
+            "    globals()['items'] = []\n",
+        )
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_literal_pytest_plugins_are_manifest_bound_and_recursive(self):
+        self.write("tests/conftest.py", "pytest_plugins = ('plugins.audit',)\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        self.write("plugins/__init__.py", "PLUGIN_PACKAGE = True\n")
+        self.write("plugins/audit.py", "from support import VALUE\n")
+        self.write("support.py", "VALUE = 1\n")
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "plugins/__init__.py",
+                "plugins/audit.py",
+                "support.py",
+                "tests/conftest.py",
+            ),
+        )
+
+    def test_dynamic_pytest_plugins_declaration_fails_closed(self):
+        self.write("tests/conftest.py", "pytest_plugins = plugin_names()\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_indirect_pytest_plugins_binding_fails_closed(self):
+        self.write(
+            "tests/conftest.py",
+            "from plugin_config import PLUGINS as pytest_plugins\n",
+        )
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        self.write("plugin_config.py", "PLUGINS = ('plugins.audit',)\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_implicit_support_consumes_shared_aggregate_budget(self):
+        self.write("tests/conftest.py", "VALUE = '" + ("x" * 80) + "'\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        limits = dict(LIMITS)
+        limits["max_total_bytes"] = 64
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            self.graph(limits=limits).closure("tests/test_service.py")
+
     def test_closed_stdlib_imports_and_path_setup_are_supported(self):
         self.write(
             "tests/test_service.py",
@@ -159,6 +235,34 @@ class PythonImportGraphTests(unittest.TestCase):
                 "support/__init__.py",
                 "support/package/__init__.py",
                 "support/package/value.py",
+            ),
+        )
+
+    def test_relative_import_requires_the_callers_exact_package(self):
+        self.write(
+            "tests/unit/test_service.py",
+            "from .helper import VALUE\ndef test_x():\n    assert VALUE\n",
+        )
+        self.write("unit/__init__.py", "NAME = 'unrelated suffix package'\n")
+        self.write("unit/helper.py", "VALUE = 1\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_UNRESOLVED"):
+            self.graph().closure("tests/unit/test_service.py")
+
+    def test_relative_import_from_exact_package_is_manifest_bound(self):
+        self.write(
+            "tests/unit/test_service.py",
+            "from .helper import VALUE\ndef test_x():\n    assert VALUE\n",
+        )
+        self.write("tests/__init__.py", "NAME = 'tests'\n")
+        self.write("tests/unit/__init__.py", "NAME = 'unit'\n")
+        self.write("tests/unit/helper.py", "VALUE = 1\n")
+        closure = self.graph().closure("tests/unit/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "tests/__init__.py",
+                "tests/unit/__init__.py",
+                "tests/unit/helper.py",
             ),
         )
 

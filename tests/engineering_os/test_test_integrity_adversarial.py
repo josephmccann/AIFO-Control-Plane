@@ -85,6 +85,31 @@ class DetectorEvasionTests(unittest.TestCase):
             (root / "tests/test_service.py").write_text(source, encoding="utf-8")
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
+    def test_implicit_conftest_mutation_changes_case_fingerprint(self):
+        source = "def test_value():\n    assert True\n"
+        for root in (self.base, self.head):
+            (root / "tests/conftest.py").write_text(
+                "def fixture_value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.head / "tests/conftest.py").write_text(
+            "def fixture_value():\n    return 2\n", encoding="utf-8",
+        )
+        self.assertIn(
+            "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+        )
+
+    def test_dynamic_namespace_inside_implicit_conftest_fails_closed(self):
+        source = "def test_value():\n    assert True\n"
+        for root in (self.base, self.head):
+            (root / "tests/conftest.py").write_text(
+                "def pytest_collection_modifyitems(items):\n"
+                "    globals()['items'] = []\n",
+                encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_dynamic_import_inside_imported_test_support_fails_closed(self):
         source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
         for root in (self.base, self.head):
@@ -108,6 +133,19 @@ class DetectorEvasionTests(unittest.TestCase):
             "def test_value(subject):\n    name = '__dict__'\n    assert getattr(subject, name)\n",
             "def test_value(subject):\n    name = '__glo' + 'bals__'\n    assert getattr(subject, name)\n",
             "def test_value(proxy):\n    name = '__dict__'\n    assert proxy.__getattr__(name)\n",
+            "def test_value(subject):\n    subject.__setattr__('enabled', False)\n",
+            "def test_value(subject):\n    subject.__delattr__('enabled')\n",
+            "class Subject:\n    pass\n"
+            "def test_value():\n    type.__setattr__(Subject, 'test_hidden', None)\n",
+            "class Subject:\n    test_hidden = None\n"
+            "def test_value():\n    type.__delattr__(Subject, 'test_hidden')\n",
+            "class Base:\n    pass\nclass Subject:\n    pass\n"
+            "def test_value():\n    Subject.__bases__ = (Base,)\n",
+            "def replacement():\n    pass\n"
+            "def test_value():\n    test_value.__code__ = replacement.__code__\n",
+            "def test_value(subject):\n    subject.__class__ = object\n",
+            "class Subject:\n    pass\n"
+            "def test_value():\n    assert Subject.__subclasses__() == []\n",
         )
         for source in sources:
             with self.subTest(source=source):

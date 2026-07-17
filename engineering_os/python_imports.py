@@ -22,8 +22,9 @@ _DYNAMIC_NAMES = frozenset((
     "setattr", "delattr", "compile",
 ))
 _DYNAMIC_ATTRIBUTES = _DYNAMIC_NAMES | frozenset((
-    "import_module", "__dict__", "__globals__", "__getattribute__",
-    "f_globals", "f_locals", "modules",
+    "import_module", "__bases__", "__class__", "__code__", "__delattr__",
+    "__dict__", "__func__", "__globals__", "__getattribute__", "__mro__",
+    "__setattr__", "__subclasses__", "f_globals", "f_locals", "modules",
 ))
 _SAFE_BUILTINS = frozenset((
     "Any", "BaseException", "Exception", "False", "None", "NotImplemented",
@@ -38,8 +39,10 @@ _RUNTIME_DYNAMIC_NAMES = frozenset((
     "vars",
 ))
 _RUNTIME_REFLECTION_ATTRIBUTES = _RUNTIME_DYNAMIC_NAMES | frozenset((
-    "__builtins__", "__dict__", "__getattr__", "__globals__", "__getattribute__",
-    "f_globals", "f_locals", "import_module", "modules",
+    "__bases__", "__builtins__", "__class__", "__code__", "__delattr__",
+    "__dict__", "__func__", "__getattr__", "__globals__", "__getattribute__",
+    "__mro__", "__setattr__", "__subclasses__", "f_globals", "f_locals",
+    "import_module", "modules",
 ))
 
 
@@ -477,6 +480,7 @@ class PythonImportGraph:
             raise PythonImportError("PYTHON_IMPORT_UNPARSABLE") from error
         if has_dynamic_namespace_mutation(tree):
             raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+        self._pytest_plugins(tree)
         projection = _DefinitionProjector().project(tree)
         self._loaded[relative] = (tree, projection)
         return tree, projection
@@ -512,11 +516,11 @@ class PythonImportGraph:
         if statement.level == 0:
             return statement.module or ""
         caller_parts = caller.split("/")[:-1]
-        while caller_parts and (
-            "/".join(caller_parts) + "/__init__.py"
-        ) not in self.manifest:
-            caller_parts.pop(0)
-        if statement.level > len(caller_parts):
+        if (
+            not caller_parts
+            or "/".join(caller_parts) + "/__init__.py" not in self.manifest
+            or statement.level > len(caller_parts)
+        ):
             raise PythonImportError("PYTHON_IMPORT_UNRESOLVED")
         prefix = caller_parts[:len(caller_parts) - statement.level + 1]
         suffix = statement.module.split(".") if statement.module else []
@@ -555,14 +559,100 @@ class PythonImportGraph:
             for module in imported_modules:
                 kind, evidence = self._resolve(module)
                 resolved.append((kind, evidence))
+        for module in self._pytest_plugins(tree):
+            kind, evidence = self._resolve(module)
+            resolved.append((kind, evidence))
         return tuple(resolved)
+
+    @staticmethod
+    def _pytest_plugins(tree: ast.Module) -> Tuple[str, ...]:
+        declarations = []
+
+        def binds_plugins(target: ast.AST) -> bool:
+            return any(
+                isinstance(item, ast.Name) and item.id == "pytest_plugins"
+                for item in ast.walk(target)
+            )
+
+        for statement in tree.body:
+            value = None
+            if isinstance(statement, (ast.Import, ast.ImportFrom)) and any(
+                (item.asname or (
+                    item.name if isinstance(statement, ast.ImportFrom)
+                    else item.name.split(".")[0]
+                )) == "pytest_plugins"
+                for item in statement.names
+            ):
+                raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+            if (
+                isinstance(
+                    statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+                )
+                and statement.name == "pytest_plugins"
+            ):
+                raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+            if isinstance(statement, ast.Assign) and any(
+                binds_plugins(target) for target in statement.targets
+            ):
+                if (
+                    len(statement.targets) != 1
+                    or not isinstance(statement.targets[0], ast.Name)
+                ):
+                    raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+                value = statement.value
+            elif (
+                isinstance(statement, ast.AnnAssign)
+                and binds_plugins(statement.target)
+            ):
+                if not isinstance(statement.target, ast.Name):
+                    raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+                value = statement.value
+            elif (
+                isinstance(statement, ast.AugAssign)
+                and binds_plugins(statement.target)
+            ):
+                raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+            if value is not None:
+                declarations.append(value)
+        if len(declarations) > 1:
+            raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+        if not declarations:
+            return ()
+        value = declarations[0]
+        items = value.elts if isinstance(value, (ast.List, ast.Tuple)) else [value]
+        plugin_modules = []
+        for item in items:
+            if (
+                not isinstance(item, ast.Constant)
+                or not isinstance(item.value, str)
+                or not item.value
+            ):
+                raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+            plugin_modules.append(item.value)
+        if len(plugin_modules) != len(set(plugin_modules)):
+            raise PythonImportError("PYTHON_IMPORT_DYNAMIC")
+        return tuple(plugin_modules)
+
+    def _implicit_support(self, test_path: str) -> Tuple[str, ...]:
+        directory_parts = PurePosixPath(test_path).parts[:-1]
+        candidates = []
+        if "conftest.py" in self.manifest:
+            candidates.append("conftest.py")
+        for size in range(1, len(directory_parts) + 1):
+            directory = "/".join(directory_parts[:size])
+            for name in ("__init__.py", "conftest.py"):
+                candidate = directory + "/" + name
+                if candidate in self.manifest:
+                    candidates.append(candidate)
+        return tuple(sorted(set(candidates)))
 
     def closure(self, test_path: str) -> PythonImportClosure:
         if test_path not in self.manifest:
             raise PythonImportError("PYTHON_IMPORT_MANIFEST_MISSING")
-        pending = [test_path]
+        implicit_support = set(self._implicit_support(test_path))
+        pending = [test_path] + sorted(implicit_support, reverse=True)
         visited = set()
-        first_party = set()
+        first_party = set(implicit_support)
         stdlib = set()
         while pending:
             path = pending.pop()
@@ -570,7 +660,7 @@ class PythonImportGraph:
                 continue
             visited.add(path)
             tree, _ = self._read(path)
-            edges = set()
+            edges = set(implicit_support) if path == test_path else set()
             external = set()
             for kind, evidence in self._imports(path, tree):
                 if kind == "external":

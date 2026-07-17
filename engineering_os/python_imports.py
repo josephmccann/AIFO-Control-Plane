@@ -61,6 +61,21 @@ class PythonImportClosure:
 def has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
     """Detect runtime namespace mutation while allowing direct benign getattr."""
 
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            components = (node.module or "").split(".") if isinstance(node, ast.ImportFrom) else []
+            if any(item in _RUNTIME_REFLECTION_ATTRIBUTES for item in components):
+                return True
+            for item in node.names:
+                if (
+                    any(
+                        component in _RUNTIME_REFLECTION_ATTRIBUTES
+                        for component in item.name.split(".")
+                    )
+                    or item.asname in _RUNTIME_REFLECTION_ATTRIBUTES
+                ):
+                    return True
+
     parents = {
         id(child): parent
         for parent in ast.walk(tree)

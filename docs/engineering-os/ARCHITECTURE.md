@@ -115,6 +115,12 @@ edges include ancestor `conftest.py` files, package initializers, and literal
 imports. Computed plugin declarations fail closed. These rules are independent
 of repository path or directory placement. Import traversal uses
 the same non-resetting aggregate budget as checkout scanning and reporting.
+Definition-time execution is separately bounded: callable setup helpers and
+decorators retain audited import or built-in provenance, custom metaclasses and
+implicit class hooks are denied, and only constant pytest/unittest collection
+assignments are admitted in `__init_subclass__`. Proven-safe frozen dataclasses
+may be instantiated only without inheritance, lifecycle hooks, implicit hooks,
+or default factories. Recursion exhaustion produces a structured denial.
 The immutable materialization action requires and byte-compares the dedicated
 `engineering_os/python_imports.py` kernel before a reusable workflow can use
 it.

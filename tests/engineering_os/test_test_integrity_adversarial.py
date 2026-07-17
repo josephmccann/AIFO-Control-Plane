@@ -1753,6 +1753,30 @@ class DetectorEvasionTests(unittest.TestCase):
         self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
         self.assertIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
 
+    def test_package_without_test_command_keeps_other_changes_ambiguous(self):
+        for root, version in ((self.base, "1.0.0"), (self.head, "2.0.0")):
+            (root / "package.json").write_text(
+                json.dumps({
+                    "scripts": {"typecheck": "tsc --noEmit"},
+                    "dependencies": {"tool": version},
+                }),
+                encoding="utf-8",
+            )
+        found = codes(self.analyze())
+        self.assertNotIn("TEST_CONFIGURATION_WEAKENED", found)
+        self.assertIn("TEST_CONFIGURATION_CHANGE_AMBIGUOUS", found)
+
+    def test_malformed_package_scripts_fail_closed(self):
+        for scripts in ([], "vitest", 1):
+            with self.subTest(scripts=scripts):
+                (self.base / "package.json").write_text(
+                    json.dumps({"scripts": {"test": "vitest"}}), encoding="utf-8",
+                )
+                (self.head / "package.json").write_text(
+                    json.dumps({"scripts": scripts}), encoding="utf-8",
+                )
+                self.assertIn("TEST_CONFIGURATION_INVALID", codes(self.analyze()))
+
     def test_package_test_command_removal_is_blocked(self):
         (self.base / "package.json").write_text(
             json.dumps({"scripts": {"test": "vitest"}}), encoding="utf-8",

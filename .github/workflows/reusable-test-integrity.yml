@@ -83,9 +83,9 @@ jobs:
           PY
 
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@259b8a2110eda7f829f2357ef0234921d571439f
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@3f35e11b36c9ffb394c0dfbfd7cbe214145f2070
         with:
-          expected_kernel_sha: 259b8a2110eda7f829f2357ef0234921d571439f
+          expected_kernel_sha: 3f35e11b36c9ffb394c0dfbfd7cbe214145f2070
 
       - name: Check out immutable base revision
         uses: actions/checkout@v4

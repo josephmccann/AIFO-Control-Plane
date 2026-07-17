@@ -64,9 +64,9 @@ jobs:
       contents: read
     steps:
       - name: Materialize immutable mirror kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@2b7aee738e0003b539b1663d3d1279b8756ad368
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@1b2dc9895fb674d48b3f2f433193f3a4960249dc
         with:
-          expected_kernel_sha: 2b7aee738e0003b539b1663d3d1279b8756ad368
+          expected_kernel_sha: 1b2dc9895fb674d48b3f2f433193f3a4960249dc
 
       - name: Materialize closed mission projections
         env:

@@ -53,8 +53,9 @@ instead of truncating it. Active leases are
 exposed to conflict evaluation regardless of issue state and remain conflicting
 until an authenticated release, park, or cancellation. Malformed candidate
 declarations or histories fail the repository snapshot closed; only issues with
-neither declaration nor event markers are skipped. Scheduled orphan discovery is always
-read-only. Recovery mutation additionally requires a non-dry manual or reusable
+neither declaration nor event markers are skipped. Scheduled orphan discovery scans
+both open and closed mission issues and is always read-only. Recovery mutation
+additionally requires a non-dry manual or reusable
 workflow invocation and the versioned `orphan_recovery_enabled` policy flag,
 which is false by default. Recovery re-fetches the chain, referenced Actions run
 metadata, and the current default-branch policy inside that serialized boundary,

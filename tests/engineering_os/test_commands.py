@@ -820,6 +820,7 @@ class CommandTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/reusable-orphan-recovery.yml").read_text(encoding="utf-8")
         self.assertIn("schedule:", workflow)
         self.assertIn("default: true", workflow)
+        self.assertIn("issues?state=all&per_page=100", workflow)
         self.assertIn("github.event_name != 'schedule'", workflow)
         self.assertIn("orphan_recovery_enabled", workflow)
         self.assertNotIn("vars.EOS_ORPHAN_RECOVERY_ENABLED", workflow)

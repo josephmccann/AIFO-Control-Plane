@@ -155,7 +155,7 @@ jobs:
             [[ "$REQUESTED_ISSUE" =~ ^[1-9][0-9]*$ ]] || { echo "issue number must be a positive integer" >&2; exit 1; }
             printf '[{"number":%s}]\n' "$REQUESTED_ISSUE" > "$RUNNER_TEMP/issues.json"
           else
-            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" | jq 'add' > "$RUNNER_TEMP/issues.json"
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > "$RUNNER_TEMP/issues.json"
             jq '[.[] | select(has("pull_request") | not) | select((.body // "") | contains("<!-- EOS:MISSION:BEGIN -->"))]' \
               "$RUNNER_TEMP/issues.json" > "$RUNNER_TEMP/mission-issues.json"
             mv "$RUNNER_TEMP/mission-issues.json" "$RUNNER_TEMP/issues.json"

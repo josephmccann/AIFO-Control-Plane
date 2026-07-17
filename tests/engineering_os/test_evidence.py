@@ -207,6 +207,22 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn(
             'bash -euo pipefail -c "$PRODUCER_VALIDATION_COMMAND"', producer
         )
+        head_checkout = producer.split("- name: Check out immutable head", 1)[1].split(
+            "- name: Capture unprivileged validation outputs", 1
+        )[0]
+        self.assertIn("fetch-depth: 0", head_checkout)
+        self.assertIn("persist-credentials: false", head_checkout)
+        self.assertIn('git cat-file -e "$BASE_SHA^{commit}"', producer)
+        self.assertIn(
+            'git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"', producer
+        )
+        self.assertIn(
+            'git update-ref refs/remotes/origin/master "$BASE_SHA"', producer
+        )
+        self.assertLess(
+            producer.index('git update-ref refs/remotes/origin/master "$BASE_SHA"'),
+            producer.index('bash -euo pipefail -c "$PRODUCER_VALIDATION_COMMAND"'),
+        )
         self.assertIn("producer-validation.txt", producer)
         self.assertNotIn("tests/engineering_os", producer)
         self.assertNotIn("${{ inputs.producer_validation_command }}\n", producer.split(

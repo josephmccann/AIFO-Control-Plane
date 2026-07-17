@@ -26,7 +26,7 @@ from .canonical import content_sha256
 _SHA40 = re.compile(r"[0-9a-f]{40}")
 _MISSION_MARKER = re.compile(r"<!-- AIFO-EOS-MISSION-ISSUE: ([1-9][0-9]*) -->")
 _DEFAULT_LIMITS = {
-    "max_files": 10000, "max_total_bytes": 64 * 1024 * 1024,
+    "max_files": 10000, "max_total_bytes": 256 * 1024 * 1024,
     "max_path_bytes": 1024, "max_git_record_bytes": 4096,
     "max_github_pages": 20, "max_github_items": 2000,
     "max_github_response_bytes": 8 * 1024 * 1024,

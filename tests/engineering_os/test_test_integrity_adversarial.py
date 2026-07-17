@@ -1920,6 +1920,15 @@ class DetectorEvasionTests(unittest.TestCase):
 
 
 class CliFailureArtifactTests(unittest.TestCase):
+    def test_default_aggregate_budget_covers_measured_demo_envelope(self):
+        from engineering_os.test_integrity_cli import _DEFAULT_LIMITS
+
+        measured_demo_usage = 139_890_135
+        self.assertEqual(256 * 1024 * 1024, _DEFAULT_LIMITS["max_total_bytes"])
+        self.assertGreater(_DEFAULT_LIMITS["max_total_bytes"], measured_demo_usage)
+        self.assertEqual(10_000, _DEFAULT_LIMITS["max_files"])
+        self.assertEqual(4_096, _DEFAULT_LIMITS["max_git_record_bytes"])
+
     def test_cli_writes_structured_report_before_checkout_or_parse_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "report.json"

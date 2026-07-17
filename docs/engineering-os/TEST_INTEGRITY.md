@@ -10,6 +10,8 @@ Coverage deltas are accepted only when a sealed trusted adapter result binds the
 
 The adapter and kernel share one non-resetting resource budget across policy and manifest validation, Git discovery, filesystem reconciliation, parsing, semantic comparison, GitHub transport, coverage verification, and report construction. Caps cover filesystem entries (including directories), total processed bytes, paths, Git records, GitHub pagination/items/responses, and coverage artifacts. Directory paths are validated and charged before enqueueing, so wide empty fanout and deep trees cannot evade the streamed traversal budget. Resource failures preserve the pre-initialized machine denial report.
 
+The aggregate processed-byte ceiling is 256 MiB. The live Package 8 base/head workload measured 139,890,135 charged bytes under the shared accounting model; 256 MiB admits that reviewed workload with bounded growth room while the independent file-count, per-file, path, Git-record, GitHub-response, and coverage caps continue to fail closed.
+
 ## Activation boundary
 
 The caller does not enforce a PR until the caller commit itself is merged to the default branch and the required status check is configured. That bootstrap interval is an explicit enforcement gap; it cannot be closed by code inside the same unmerged PR. Closing it requires founder-approved merge and, separately, founder-approved live branch-protection configuration.

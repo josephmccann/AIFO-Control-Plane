@@ -662,6 +662,8 @@ def main(argv: Sequence[str] = None) -> int:
     parser.add_argument("--base-policy", required=True)
     parser.add_argument("--pull-request", required=True, type=int)
     parser.add_argument("--evaluated-at")
+    parser.add_argument("--initial-baseline-output")
+    parser.add_argument("--canonical-inventory-sha256")
     parser.add_argument("--output", required=True)
     args = None
     try:
@@ -681,6 +683,15 @@ def main(argv: Sequence[str] = None) -> int:
             args.base_root, args.head_root, args.base_sha, args.head_sha, max_file_bytes,
             limits, resource_budget=resource_budget,
         )
+        if args.initial_baseline_output is not None:
+            if not args.canonical_inventory_sha256:
+                raise ValueError("TEST_BASELINE_CANONICAL_REQUIRED")
+            establish_initial_baseline(
+                Path(args.head_root), args.head_sha,
+                Path(args.initial_baseline_output),
+                canonical_inventory_sha256=args.canonical_inventory_sha256,
+                resource_budget=resource_budget,
+            )
         changed = sorted({
             path for path in set(base_manifest) | set(head_manifest)
             if base_manifest.get(path) != head_manifest.get(path)

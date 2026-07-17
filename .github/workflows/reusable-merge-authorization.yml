@@ -55,8 +55,8 @@ jobs:
       pull-requests: read
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@6a6cdcd326e9bbf980563b3815f7d47667c3755e
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@d72e0e6862ef30240b6601d07304bf1ac4cdb370
         with:
-          expected_kernel_sha: 6a6cdcd326e9bbf980563b3815f7d47667c3755e
+          expected_kernel_sha: d72e0e6862ef30240b6601d07304bf1ac4cdb370
       - name: Require authenticated merge adapter
         run: kernel/scripts/engineering-os/validate-merge-authorization

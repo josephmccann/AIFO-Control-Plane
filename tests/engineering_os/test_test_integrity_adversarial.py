@@ -1940,6 +1940,10 @@ class CliFailureArtifactTests(unittest.TestCase):
     def test_workflow_initializes_report_before_any_checkout(self):
         workflow = (ROOT / ".github/workflows/reusable-test-integrity.yml").read_text(encoding="utf-8")
         self.assertLess(workflow.index("Initialize fail-closed report"), workflow.index("actions/checkout"))
+        self.assertLess(
+            workflow.index("Initialize fail-closed report"),
+            workflow.index("materialize-kernel@"),
+        )
         self.assertIn("pull-requests: read", workflow)
         self.assertIn("issues: read", workflow)
         self.assertIn("actions: read", workflow)

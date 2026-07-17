@@ -82,14 +82,19 @@ The product runtime remains outside this package. In particular, the
 deterministic financial engine, customer data, credentials, deployment, and
 external connectors receive no authority from an engineering mission.
 
-Cross-repository reusable workflows maintain two explicit trust roots. An
-immutable enforcement-kernel checkout is selected from the reusable workflow's
-own repository and exact workflow SHA. A separate target-repository checkout
-is selected from the caller repository at the revision being evaluated. Only
-the target checkout supplies source, policy, and declarations. The target
-checkout must never supply executable EOS code. Python imports and EOS command wrappers always run
-from the immutable kernel. If either repository identity, revision, checkout,
-or required policy cannot be established, validation fails closed.
+Cross-repository reusable workflows maintain two explicit trust roots. GitHub
+does not grant the caller's `GITHUB_TOKEN` clone access to the private Control
+Plane. Immutable enforcement-kernel materialization therefore uses the pinned
+private `materialize-kernel` composite action and GitHub's short-lived scoped
+installation token for private-action transport. The action verifies its exact
+40-hex action ref against the workflow's pinned kernel SHA before copying the
+kernel into the workspace. A separate target-repository checkout is selected
+from the caller repository at the revision being evaluated. Only the target
+checkout supplies source, policy, and declarations. The target checkout must
+never supply executable EOS code. Python imports and EOS command wrappers
+always run from the immutable kernel. If either repository identity, revision,
+transport, checkout, or required policy cannot be established, validation
+fails closed.
 
 GitHub's personal-account sharing setting is coarse-grained, so every
 Demo-only reusable workflow enforces a repository-level caller boundary before

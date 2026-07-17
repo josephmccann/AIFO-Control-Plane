@@ -129,13 +129,10 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - name: Check out immutable evidence kernel
-        uses: actions/checkout@v4
+      - name: Materialize immutable evidence kernel
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
         with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: kernel
-          persist-credentials: false
+          expected_kernel_sha: 672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
 
       - name: Download producer-only evidence
         uses: actions/download-artifact@v4

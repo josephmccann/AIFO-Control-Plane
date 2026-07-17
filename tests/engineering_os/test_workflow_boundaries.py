@@ -13,6 +13,7 @@ KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.ym
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
+KERNEL_ACTION_SHA = "672160e2e2e1bbf783e3b4ff5d5771a2806a4e35"
 DEMO_CALLER_PATHS = {
     "reusable-airtable-mirror.yml": ".github/workflows/eos-airtable-mirror.yml",
     "reusable-orphan-recovery.yml": ".github/workflows/eos-orphan-recovery.yml",
@@ -39,9 +40,11 @@ def load_workflow(name: str) -> dict:
 
 def cross_repository_boundary_errors(workflow: str) -> list[str]:
     required = {
-        "kernel repository": "repository: ${{ job.workflow_repository }}",
-        "kernel revision": "ref: ${{ job.workflow_sha }}",
-        "kernel path": "path: kernel",
+        "kernel transport": (
+            "uses: josephmccann/AIFO-Control-Plane/.github/actions/"
+            "materialize-kernel@" + KERNEL_ACTION_SHA
+        ),
+        "kernel revision": "expected_kernel_sha: " + KERNEL_ACTION_SHA,
         "target repository": "repository: ${{ github.repository }}",
         "target path": "path: target",
         "kernel Python path": "PYTHONPATH: ${{ github.workspace }}/kernel",
@@ -167,6 +170,13 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 self.assertIn("required: true", self.read(name).split(
                     "expected_workflow_sha:", 1
                 )[1].split("jobs:", 1)[0])
+                self.assertIn(
+                    "josephmccann/AIFO-Control-Plane/.github/actions/"
+                    "materialize-kernel@" + KERNEL_ACTION_SHA,
+                    self.read(name),
+                )
+                self.assertIn("expected_kernel_sha: " + KERNEL_ACTION_SHA, self.read(name))
+                self.assertNotIn("repository: ${{ job.workflow_repository }}", self.read(name))
 
                 def reaches_authorization(job_name: str, seen: set[str]) -> bool:
                     if job_name == "caller-authorization":
@@ -378,12 +388,12 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         for name in self.boundary_workflows:
             with self.subTest(workflow=name):
                 self.assertEqual(cross_repository_boundary_errors(self.read(name)), [])
+                self.assertNotIn("repository: ${{ job.workflow_repository }}", self.read(name))
 
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: kernel
+          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
+          expected_kernel_sha: 672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           path: target
@@ -394,11 +404,11 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(cross_repository_boundary_errors(valid), [])
 
         no_kernel_identity = valid.replace(
-            "repository: ${{ job.workflow_repository }}",
-            "repository: ${{ github.repository }}",
+            "materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35",
+            "materialize-kernel@main",
             1,
         )
-        self.assertIn("kernel repository", cross_repository_boundary_errors(no_kernel_identity))
+        self.assertIn("kernel transport", cross_repository_boundary_errors(no_kernel_identity))
 
         caller_script = valid.replace(
             "kernel/scripts/engineering-os/validate-paths",
@@ -508,9 +518,12 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         architecture = (ROOT / "docs" / "engineering-os" / "ARCHITECTURE.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("immutable enforcement-kernel checkout", architecture)
+        normalized_architecture = " ".join(architecture.split())
+        self.assertIn("immutable enforcement-kernel materialization", architecture.lower())
+        self.assertIn("scoped installation token", normalized_architecture)
+        self.assertIn("materialize-kernel", architecture)
         self.assertIn("target-repository checkout", architecture)
-        self.assertIn("must never supply executable EOS code", architecture)
+        self.assertIn("must never supply executable EOS code", normalized_architecture)
         self.assertIn("josephmccann/AI.FO-Demo", architecture)
         self.assertIn("expected_workflow_sha", architecture)
         self.assertIn("job.workflow_file_path", architecture)

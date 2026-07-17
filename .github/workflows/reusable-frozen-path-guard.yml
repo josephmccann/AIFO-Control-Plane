@@ -61,14 +61,10 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - name: Check out immutable enforcement kernel
-        uses: actions/checkout@v4
+      - name: Materialize immutable enforcement kernel
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
         with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: kernel
-          fetch-depth: 1
-          persist-credentials: false
+          expected_kernel_sha: 672160e2e2e1bbf783e3b4ff5d5771a2806a4e35
       - name: Check out target repository base revision
         uses: actions/checkout@v4
         with:

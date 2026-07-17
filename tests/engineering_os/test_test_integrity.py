@@ -314,8 +314,14 @@ class TestIntegrityTests(unittest.TestCase):
         self.assertIn("contents: read", workflow)
         self.assertNotIn("issues: write", workflow)
         self.assertNotIn("pull-requests: write", workflow)
-        self.assertIn("repository: ${{ job.workflow_repository }}", workflow)
-        self.assertIn("ref: ${{ job.workflow_sha }}", workflow)
+        self.assertIn(
+            "materialize-kernel@672160e2e2e1bbf783e3b4ff5d5771a2806a4e35",
+            workflow,
+        )
+        self.assertIn(
+            "expected_kernel_sha: 672160e2e2e1bbf783e3b4ff5d5771a2806a4e35",
+            workflow,
+        )
         self.assertIn("kernel/scripts/engineering-os/validate-test-integrity", workflow)
         self.assertNotIn("head/scripts/engineering-os/validate-test-integrity", workflow)
         self.assertNotIn("base/scripts/engineering-os/validate-test-integrity", workflow)

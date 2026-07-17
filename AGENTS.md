@@ -49,6 +49,20 @@ bash -n scripts/*.sh
 
 Use `scripts/validate.sh` as the standard local validation entrypoint.
 
+## Engineering Operating System
+
+- The EOS entrypoint is `docs/engineering-os/README.md`.
+- Humans and agents follow the same mission, validation, independent-review,
+  evidence, and founder-approval path.
+- Active EOS version: `1.0.0`.
+- Engineering Constitution SHA-256:
+  `a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e`.
+- Run `scripts/engineering-os/validate-all` for the credential-free EOS gate.
+- Unknown, missing, stale, malformed, conflicting, or unverifiable authority
+  fails closed. Merge approval never grants deployment or cloud authority.
+- Known non-mechanical limits are recorded in
+  `docs/engineering-os/KNOWN_ENFORCEMENT_GAPS.md`.
+
 ## Change Expectations
 
 - Keep changes narrow and consistent with the existing structure.

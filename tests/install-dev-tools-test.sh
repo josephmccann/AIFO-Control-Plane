@@ -123,7 +123,7 @@ assert_equal "" "$DEV_TOOLS_TEMP_DIR" "cleanup clears temporary directory state"
 
 assert_file_contains \
   "$ROOT_DIR/scripts/validate.sh" \
-  "shellcheck \"\$ROOT_DIR\"/scripts/*.sh \"\$ROOT_DIR\"/tests/*.sh" \
+  "shellcheck \"\$ROOT_DIR\"/scripts/*.sh \"\$ROOT_DIR\"/scripts/engineering-os/* \"\$ROOT_DIR\"/tests/*.sh" \
   "validation lints scripts and tests"
 assert_file_contains \
   "$ROOT_DIR/scripts/validate.sh" \

@@ -9,6 +9,9 @@ Session state: ACTIVE — OPERATIONAL REFINEMENT
 | OD-007 | Decide whether to retain Cloudflare R2 or migrate uploads to S3 | Product + Infrastructure | Before AWS product runtime | Yes |
 | OD-008 | Decide product secrets manager and rotation model | Product + Infrastructure | Before AWS product runtime | Yes |
 | OD-012 | Decide whether to upgrade GitHub plan or choose another approval boundary for future apply automation | Human + Infrastructure | Before any apply workflow exists | Yes |
+| OD-017 | Approve or reject exact private reusable-workflow access from AI.FO-Demo to AIFO-Control-Plane | Founder | Before activating Demo EOS callers | Yes |
+| OD-018 | Approve exact EOS required-check contexts and branch-protection settings after the first authorized caller run | Founder + Repository administrator | Before EOS merge authorization is relied upon | Yes |
+| OD-019 | Approve or reject the exact reviewed EOS Control Plane and Demo heads and merge sequence | Founder | Final EOS founder gate | Yes |
 
 ## Recently Resolved
 

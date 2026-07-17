@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "Running complete Engineering OS tests."
+python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v
+
+echo "Checking Engineering OS Python syntax."
+python3 -m py_compile "$ROOT_DIR"/engineering_os/*.py "$ROOT_DIR"/tests/engineering_os/*.py
+
+echo "Checking Engineering OS shell syntax."
+bash -n "$ROOT_DIR"/scripts/engineering-os/*
+
+echo "Parsing Engineering OS JSON documents."
+while IFS= read -r -d '' document; do
+  python3 -m json.tool "$document" >/dev/null
+done < <(find "$ROOT_DIR/schemas/engineering-os" "$ROOT_DIR/tests/engineering_os/fixtures" \
+  -type f -name '*.json' -print0)
+python3 -m json.tool "$ROOT_DIR/.aifo/engineering-os-policy.json" >/dev/null
+
+echo "Parsing GitHub workflow and issue-form YAML."
+ruby -ryaml -e 'ARGV.each { |path| YAML.load_file(path) }' \
+  "$ROOT_DIR"/.github/workflows/*.yml \
+  "$ROOT_DIR"/.github/ISSUE_TEMPLATE/*.yml
+
+echo "Checking patch whitespace."
+git diff --check
+
+echo "Engineering OS validation complete."

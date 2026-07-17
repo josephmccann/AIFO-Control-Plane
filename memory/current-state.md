@@ -1,6 +1,6 @@
 # Current State
 
-Date: 2026-07-15
+Date: 2026-07-16
 
 Session state: ACTIVE — OPERATIONAL REFINEMENT
 
@@ -84,3 +84,15 @@ Session state: ACTIVE — OPERATIONAL REFINEMENT
 ## Product Runtime Boundary
 
 No AWS product runtime, production database, product secrets, QBO callback migration, product storage migration, domain/TLS migration, or customer-data hosting has been approved or deployed from this repository.
+
+## Engineering Operating System
+
+- EOS version: `1.0.0`
+- Engineering Constitution SHA-256: `a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e`
+- Reviewed Control Plane prerequisite: `8eb0554e1b0796485ad5354dcc5fed02c633b343`
+- Reviewed Demo telemetry prerequisite: `ca56ecc9740edce719df8584b3cd345286c3a777`
+- Independently reviewed Demo Package 8: `eddc1ca024305d222ef716a27005472590d0a087`
+- Demo master baseline reviewed before Package 8: `438a68bf0b4f49ae15a04a69ad72c14cc43de0cb`
+- EOS callers remain inactive until exact private cross-repository GitHub Actions access is founder-approved.
+- Auto-merge, deployment, cloud mutation, live Airtable writes, orphan mutation, and EDGAR integration remain disabled.
+- No EOS branch has been merged and no EOS pull request has been opened by this program.

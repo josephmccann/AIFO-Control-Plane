@@ -1,0 +1,33 @@
+paths:
+  .github/workflows/reusable-airtable-mirror.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-evidence-manifest.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-frozen-path-guard.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-merge-authorization.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-mission-validation.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-orphan-recovery.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-test-integrity.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '
+  .github/workflows/reusable-tier-path-guard.yml:
+    ignore:
+      - '^property "workflow_repository" is not defined in object type '
+      - '^property "workflow_sha" is not defined in object type '

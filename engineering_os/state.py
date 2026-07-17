@@ -61,6 +61,15 @@ TRANSITIONS = {
     "incident.opened": ({"Merged", "Verified", "Closed"}, "Incident", {"producer", "adversary", "founder"}),
     "incident.verified": ({"Incident"}, "Verified", {"adversary", "founder"}),
     "incident.closed": ({"Incident"}, "Closed", {"founder"}),
+    # These are deliberately state-preserving and mission-scoped.  They are
+    # not a general authorization API; commands.py validates their complete
+    # Test Integrity tuple before they can be accepted.
+    "test_integrity.baseline.authorized": (
+        {"Ready", "Founder Approval"}, "__PRESERVE__", {"founder"},
+    ),
+    "test_integrity.baseline.consumed": (
+        {"Ready", "Founder Approval"}, "__PRESERVE__", {"system"},
+    ),
 }
 
 

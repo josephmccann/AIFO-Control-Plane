@@ -61,6 +61,137 @@ _EVENT_BEGIN = "EOS:EVENT:BEGIN"
 _EVENT_END = "EOS:EVENT:END"
 _BOT = "github-actions[bot]"
 _RECOVERY_EVENTS = frozenset(("workflow_dispatch",))
+_ACTIVATION_AUTHORIZED = "test_integrity.baseline.authorized"
+_ACTIVATION_CONSUMED = "test_integrity.baseline.consumed"
+_ACTIVATION_EVENTS = frozenset((_ACTIVATION_AUTHORIZED, _ACTIVATION_CONSUMED))
+_ACTIVATION_REQUIRED = frozenset({
+    "repository", "mission_issue", "remediation_head", "remediation_tree",
+    "baseline_artifact_sha256", "canonical_inventory_sha256",
+    "baseline_generator_identity", "analyzer_identity", "workflow_identity",
+    "caller_identity", "immutable_kernel_identity", "manifest_identity",
+    "rollback_sha", "activation_nonce", "activation_type", "single_use",
+    "founder_authorization_identity", "founder_authorization_sequence",
+})
+_CONSUMPTION_REQUIRED = _ACTIVATION_REQUIRED | frozenset({
+    "authorization_event_hash", "authorization_sequence", "consumer_identity",
+    "consumed_at", "consumption_result", "post_consumption_state",
+})
+
+
+def _activation_tuple(details: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return a strict activation tuple, rejecting extra or malformed fields."""
+    if not isinstance(details, Mapping) or set(details) != _ACTIVATION_REQUIRED:
+        return None
+    text_fields = _ACTIVATION_REQUIRED - {"mission_issue", "single_use", "founder_authorization_sequence"}
+    if any(not isinstance(details[key], str) or not details[key].strip() for key in text_fields):
+        return None
+    if not isinstance(details["mission_issue"], int) or isinstance(details["mission_issue"], bool):
+        return None
+    if details["mission_issue"] != 26 or not isinstance(details["single_use"], bool):
+        return None
+    if not isinstance(details["founder_authorization_sequence"], int) or isinstance(details["founder_authorization_sequence"], bool):
+        return None
+    if details["single_use"] is not True or details["activation_type"] != "initial_test_integrity_baseline":
+        return None
+    for key in ("baseline_artifact_sha256", "canonical_inventory_sha256"):
+        if re.fullmatch(r"[0-9a-f]{64}", details[key]) is None:
+            return None
+    if re.fullmatch(r"[0-9a-f]{40}", details["remediation_head"]) is None:
+        return None
+    if re.fullmatch(r"[0-9a-f]{40}", details["rollback_sha"]) is None:
+        return None
+    if re.fullmatch(r"[0-9a-f]{40}", details["remediation_tree"]) is None:
+        return None
+    if len(details["activation_nonce"]) < 32:
+        return None
+    return dict(details)
+
+
+def validate_activation_ledger(
+    events: Sequence[Mapping[str, Any]],
+    activation: Mapping[str, Any],
+    *, repository: str,
+    mission_issue: int = 26,
+    current_commit: Optional[str] = None,
+    current_tree: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Validate the Mission #26 activation protocol without mutating state.
+
+    This validator consumes only an already authenticated, complete event
+    history.  It intentionally has no persistence or append capability.
+    """
+    if not isinstance(events, (list, tuple)) or not isinstance(activation, Mapping):
+        return False, "ACTIVATION_INPUT_INVALID", {}
+    if any(isinstance(event, Mapping) and event.get("type") in {
+        "mission.cancelled", "test_integrity.baseline.superseded",
+        "test_integrity.baseline.recovery",
+    } for event in events):
+        return False, "ACTIVATION_AUTHORIZATION_INVALIDATED", {}
+    expected = _activation_tuple(activation)
+    if expected is None or expected["repository"] != repository or expected["mission_issue"] != mission_issue:
+        return False, "ACTIVATION_TUPLE_INVALID", {}
+    if current_commit is not None and expected["remediation_head"] != current_commit:
+        return False, "ACTIVATION_COMMIT_MISMATCH", {}
+    if current_tree is not None and expected["remediation_tree"] != current_tree:
+        return False, "ACTIVATION_TREE_MISMATCH", {}
+    authorizations = []
+    consumptions = []
+    nonces = set()
+    for event in events:
+        if not isinstance(event, Mapping) or event.get("type") not in _ACTIVATION_EVENTS:
+            continue
+        details = event.get("details")
+        if event.get("type") == _ACTIVATION_AUTHORIZED:
+            tuple_value = _activation_tuple(details)
+        else:
+            tuple_value = (
+                {key: details.get(key) for key in _ACTIVATION_REQUIRED}
+                if isinstance(details, Mapping) and set(details) == _CONSUMPTION_REQUIRED
+                else None
+            )
+            if tuple_value is not None and (
+                not isinstance(details.get("authorization_event_hash"), str)
+                or not isinstance(details.get("authorization_sequence"), int)
+                or isinstance(details.get("authorization_sequence"), bool)
+                or not isinstance(details.get("consumer_identity"), str)
+                or not isinstance(details.get("consumed_at"), str)
+                or not isinstance(details.get("consumption_result"), str)
+                or not isinstance(details.get("post_consumption_state"), str)
+            ):
+                tuple_value = None
+        if tuple_value is None or tuple_value != expected:
+            return False, "ACTIVATION_TUPLE_MISMATCH", {}
+        nonce = tuple_value["activation_nonce"]
+        if event.get("type") == _ACTIVATION_AUTHORIZED:
+            nonces.add(nonce)
+        if event.get("type") == _ACTIVATION_AUTHORIZED:
+            if event.get("actor_role") != "founder":
+                return False, "ACTIVATION_AUTHORITY_INVALID", {}
+            authorizations.append(event)
+        else:
+            if event.get("actor_role") != "system":
+                return False, "ACTIVATION_CONSUMER_INVALID", {}
+            consumptions.append(event)
+    if len(authorizations) > 1:
+        return False, "ACTIVATION_AUTHORIZATION_REPLAY", {}
+    if len(nonces) != len(authorizations):
+        return False, "ACTIVATION_NONCE_REPLAY", {}
+    if len(consumptions) > 1:
+        return False, "ACTIVATION_CONSUMPTION_REPLAY", {}
+    if consumptions and not authorizations:
+        return False, "ACTIVATION_ORPHAN_CONSUMPTION", {}
+    if consumptions:
+        auth = authorizations[0]
+        consumed = consumptions[0]
+        if consumed.get("details", {}).get("authorization_event_hash") != auth.get("event_hash"):
+            return False, "ACTIVATION_AUTHORIZATION_REFERENCE_INVALID", {}
+        if consumed.get("details", {}).get("authorization_sequence") != auth.get("sequence"):
+            return False, "ACTIVATION_AUTHORIZATION_SEQUENCE_INVALID", {}
+        return True, "ACTIVATION_ALREADY_CONSUMED", {"consumed": True}
+    return bool(authorizations), ("ACTIVATION_AUTHORIZED" if authorizations else "ACTIVATION_NOT_AUTHORIZED"), {
+        "consumed": False,
+        "authorization_event_hash": authorizations[0].get("event_hash") if authorizations else None,
+    }
 
 
 @dataclass(frozen=True)

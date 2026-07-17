@@ -81,7 +81,8 @@ jobs:
           PROJECTED_AT: ${{ inputs.projected_at }}
         run: |
           set -euo pipefail
-          kernel/scripts/engineering-os/sync-airtable \
+          cd "$GITHUB_WORKSPACE/kernel"
+          scripts/engineering-os/sync-airtable \
             --direction github_to_airtable \
             --mode dry-run \
             --missions "$RUNNER_TEMP/eos-airtable/missions.json" \

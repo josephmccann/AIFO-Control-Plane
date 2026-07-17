@@ -178,13 +178,25 @@ class EvidenceTests(unittest.TestCase):
             "kernel/scripts/engineering-os/validate-test-integrity", workflow
         )
         self.assertIn(
-            "kernel/scripts/engineering-os/validate-evidence-bundle", workflow
+            "scripts/engineering-os/validate-evidence-bundle", workflow
         )
         artifact_boundary = workflow.split(
             "- name: Validate producer artifact boundary with immutable kernel", 1
         )[1].split("- name: Retain validated evidence boundary", 1)[0]
         self.assertIn(
             "PYTHONPATH: ${{ github.workspace }}/kernel", artifact_boundary
+        )
+        self.assertIn('cd "$GITHUB_WORKSPACE/kernel"', artifact_boundary)
+        self.assertIn(
+            '"$GITHUB_WORKSPACE/producer/bundle.json"', artifact_boundary
+        )
+        self.assertIn('"$GITHUB_WORKSPACE/producer"', artifact_boundary)
+        self.assertIn(
+            "scripts/engineering-os/validate-evidence-bundle", artifact_boundary
+        )
+        self.assertNotIn(
+            "kernel/scripts/engineering-os/validate-evidence-bundle",
+            artifact_boundary,
         )
         self.assertIn("path: base", workflow)
         self.assertIn("path: head", workflow)
@@ -310,6 +322,18 @@ class EvidenceTests(unittest.TestCase):
             json.loads(denied.stdout)["code"],
             "APPROVAL_AUTHENTICATED_ADAPTER_REQUIRED",
         )
+        isolated_environment = os.environ.copy()
+        isolated_environment.pop("PYTHONPATH", None)
+        boundary = subprocess.run(
+            [str(ROOT / "scripts/engineering-os/validate-evidence-bundle")],
+            cwd=ROOT,
+            env=isolated_environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(boundary.returncode, 2, boundary.stderr)
+        self.assertIn("the following arguments are required", boundary.stderr)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             audit_path = root / "audit.json"

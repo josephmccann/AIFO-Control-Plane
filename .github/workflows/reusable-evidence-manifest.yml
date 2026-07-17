@@ -211,9 +211,10 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/kernel
         run: |
           set -euo pipefail
-          kernel/scripts/engineering-os/validate-evidence-bundle \
-            producer/bundle.json \
-            producer \
+          cd "$GITHUB_WORKSPACE/kernel"
+          scripts/engineering-os/validate-evidence-bundle \
+            "$GITHUB_WORKSPACE/producer/bundle.json" \
+            "$GITHUB_WORKSPACE/producer" \
             "$RUNNER_TEMP/eos-validated/producer-bundle.json" \
             --repository "$GITHUB_REPOSITORY" \
             --pull-request "$PULL_REQUEST" \

@@ -294,6 +294,14 @@ class AirtableTests(unittest.TestCase):
         self.assertIn("default: dry-run", workflow)
         self.assertNotIn("AIRTABLE_API_KEY", workflow)
         self.assertNotIn("airtable_to_github", workflow)
+        generation_step = workflow.split(
+            "- name: Generate redacted deterministic mirror", 1
+        )[1].split("- name: Retain dry-run reporting artifact", 1)[0]
+        self.assertIn('cd "$GITHUB_WORKSPACE/kernel"', generation_step)
+        self.assertIn("scripts/engineering-os/sync-airtable", generation_step)
+        self.assertNotIn(
+            "kernel/scripts/engineering-os/sync-airtable", generation_step
+        )
 
 
 if __name__ == "__main__":

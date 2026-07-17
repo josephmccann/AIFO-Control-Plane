@@ -170,6 +170,51 @@ class PolicyBootstrapTests(unittest.TestCase):
             self.assertIn("bootstrap policy history", result.stderr)
             self.assertFalse(output.exists())
 
+    def test_descendant_bootstrap_rejects_policy_changes_on_merged_branch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, bootstrap_base_sha = self.repository(directory)
+            main_branch = self.git(repository, "branch", "--show-current")
+            self.git(repository, "checkout", "-q", "-b", "policy-side-branch")
+            policy = repository / ".aifo" / "engineering-os-policy.json"
+            policy.parent.mkdir()
+            policy.write_text('{"source":"side-branch"}\n', encoding="utf-8")
+            self.commit(repository, "introduce side-branch policy")
+            policy.unlink()
+            self.commit(repository, "remove side-branch policy")
+            self.git(repository, "checkout", "-q", main_branch)
+            (repository / "README.md").write_text(
+                "base\nunrelated mainline change\n", encoding="utf-8"
+            )
+            self.commit(repository, "advance mainline")
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "merge",
+                    "--no-ff",
+                    "--no-edit",
+                    "policy-side-branch",
+                ],
+                check=True,
+                capture_output=True,
+            )
+            base_sha = self.git(repository, "rev-parse", "HEAD")
+            policy.write_text('{"source":"reviewed-bootstrap"}\n', encoding="utf-8")
+            head_sha = self.commit(repository, "head")
+            output = Path(directory) / "rejected-merged-history.json"
+            result = self.resolve(
+                repository,
+                base_sha,
+                head_sha,
+                output,
+                bootstrap_base_sha=bootstrap_base_sha,
+                bootstrap_digest=hashlib.sha256(policy.read_bytes()).hexdigest(),
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("bootstrap policy history", result.stderr)
+            self.assertFalse(output.exists())
+
     def test_bootstrap_rejects_base_outside_frozen_ancestry(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, bootstrap_base_sha = self.repository(directory)

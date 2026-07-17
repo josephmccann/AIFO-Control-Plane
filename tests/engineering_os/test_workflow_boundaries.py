@@ -799,6 +799,25 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                     workflow,
                 )
 
+    def test_bootstrap_consumers_fetch_complete_base_history(self):
+        for name in (
+            "reusable-test-integrity.yml",
+            "reusable-evidence-manifest.yml",
+        ):
+            with self.subTest(workflow=name):
+                workflow = load_workflow(name)
+                base_checkout = next(
+                    step
+                    for job in workflow["jobs"].values()
+                    for step in job.get("steps", [])
+                    if step.get("name") in {
+                        "Check out immutable base",
+                        "Check out immutable base revision",
+                        "Check out immutable base for trusted analysis",
+                    }
+                )
+                self.assertEqual(0, base_checkout["with"]["fetch-depth"])
+
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
           uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@d48b58b245d58e9f83eb480baa61d7dbdffe7009

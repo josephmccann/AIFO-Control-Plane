@@ -32,25 +32,28 @@ jobs:
           CALLER_REPOSITORY: ${{ github.repository }}
           CALLER_OWNER: ${{ github.repository_owner }}
           CALLER_REF: ${{ github.ref }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
           WORKFLOW_SHA: ${{ job.workflow_sha }}
           WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
           EXPECTED_WORKFLOW_SHA: ${{ inputs.expected_workflow_sha }}
           EXPECTED_WORKFLOW_FILE_PATH: .github/workflows/reusable-airtable-mirror.yml
+          EXPECTED_CALLER_WORKFLOW_PATH: .github/workflows/eos-airtable-mirror.yml
         run: |
           set -euo pipefail
           deny() { echo "caller authorization denied: $1" >&2; exit 1; }
           [[ "$CALLER_OWNER" == "josephmccann" ]] || deny "repository owner"
+          [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
           [[ "$WORKFLOW_REPOSITORY" == "josephmccann/AIFO-Control-Plane" ]] || deny "workflow repository"
           [[ "$WORKFLOW_FILE_PATH" == "$EXPECTED_WORKFLOW_FILE_PATH" ]] || deny "workflow identity"
           [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "workflow revision"
-          if [[ "$CALLER_EVENT_NAME" == "workflow_call" ]]; then
-            [[ "$CALLER_REPOSITORY" == "josephmccann/AI.FO-Demo" ]] || deny "calling repository"
-            [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
-            [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
-          else
-            deny "event"
-          fi
+          [[ "$EXPECTED_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "expected evidence"
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_WORKFLOW_SHA" ]] || deny "workflow provenance"
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || deny "caller workflow revision"
+          [[ "$CALLER_EVENT_NAME" == "schedule" || "$CALLER_EVENT_NAME" == "workflow_dispatch" ]] || deny "event"
+          [[ "$CALLER_REF" == "refs/heads/master" ]] || deny "caller ref"
+          [[ "$CALLER_WORKFLOW_REF" == "$CALLER_REPOSITORY/$EXPECTED_CALLER_WORKFLOW_PATH@$CALLER_REF" ]] || deny "caller workflow identity"
 
   dry-run:
     name: Airtable mirror dry run

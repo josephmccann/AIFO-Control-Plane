@@ -12,6 +12,11 @@ WORKFLOW_ROOT = ROOT / ".github" / "workflows"
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
+DEMO_CALLER_PATHS = {
+    "reusable-airtable-mirror.yml": ".github/workflows/eos-airtable-mirror.yml",
+    "reusable-orphan-recovery.yml": ".github/workflows/eos-orphan-recovery.yml",
+}
+DEFAULT_DEMO_CALLER_PATH = ".github/workflows/eos-pull-request.yml"
 
 
 def load_workflow(name: str) -> dict:
@@ -75,20 +80,26 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 authorization = jobs["caller-authorization"]
                 self.assertEqual({}, authorization["permissions"])
                 step = authorization["steps"][0]
+                expected_caller_path = DEMO_CALLER_PATHS.get(
+                    name, DEFAULT_DEMO_CALLER_PATH
+                )
                 expected_environment = {
                     "CALLER_EVENT_NAME": "${{ github.event_name }}",
                     "CALLER_REPOSITORY": "${{ github.repository }}",
                     "CALLER_OWNER": "${{ github.repository_owner }}",
                     "CALLER_REF": "${{ github.ref }}",
+                    "CALLER_WORKFLOW_REF": "${{ github.workflow_ref }}",
+                    "CALLER_WORKFLOW_SHA": "${{ github.workflow_sha }}",
                     "WORKFLOW_REPOSITORY": "${{ job.workflow_repository }}",
                     "WORKFLOW_SHA": "${{ job.workflow_sha }}",
                     "WORKFLOW_FILE_PATH": "${{ job.workflow_file_path }}",
                     "EXPECTED_WORKFLOW_SHA": "${{ inputs.expected_workflow_sha }}",
                     "EXPECTED_WORKFLOW_FILE_PATH": ".github/workflows/%s" % name,
+                    "EXPECTED_CALLER_WORKFLOW_PATH": expected_caller_path,
                 }
                 self.assertEqual(expected_environment, step["env"])
                 scripts.add(step["run"])
-                direct_event_check = '"$CALLER_EVENT_NAME" == "schedule"'
+                direct_event_check = 'deny "direct workflow provenance"'
                 if name == "reusable-orphan-recovery.yml":
                     self.assertIn(direct_event_check, step["run"])
                 else:
@@ -115,21 +126,28 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                         job_condition = jobs[job_name].get("if")
                         if job_condition:
                             self.assertIn("success()", job_condition)
-        self.assertEqual(2, len(scripts))
+        self.assertEqual(4, len(scripts))
 
     def test_caller_authorization_script_fails_closed(self):
         workflow = load_workflow("reusable-mission-validation.yml")
         self.assertIn("caller-authorization", workflow["jobs"])
         script = workflow["jobs"]["caller-authorization"]["steps"][0]["run"]
         valid = {
-            "CALLER_EVENT_NAME": "workflow_call",
+            "CALLER_EVENT_NAME": "pull_request",
             "CALLER_REPOSITORY": AUTHORIZED_CALLER,
             "CALLER_OWNER": AUTHORIZED_OWNER,
+            "CALLER_REF": "refs/pull/17/merge",
+            "CALLER_WORKFLOW_REF": (
+                AUTHORIZED_CALLER
+                + "/.github/workflows/eos-pull-request.yml@refs/pull/17/merge"
+            ),
+            "CALLER_WORKFLOW_SHA": "c" * 40,
             "WORKFLOW_REPOSITORY": KERNEL_REPOSITORY,
             "WORKFLOW_SHA": "a" * 40,
             "WORKFLOW_FILE_PATH": ".github/workflows/reusable-mission-validation.yml",
             "EXPECTED_WORKFLOW_SHA": "a" * 40,
             "EXPECTED_WORKFLOW_FILE_PATH": ".github/workflows/reusable-mission-validation.yml",
+            "EXPECTED_CALLER_WORKFLOW_PATH": DEFAULT_DEMO_CALLER_PATH,
         }
         accepted = subprocess.run(
             ["bash", "-c", script], env={**os.environ, **valid}, capture_output=True, text=True
@@ -143,6 +161,14 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             "malformed provenance": {"WORKFLOW_SHA": "main", "EXPECTED_WORKFLOW_SHA": "main"},
             "contradictory provenance": {"EXPECTED_WORKFLOW_SHA": "b" * 40},
             "missing evidence": {"EXPECTED_WORKFLOW_SHA": ""},
+            "wrong event": {"CALLER_EVENT_NAME": "push"},
+            "wrong caller workflow": {
+                "CALLER_WORKFLOW_REF": (
+                    AUTHORIZED_CALLER + "/.github/workflows/other.yml@refs/pull/17/merge"
+                )
+            },
+            "wrong caller ref": {"CALLER_REF": "refs/heads/master"},
+            "malformed caller revision": {"CALLER_WORKFLOW_SHA": "master"},
         }
         for label, mutation in regressions.items():
             with self.subTest(regression=label):
@@ -170,6 +196,12 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             "EXPECTED_WORKFLOW_SHA": "",
             "EXPECTED_WORKFLOW_FILE_PATH": ".github/workflows/reusable-orphan-recovery.yml",
             "CALLER_REF": "refs/heads/main",
+            "CALLER_WORKFLOW_REF": (
+                KERNEL_REPOSITORY
+                + "/.github/workflows/reusable-orphan-recovery.yml@refs/heads/main"
+            ),
+            "CALLER_WORKFLOW_SHA": "a" * 40,
+            "EXPECTED_CALLER_WORKFLOW_PATH": ".github/workflows/eos-orphan-recovery.yml",
         }
         accepted = subprocess.run(
             ["bash", "-c", script], env={**os.environ, **direct}, capture_output=True, text=True
@@ -179,6 +211,13 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             {"CALLER_REPOSITORY": AUTHORIZED_CALLER},
             {"CALLER_REF": "refs/heads/feature"},
             {"CALLER_EVENT_NAME": "pull_request"},
+            {"CALLER_WORKFLOW_SHA": "b" * 40},
+            {
+                "CALLER_WORKFLOW_REF": (
+                    KERNEL_REPOSITORY
+                    + "/.github/workflows/reusable-orphan-recovery.yml@refs/heads/feature"
+                )
+            },
         ):
             rejected = subprocess.run(
                 ["bash", "-c", script],
@@ -187,6 +226,94 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 text=True,
             )
             self.assertNotEqual(0, rejected.returncode)
+
+    def test_control_plane_test_integrity_caller_is_exactly_authorized(self):
+        workflow = load_workflow("reusable-test-integrity.yml")
+        script = workflow["jobs"]["caller-authorization"]["steps"][0]["run"]
+        valid = {
+            "CALLER_EVENT_NAME": "pull_request_target",
+            "CALLER_REPOSITORY": KERNEL_REPOSITORY,
+            "CALLER_OWNER": AUTHORIZED_OWNER,
+            "CALLER_REF": "refs/heads/main",
+            "CALLER_WORKFLOW_REF": (
+                KERNEL_REPOSITORY + "/.github/workflows/test-integrity.yml@refs/heads/main"
+            ),
+            "CALLER_WORKFLOW_SHA": "c" * 40,
+            "WORKFLOW_REPOSITORY": KERNEL_REPOSITORY,
+            "WORKFLOW_SHA": "a" * 40,
+            "WORKFLOW_FILE_PATH": ".github/workflows/reusable-test-integrity.yml",
+            "EXPECTED_WORKFLOW_SHA": "a" * 40,
+            "EXPECTED_WORKFLOW_FILE_PATH": ".github/workflows/reusable-test-integrity.yml",
+            "EXPECTED_CALLER_WORKFLOW_PATH": DEFAULT_DEMO_CALLER_PATH,
+        }
+        accepted = subprocess.run(
+            ["bash", "-c", script], env={**os.environ, **valid}, capture_output=True, text=True
+        )
+        self.assertEqual(0, accepted.returncode, accepted.stderr)
+        for mutation in (
+            {"CALLER_EVENT_NAME": "pull_request"},
+            {"CALLER_REF": "refs/heads/feature"},
+            {
+                "CALLER_WORKFLOW_REF": (
+                    KERNEL_REPOSITORY + "/.github/workflows/other.yml@refs/heads/main"
+                )
+            },
+            {"CALLER_WORKFLOW_SHA": "main"},
+            {"EXPECTED_WORKFLOW_SHA": "b" * 40},
+        ):
+            rejected = subprocess.run(
+                ["bash", "-c", script],
+                env={**os.environ, **valid, **mutation},
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, rejected.returncode)
+
+    def test_demo_scheduled_callers_are_default_branch_only(self):
+        for name in ("reusable-airtable-mirror.yml", "reusable-orphan-recovery.yml"):
+            with self.subTest(workflow=name):
+                workflow = load_workflow(name)
+                script = workflow["jobs"]["caller-authorization"]["steps"][0]["run"]
+                caller_path = DEMO_CALLER_PATHS[name]
+                valid = {
+                    "CALLER_EVENT_NAME": "schedule",
+                    "CALLER_REPOSITORY": AUTHORIZED_CALLER,
+                    "CALLER_OWNER": AUTHORIZED_OWNER,
+                    "CALLER_REF": "refs/heads/master",
+                    "CALLER_WORKFLOW_REF": (
+                        AUTHORIZED_CALLER + "/" + caller_path + "@refs/heads/master"
+                    ),
+                    "CALLER_WORKFLOW_SHA": "c" * 40,
+                    "WORKFLOW_REPOSITORY": KERNEL_REPOSITORY,
+                    "WORKFLOW_SHA": "a" * 40,
+                    "WORKFLOW_FILE_PATH": ".github/workflows/" + name,
+                    "EXPECTED_WORKFLOW_SHA": "a" * 40,
+                    "EXPECTED_WORKFLOW_FILE_PATH": ".github/workflows/" + name,
+                    "EXPECTED_CALLER_WORKFLOW_PATH": caller_path,
+                }
+                accepted = subprocess.run(
+                    ["bash", "-c", script],
+                    env={**os.environ, **valid},
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, accepted.returncode, accepted.stderr)
+                for mutation in (
+                    {"CALLER_REF": "refs/heads/feature"},
+                    {"CALLER_EVENT_NAME": "push"},
+                    {
+                        "CALLER_WORKFLOW_REF": (
+                            AUTHORIZED_CALLER + "/" + caller_path + "@refs/heads/feature"
+                        )
+                    },
+                ):
+                    rejected = subprocess.run(
+                        ["bash", "-c", script],
+                        env={**os.environ, **valid, **mutation},
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertNotEqual(0, rejected.returncode)
 
     def test_reusable_workflows_separate_immutable_kernel_and_target(self):
         for name in self.boundary_workflows:
@@ -328,6 +455,11 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("josephmccann/AI.FO-Demo", architecture)
         self.assertIn("expected_workflow_sha", architecture)
         self.assertIn("job.workflow_file_path", architecture)
+        self.assertIn("github.workflow_ref", architecture)
+        self.assertIn("eos-pull-request.yml", architecture)
+        self.assertIn("eos-orphan-recovery.yml", architecture)
+        self.assertIn("eos-airtable-mirror.yml", architecture)
+        self.assertIn("Control Plane test-integrity caller", architecture)
 
 
 if __name__ == "__main__":

@@ -154,6 +154,19 @@ class DocumentationContractTests(unittest.TestCase):
                 self.assertFalse(path.startswith("build/"), path)
                 self.assertFalse(path.startswith("diagnostics/"), path)
 
+    def test_python_bytecode_cache_is_repository_ignored(self):
+        ignored = subprocess.run(
+            [
+                "git",
+                "check-ignore",
+                "--quiet",
+                "--no-index",
+                "engineering_os/__pycache__/kernel.pyc",
+            ],
+            cwd=ROOT,
+        )
+        self.assertEqual(0, ignored.returncode)
+
     def test_repository_entrypoints_link_operational_docs_and_state(self):
         readme = self.read("README.md")
         agents = self.read("AGENTS.md")

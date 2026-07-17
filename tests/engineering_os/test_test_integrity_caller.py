@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-KERNEL_SHA = "2446d37d2d48a7a8443bb19d6a087a7da5e6fdfd"
+KERNEL_SHA = "f67cc112439009297cb02d72651e529ea716b899"
 
 
 class TestIntegrityCallerTests(unittest.TestCase):
@@ -24,5 +24,6 @@ class TestIntegrityCallerTests(unittest.TestCase):
             "reusable-test-integrity.yml@" + KERNEL_SHA
         )
         self.assertIn(expected, caller)
+        self.assertIn("expected_workflow_sha: " + KERNEL_SHA, caller)
         self.assertIsNotNone(re.fullmatch(r"[0-9a-f]{40}", KERNEL_SHA))
         self.assertIn("bootstrap interval is an explicit enforcement gap", documentation)

@@ -80,6 +80,7 @@ def establish_initial_baseline(
         mode, kind, blob_sha = header.split(" ", 2)
         if not path.startswith(_BASELINE_GOVERNED_PREFIXES):
             continue
+        budget.consume_entry(path, phase="baseline-inventory")
         if kind != "blob" or not _SHA40.fullmatch(blob_sha):
             raise ValueError("TEST_BASELINE_GOVERNED_ENTRY_INVALID")
         records.append({"mode": mode, "path": path, "blob_sha": blob_sha})

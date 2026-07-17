@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+deny() {
+  echo "base policy resolution denied: $1" >&2
+  exit 1
+}
+
+repository=""
+base_root=""
+head_root=""
+base_sha=""
+head_sha=""
+bootstrap_repository=""
+bootstrap_base_sha=""
+bootstrap_policy_sha256=""
+output=""
+
+while (($#)); do
+  case "$1" in
+    --repository) repository=${2-}; shift 2 ;;
+    --base-root) base_root=${2-}; shift 2 ;;
+    --head-root) head_root=${2-}; shift 2 ;;
+    --base-sha) base_sha=${2-}; shift 2 ;;
+    --head-sha) head_sha=${2-}; shift 2 ;;
+    --bootstrap-repository) bootstrap_repository=${2-}; shift 2 ;;
+    --bootstrap-base-sha) bootstrap_base_sha=${2-}; shift 2 ;;
+    --bootstrap-policy-sha256) bootstrap_policy_sha256=${2-}; shift 2 ;;
+    --output) output=${2-}; shift 2 ;;
+    *) deny "unknown argument" ;;
+  esac
+done
+
+[[ -n "$repository" && -n "$base_root" && -n "$head_root" ]] || deny "repository evidence"
+[[ "$base_sha" =~ ^[0-9a-f]{40}$ && "$head_sha" =~ ^[0-9a-f]{40}$ ]] || deny "revision evidence"
+[[ "$bootstrap_base_sha" =~ ^[0-9a-f]{40}$ ]] || deny "bootstrap base evidence"
+[[ "$bootstrap_policy_sha256" =~ ^[0-9a-f]{64}$ ]] || deny "bootstrap policy evidence"
+[[ "$output" == /* && ! -L "$output" && ! -d "$output" ]] || deny "output path"
+[[ -d "$base_root/.git" && -d "$head_root/.git" ]] || deny "git roots"
+git -C "$base_root" cat-file -e "$base_sha^{commit}" || deny "base commit"
+git -C "$head_root" cat-file -e "$head_sha^{commit}" || deny "head commit"
+
+policy_path=.aifo/engineering-os-policy.json
+base_record=$(git -C "$base_root" ls-tree "$base_sha" -- "$policy_path")
+selected_root=$base_root
+selected_record=$base_record
+
+if [[ -z "$base_record" ]]; then
+  [[ "$repository" == "$bootstrap_repository" ]] || deny "bootstrap repository"
+  [[ "$base_sha" == "$bootstrap_base_sha" ]] || deny "bootstrap base"
+  selected_root=$head_root
+  selected_record=$(git -C "$head_root" ls-tree "$head_sha" -- "$policy_path")
+  [[ -n "$selected_record" ]] || deny "bootstrap policy"
+fi
+
+IFS=$'\t' read -r metadata selected_path <<< "$selected_record"
+read -r mode type object_id <<< "$metadata"
+[[ "$selected_path" == "$policy_path" && "$mode" == "100644" && "$type" == "blob" ]] || deny "policy object"
+
+output_parent=$(dirname "$output")
+[[ -d "$output_parent" ]] || deny "output parent"
+umask 077
+temporary=$(mktemp "$output_parent/.base-policy.XXXXXX")
+trap 'rm -f "$temporary"' EXIT
+git -C "$selected_root" cat-file blob "$object_id" > "$temporary"
+
+if [[ -z "$base_record" ]]; then
+  actual_sha256=$(python3 - "$temporary" <<'PY'
+import hashlib
+import sys
+
+with open(sys.argv[1], "rb") as stream:
+    print(hashlib.sha256(stream.read()).hexdigest())
+PY
+  )
+  [[ "$actual_sha256" == "$bootstrap_policy_sha256" ]] || deny "bootstrap policy digest"
+fi
+
+mv "$temporary" "$output"
+trap - EXIT

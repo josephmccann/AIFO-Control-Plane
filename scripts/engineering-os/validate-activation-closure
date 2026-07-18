@@ -7,8 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from engineering_os.schema import validate_document
+
 ROOT = Path(__file__).resolve().parents[2]
 READY_SHA = "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0"
+BASE_SHA = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
 CLOSURE_PATH = "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
 
 
@@ -66,6 +70,9 @@ def generate(base, head, records_path):
 
 def validate(path, head):
     closure = json.loads(path.read_text(encoding="utf-8"))
+    violations = validate_document("activation-closure", closure)
+    if violations:
+        raise SystemExit("activation closure schema rejected: " + "; ".join(item.code for item in violations))
     if set(closure) != {"schema_version", "mission", "base", "final", "files", "edges", "pins", "tests", "evidence", "reviews"}:
         raise SystemExit("closure top-level structure is not closed")
     mission = closure.get("mission", {})
@@ -79,6 +86,8 @@ def validate(path, head):
     if final.get("sha") != head or git("rev-parse", head) != head or final.get("tree") != git("rev-parse", "%s^{tree}" % head):
         raise SystemExit("closure final revision mismatch")
     base = closure.get("base", {})
+    if base.get("sha") != BASE_SHA:
+        raise SystemExit("closure base is not the Mission 31 rollback/base")
     if git("rev-parse", base.get("sha", "")) != base.get("sha") or git("rev-parse", "%s^{tree}" % base["sha"]) != base.get("tree"):
         raise SystemExit("closure base revision mismatch")
     changed = set(git("diff", "--name-only", base["sha"], head).splitlines()) - {CLOSURE_PATH}
@@ -91,6 +100,14 @@ def validate(path, head):
         if set(item) != {"path", "sha256", "reason"} or item["sha256"] != digest_at(head, item["path"]):
             raise SystemExit("closure file digest mismatch: %s" % item.get("path"))
     nodes = changed | {item.get("path") for item in closure.get("evidence", [])}
+    expected_edges = []
+    for test in sorted(item for item in changed if item.startswith("tests/")):
+        for source in sorted(item for item in changed if not item.startswith("tests/")):
+            expected_edges.append({"from": test, "to": source, "kind": "tests"})
+    if closure.get("edges") != expected_edges:
+        raise SystemExit("closure dependency edges are incomplete or contradictory")
+    if not closure.get("edges"):
+        raise SystemExit("closure dependency edges are empty")
     for edge in closure.get("edges", []):
         if set(edge) != {"from", "to", "kind"} or edge["from"] not in nodes or edge["to"] not in nodes:
             raise SystemExit("closure dependency edge is dangling")

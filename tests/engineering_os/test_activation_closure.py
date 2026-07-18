@@ -4,13 +4,14 @@ import json
 import subprocess
 import tempfile
 import unittest
+import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/engineering-os/validate-activation-closure"
 SUBJECT = "da301963cc430883bdd3623e734aed0e06d52d18"
-BASE = "d3a5e29f47ab53a5190e32f3bb0edfd2cbdc1533"
+BASE = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
 
 
 class ActivationClosureTests(unittest.TestCase):
@@ -18,6 +19,11 @@ class ActivationClosureTests(unittest.TestCase):
         paths = subprocess.check_output(
             ["git", "diff", "--name-only", BASE, SUBJECT], cwd=ROOT, text=True
         ).splitlines()
+        pins = []
+        pattern = re.compile(r"josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@([0-9a-f]{40})")
+        for path in sorted(path for path in paths if path.startswith(".github/workflows/")):
+            content = subprocess.check_output(["git", "show", "%s:%s" % (SUBJECT, path)], cwd=ROOT, text=True)
+            pins.extend({"consumer": path, "sha": sha} for sha in sorted(set(pattern.findall(content))))
         allowed = sorted(set(paths) | {"docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"})
         files = []
         for path in paths:
@@ -36,8 +42,10 @@ class ActivationClosureTests(unittest.TestCase):
             "base": {"sha": BASE, "tree": subprocess.check_output(["git", "rev-parse", BASE + "^{tree}"], cwd=ROOT, text=True).strip()},
             "final": {"sha": SUBJECT, "tree": subprocess.check_output(["git", "rev-parse", SUBJECT + "^{tree}"], cwd=ROOT, text=True).strip()},
             "files": files,
-            "edges": [{"from": paths[1], "to": paths[0], "kind": "validates"}],
-            "pins": [], "tests": [{"command": "focused", "result": "pass", "head": SUBJECT,
+            "edges": [{"from": test, "to": source, "kind": "tests"}
+                      for test in sorted(path for path in paths if path.startswith("tests/"))
+                      for source in sorted(path for path in paths if not path.startswith("tests/"))],
+            "pins": pins, "tests": [{"command": "focused", "result": "pass", "head": SUBJECT,
                 "evidence_path": "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
                 "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
             "evidence": evidence,

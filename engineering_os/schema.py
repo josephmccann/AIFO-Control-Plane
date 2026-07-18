@@ -14,6 +14,7 @@ DOCUMENT_KINDS = (
     "evidence",
     "approval",
     "audit-event",
+    "activation-closure",
     "repository-policy",
     "frozen-path",
     "incident",

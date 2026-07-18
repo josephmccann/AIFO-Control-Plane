@@ -32,6 +32,7 @@ class SchemaTests(unittest.TestCase):
                 "evidence",
                 "approval",
                 "audit-event",
+                "activation-closure",
                 "repository-policy",
                 "frozen-path",
                 "incident",

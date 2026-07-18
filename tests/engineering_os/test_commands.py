@@ -225,6 +225,7 @@ class CommandTests(unittest.TestCase):
                       "workflow_sha": sha, "run_id": 31, "run_attempt": 2, "job": "append",
                       "actor": BOT, "trigger_actor": "josephmccann", "event": "issue_comment",
                       "head_sha": sha, "head_tree": "4" * 40}
+        self.assertFalse(command_kernel.validate_activation_run(run, REPOSITORY, url))
         self.assertTrue(command_kernel.validate_activation_run(run, REPOSITORY, url, provenance=provenance))
         for field, value in (("run_id", 32), ("run_attempt", 1), ("trigger_actor", "attacker"),
                              ("workflow_sha", "5" * 40), ("head_sha", "6" * 40),

@@ -655,7 +655,7 @@ def validate_activation_run(run: Mapping[str, Any], repository: str, source_url:
         and (expected_head_sha is None or run.get("head_sha") == expected_head_sha)
     )
     if not valid or provenance is None:
-        return valid and provenance is None
+        return False
     return (
         _run_provenance(provenance, repository)
         and provenance.get("run_id") == run_id

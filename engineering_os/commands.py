@@ -1067,7 +1067,7 @@ def authorize_command_proposal(
                     "authorization_sequence": prior_auth.get("sequence"),
                     "consumer_identity": actor,
                     "consumed_at": occurred_at,
-                    "consumption_result": "attempted" if event_type == _ACTIVATION_ATTEMPTED else "consumed",
+                    "consumption_result": "attempted" if event_type == _ACTIVATION_ATTEMPTED else "activated",
                     "post_consumption_state": "locked" if event_type == _ACTIVATION_ATTEMPTED else "active",
                     "attempt_event_hash": next((item.get("event_hash") for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), ""),
                 })

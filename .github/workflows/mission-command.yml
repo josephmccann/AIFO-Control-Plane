@@ -41,8 +41,8 @@ jobs:
               raise SystemExit(1)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               stream.write("command=%s\n" % parsed[0])
-          if parsed[0] in {"authorize-baseline", "attempt-baseline", "consume-baseline"} and int(os.environ["GITHUB_EVENT_ISSUE_NUMBER"]) != 26:
-              raise SystemExit("activation commands are bound to issue 26")
+          if parsed[0] in {"authorize-baseline", "attempt-baseline", "consume-baseline"}:
+              raise SystemExit("activation lifecycle requires a separately authorized activation mission")
           PY
       - name: Normalize mission and paginated comments
         if: ${{ steps.exact.outcome == 'success' && steps.exact.outputs.command != 'claim' }}

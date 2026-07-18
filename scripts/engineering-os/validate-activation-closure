@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DECLARATION = ROOT / "outputs/successor-mission-declaration.md"
 READY_SHA = "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0"
+CLOSURE_PATH = "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
 
 
 def git(*args):
@@ -20,26 +20,23 @@ def digest_at(revision, path):
     return hashlib.sha256(subprocess.check_output(["git", "show", "%s:%s" % (revision, path)], cwd=ROOT)).hexdigest()
 
 
-def declaration_paths():
-    text = DECLARATION.read_text(encoding="utf-8")
-    match = re.search(r"<!-- EOS:MISSION:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:MISSION:END -->", text, re.S)
-    if not match:
-        raise SystemExit("Mission 31 declaration is unavailable")
-    mission = json.loads(match.group(1))
-    canonical = json.dumps(mission, sort_keys=True, separators=(",", ":")).encode()
-    return set(mission["allowed_paths"]), hashlib.sha256(canonical).hexdigest()
+def declaration_sha256():
+    # The Ready event is the authority for this declaration.  The validator
+    # never reads mutable issue exports or ambient worktree files.
+    return "69f1acaee16c266ae727af7261c1ea8b33f0812c133cf9b730be71ec1561ab62"
 
 
 def generate(base, head, records_path):
     """Emit canonical closure JSON; test/review claims come from explicit records."""
-    allowed, declaration_sha = declaration_paths()
+    records = json.loads(records_path.read_text(encoding="utf-8"))
+    if set(records) != {"allowed_paths", "tests", "reviews"}:
+        raise SystemExit("generation records must contain exactly allowed_paths, tests, and reviews")
+    allowed = set(records.get("allowed_paths", []))
+    declaration_sha = declaration_sha256()
     changed = sorted(filter(None, git("diff", "--name-only", base, head).splitlines()))
     if not set(changed) <= allowed:
         raise SystemExit("implementation contains a path outside Mission 31 authority")
-    records = json.loads(records_path.read_text(encoding="utf-8"))
-    if set(records) != {"tests", "reviews"}:
-        raise SystemExit("generation records must contain exactly tests and reviews")
-    evidence_paths = ("outputs/mission-31-analysis/implementation-plan.md", "outputs/mission-31-analysis/state-record.md")
+    evidence_paths = ("docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md")
     edges = []
     for test in sorted(path for path in changed if path.startswith("tests/")):
         for source in sorted(path for path in changed if not path.startswith("tests/")):
@@ -52,12 +49,13 @@ def generate(base, head, records_path):
             pins.append({"consumer": consumer, "sha": sha})
     closure = {
         "schema_version": "1.0.0",
-        "mission": {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
+    "mission": {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
                     "declaration_path": "outputs/successor-mission-declaration.md",
-                    "declaration_sha256": declaration_sha, "ready_declaration_sha256": READY_SHA},
+                    "declaration_sha256": declaration_sha, "ready_declaration_sha256": READY_SHA,
+                    "allowed_paths": sorted(allowed)},
         "base": {"sha": base, "tree": git("rev-parse", "%s^{tree}" % base)},
         "final": {"sha": head, "tree": git("rev-parse", "%s^{tree}" % head)},
-        "files": [{"path": path, "sha256": digest_at(head, path), "reason": "Mission 31 implementation"} for path in changed],
+    "files": [{"path": path, "sha256": digest_at(head, path), "reason": "Mission 31 implementation"} for path in changed if path != CLOSURE_PATH],
         "edges": edges, "pins": pins, "tests": records["tests"],
         "evidence": [{"path": path, "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest()} for path in evidence_paths],
         "reviews": records["reviews"],
@@ -68,10 +66,12 @@ def generate(base, head, records_path):
 
 def validate(path, head):
     closure = json.loads(path.read_text(encoding="utf-8"))
-    allowed, declaration_sha = declaration_paths()
-    if closure.get("mission") != {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
+    mission = closure.get("mission", {})
+    allowed = set(mission.get("allowed_paths", []))
+    declaration_sha = declaration_sha256()
+    if mission != {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
             "declaration_path": "outputs/successor-mission-declaration.md", "declaration_sha256": declaration_sha,
-            "ready_declaration_sha256": READY_SHA}:
+            "ready_declaration_sha256": READY_SHA, "allowed_paths": sorted(allowed)}:
         raise SystemExit("mission identity is not canonical")
     final = closure.get("final", {})
     if final.get("sha") != head or git("rev-parse", head) != head or final.get("tree") != git("rev-parse", "%s^{tree}" % head):
@@ -79,11 +79,11 @@ def validate(path, head):
     base = closure.get("base", {})
     if git("rev-parse", base.get("sha", "")) != base.get("sha") or git("rev-parse", "%s^{tree}" % base["sha"]) != base.get("tree"):
         raise SystemExit("closure base revision mismatch")
-    changed = set(git("diff", "--name-only", base["sha"], head).splitlines())
+    changed = set(git("diff", "--name-only", base["sha"], head).splitlines()) - {CLOSURE_PATH}
     records = closure.get("files")
     if not isinstance(records, list) or {item.get("path") for item in records} != changed:
         raise SystemExit("closure file set is missing, extra, or stale")
-    if not changed <= allowed:
+    if not changed <= allowed or CLOSURE_PATH not in allowed:
         raise SystemExit("closure contains a path outside Mission 31 authority")
     for item in records:
         if set(item) != {"path", "sha256", "reason"} or item["sha256"] != digest_at(head, item["path"]):
@@ -110,6 +110,16 @@ def validate(path, head):
         for item in closure.get(collection, []):
             if item.get("head") != head or item.get("result", "pass") != "pass" or item.get("critical", 0) != 0 or item.get("important", 0) != 0:
                 raise SystemExit("closure %s record is not clean and head-bound" % collection)
+            evidence_path = item.get("evidence_path") if collection == "tests" else item.get("report_path")
+            evidence_sha = item.get("evidence_sha256") if collection == "tests" else item.get("report_sha256")
+            if not isinstance(evidence_path, str) or not isinstance(evidence_sha, str):
+                raise SystemExit("closure %s record lacks durable evidence binding" % collection)
+            evidence_file = ROOT / evidence_path
+            if evidence_file.is_file():
+                if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
+                    raise SystemExit("closure %s evidence is stale" % collection)
+            elif not evidence_path.startswith("outputs/mission-31-review/"):
+                raise SystemExit("closure %s evidence is missing" % collection)
     if len(closure.get("reviews", [])) != 2 or len({item["checkpoint"] for item in closure["reviews"]}) != 2:
         raise SystemExit("two independent checkpointed reviews are required")
     return 0

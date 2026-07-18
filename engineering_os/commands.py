@@ -567,7 +567,8 @@ def validate_recovery_run(
     )
 
 
-def validate_activation_run(run: Mapping[str, Any], repository: str, source_url: str) -> bool:
+def validate_activation_run(run: Mapping[str, Any], repository: str, source_url: str,
+                            expected_head_sha: Optional[str] = None) -> bool:
     """Authenticate the existing mission-command workflow as activation source."""
     if not isinstance(run, Mapping) or not isinstance(repository, str):
         return False
@@ -580,6 +581,7 @@ def validate_activation_run(run: Mapping[str, Any], repository: str, source_url:
         and run.get("event") == "issue_comment"
         and isinstance(run.get("repository"), Mapping)
         and run["repository"].get("full_name") == repository
+        and (expected_head_sha is None or run.get("head_sha") == expected_head_sha)
     )
 def effective_limits(mission: Mapping[str, Any], policy: Mapping[str, Any]) -> Dict[str, Any]:
     """Return the most restrictive declared mission/repository cap per resource."""
@@ -1065,7 +1067,7 @@ def authorize_command_proposal(
                 event_details.update({
                     "authorization_event_hash": prior_auth.get("event_hash"),
                     "authorization_sequence": prior_auth.get("sequence"),
-                    "consumer_identity": actor,
+                    "consumer_identity": "github-actions[bot]/mission-command",
                     "consumed_at": occurred_at,
                     "consumption_result": "attempted" if event_type == _ACTIVATION_ATTEMPTED else "activated",
                     "post_consumption_state": "locked" if event_type == _ACTIVATION_ATTEMPTED else "active",

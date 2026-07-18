@@ -1,38 +1,127 @@
 #!/usr/bin/env python3
-"""Validate a Mission #31 activation closure artifact against one exact tree."""
+"""Generate or validate the deterministic Mission #31 dependency closure."""
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+DECLARATION = ROOT / "outputs/successor-mission-declaration.md"
+READY_SHA = "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0"
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+
+
+def digest_at(revision, path):
+    return hashlib.sha256(subprocess.check_output(["git", "show", "%s:%s" % (revision, path)], cwd=ROOT)).hexdigest()
+
+
+def declaration_paths():
+    text = DECLARATION.read_text(encoding="utf-8")
+    match = re.search(r"<!-- EOS:MISSION:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:MISSION:END -->", text, re.S)
+    if not match:
+        raise SystemExit("Mission 31 declaration is unavailable")
+    mission = json.loads(match.group(1))
+    canonical = json.dumps(mission, sort_keys=True, separators=(",", ":")).encode()
+    return set(mission["allowed_paths"]), hashlib.sha256(canonical).hexdigest()
+
+
+def generate(base, head, records_path):
+    """Emit canonical closure JSON; test/review claims come from explicit records."""
+    allowed, declaration_sha = declaration_paths()
+    changed = sorted(filter(None, git("diff", "--name-only", base, head).splitlines()))
+    if not set(changed) <= allowed:
+        raise SystemExit("implementation contains a path outside Mission 31 authority")
+    records = json.loads(records_path.read_text(encoding="utf-8"))
+    if set(records) != {"tests", "reviews"}:
+        raise SystemExit("generation records must contain exactly tests and reviews")
+    evidence_paths = ("outputs/mission-31-analysis/implementation-plan.md", "outputs/mission-31-analysis/state-record.md")
+    edges = []
+    for test in sorted(path for path in changed if path.startswith("tests/")):
+        for source in sorted(path for path in changed if not path.startswith("tests/")):
+            edges.append({"from": test, "to": source, "kind": "tests"})
+    pins = []
+    pin_pattern = re.compile(r"josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@([0-9a-f]{40})")
+    for consumer in sorted(path for path in changed if path.startswith(".github/workflows/")):
+        content = subprocess.check_output(["git", "show", "%s:%s" % (head, consumer)], cwd=ROOT, text=True)
+        for sha in sorted(set(pin_pattern.findall(content))):
+            pins.append({"consumer": consumer, "sha": sha})
+    closure = {
+        "schema_version": "1.0.0",
+        "mission": {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
+                    "declaration_path": "outputs/successor-mission-declaration.md",
+                    "declaration_sha256": declaration_sha, "ready_declaration_sha256": READY_SHA},
+        "base": {"sha": base, "tree": git("rev-parse", "%s^{tree}" % base)},
+        "final": {"sha": head, "tree": git("rev-parse", "%s^{tree}" % head)},
+        "files": [{"path": path, "sha256": digest_at(head, path), "reason": "Mission 31 implementation"} for path in changed],
+        "edges": edges, "pins": pins, "tests": records["tests"],
+        "evidence": [{"path": path, "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest()} for path in evidence_paths],
+        "reviews": records["reviews"],
+    }
+    print(json.dumps(closure, sort_keys=True, indent=2))
+    return 0
+
+
+def validate(path, head):
+    closure = json.loads(path.read_text(encoding="utf-8"))
+    allowed, declaration_sha = declaration_paths()
+    if closure.get("mission") != {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
+            "declaration_path": "outputs/successor-mission-declaration.md", "declaration_sha256": declaration_sha,
+            "ready_declaration_sha256": READY_SHA}:
+        raise SystemExit("mission identity is not canonical")
+    final = closure.get("final", {})
+    if final.get("sha") != head or git("rev-parse", head) != head or final.get("tree") != git("rev-parse", "%s^{tree}" % head):
+        raise SystemExit("closure final revision mismatch")
+    base = closure.get("base", {})
+    if git("rev-parse", base.get("sha", "")) != base.get("sha") or git("rev-parse", "%s^{tree}" % base["sha"]) != base.get("tree"):
+        raise SystemExit("closure base revision mismatch")
+    changed = set(git("diff", "--name-only", base["sha"], head).splitlines())
+    records = closure.get("files")
+    if not isinstance(records, list) or {item.get("path") for item in records} != changed:
+        raise SystemExit("closure file set is missing, extra, or stale")
+    if not changed <= allowed:
+        raise SystemExit("closure contains a path outside Mission 31 authority")
+    for item in records:
+        if set(item) != {"path", "sha256", "reason"} or item["sha256"] != digest_at(head, item["path"]):
+            raise SystemExit("closure file digest mismatch: %s" % item.get("path"))
+    nodes = changed | {item.get("path") for item in closure.get("evidence", [])}
+    for edge in closure.get("edges", []):
+        if set(edge) != {"from", "to", "kind"} or edge["from"] not in nodes or edge["to"] not in nodes:
+            raise SystemExit("closure dependency edge is dangling")
+    expected_pins = []
+    pin_pattern = re.compile(r"josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@([0-9a-f]{40})")
+    for consumer in sorted(path for path in changed if path.startswith(".github/workflows/")):
+        content = subprocess.check_output(["git", "show", "%s:%s" % (head, consumer)], cwd=ROOT, text=True)
+        for sha in sorted(set(pin_pattern.findall(content))):
+            expected_pins.append({"consumer": consumer, "sha": sha})
+    if closure.get("pins") != expected_pins:
+        raise SystemExit("closure transport pin set is missing, extra, or stale")
+    if {item.get("path") for item in closure.get("evidence", [])} != {
+        "outputs/mission-31-analysis/implementation-plan.md", "outputs/mission-31-analysis/state-record.md"}:
+        raise SystemExit("closure evidence set is incomplete")
+    for item in closure["evidence"]:
+        if item["sha256"] != hashlib.sha256((ROOT / item["path"]).read_bytes()).hexdigest():
+            raise SystemExit("closure evidence digest mismatch")
+    for collection in ("tests", "reviews"):
+        for item in closure.get(collection, []):
+            if item.get("head") != head or item.get("result", "pass") != "pass" or item.get("critical", 0) != 0 or item.get("important", 0) != 0:
+                raise SystemExit("closure %s record is not clean and head-bound" % collection)
+    if len(closure.get("reviews", [])) != 2 or len({item["checkpoint"] for item in closure["reviews"]}) != 2:
+        raise SystemExit("two independent checkpointed reviews are required")
+    return 0
+
 
 def main(argv):
+    if len(argv) == 5 and argv[1] == "--generate":
+        return generate(argv[2], argv[3], Path(argv[4]))
     if len(argv) != 3:
-        raise SystemExit("usage: validate-activation-closure CLOSURE.json HEAD")
-    path, head = Path(argv[1]), argv[2]
-    closure = json.loads(path.read_text(encoding="utf-8"))
-    if closure["final"]["sha"] != head:
-        raise SystemExit("closure final SHA mismatch")
-    if subprocess.check_output(["git", "rev-parse", head], text=True).strip() != head:
-        raise SystemExit("unknown head")
-    seen = set()
-    for record in closure["files"]:
-        name = record["path"]
-        if name in seen or not record["declared"]:
-            raise SystemExit("duplicate or undeclared governed file: %s" % name)
-        seen.add(name)
-        data = subprocess.check_output(["git", "show", "%s:%s" % (head, name)])
-        digest = hashlib.sha256(data).hexdigest()
-        if digest != record["sha256"]:
-            raise SystemExit("file digest mismatch: %s" % name)
-    for validation in closure["validation"]:
-        if validation["head"] != head or validation["result"] != "pass":
-            raise SystemExit("validation is not bound to the final head")
-    for review in closure["reviews"]:
-        if review["head"] != head or review["critical"] != 0 or review["important"] != 0:
-            raise SystemExit("review is not clean and head-bound")
-    return 0
+        raise SystemExit("usage: validate-activation-closure CLOSURE.json ATTESTED_HEAD\n"
+                         "   or: validate-activation-closure --generate BASE HEAD RECORDS.json")
+    return validate(Path(argv[1]), argv[2])
 
 
 if __name__ == "__main__":

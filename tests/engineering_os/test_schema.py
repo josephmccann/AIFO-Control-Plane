@@ -120,6 +120,16 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("SCHEMA_CONST", codes)
         self.assertIn("SCHEMA_FIELD_REQUIRED", codes)
 
+    def test_activation_schema_accepts_closed_identity_and_rejects_nested_extras(self):
+        from tests.engineering_os.test_activation_ledger import ActivationLedgerTests
+        fixture = ActivationLedgerTests()
+        fixture.setUp()
+        event = fixture.chain([fixture.auth()])[0]
+        self.assertEqual(validate_document("audit-event", event), [])
+        event["details"]["mission_issue_identity"]["copied_from"] = 27
+        codes = {item.code for item in validate_document("audit-event", event)}
+        self.assertIn("SCHEMA_ADDITIONAL_PROPERTY", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

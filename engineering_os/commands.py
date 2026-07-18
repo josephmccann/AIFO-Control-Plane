@@ -72,7 +72,8 @@ _ACTIVATION_ATTEMPTED = "test_integrity.baseline.consumption_attempted"
 _ACTIVATION_CONSUMED = "test_integrity.baseline.consumed"
 _ACTIVATION_EVENTS = frozenset((_ACTIVATION_AUTHORIZED, _ACTIVATION_ATTEMPTED, _ACTIVATION_CONSUMED))
 _ACTIVATION_REQUIRED = frozenset({
-    "repository", "mission_issue", "remediation_head", "remediation_tree",
+    "repository", "mission_issue", "mission_issue_identity", "authorization_provenance",
+    "remediation_head", "remediation_tree",
     "baseline_artifact_sha256", "canonical_inventory_sha256",
     "baseline_generator_identity", "analyzer_identity", "workflow_identity",
     "caller_identity", "immutable_kernel_identity", "manifest_identity",
@@ -81,20 +82,84 @@ _ACTIVATION_REQUIRED = frozenset({
 })
 _CONSUMPTION_REQUIRED = _ACTIVATION_REQUIRED | frozenset({
     "authorization_event_hash", "authorization_sequence", "consumer_identity",
-    "consumed_at", "consumption_result", "post_consumption_state", "attempt_event_hash",
+    "consumer_provenance", "consumed_at", "consumption_result",
+    "post_consumption_state", "attempt_event_hash",
 })
+
+_ISSUE_IDENTITY_REQUIRED = frozenset({
+    "repository", "number", "node_id", "url", "state", "ready_event_hash",
+    "ready_sequence", "ready_declaration_sha256",
+})
+_RUN_PROVENANCE_REQUIRED = frozenset({
+    "repository", "workflow_path", "workflow_ref", "workflow_sha", "run_id",
+    "run_attempt", "job", "actor", "trigger_actor", "event", "head_sha", "head_tree",
+})
+_CONSUMER_IDENTITY_REQUIRED = frozenset({"repository", "workflow_path", "job", "actor"})
+
+
+def _sha(value: Any, length: int) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{%d}" % length, value) is not None
+
+
+def _issue_identity(value: Any, repository: str, mission_issue: int) -> bool:
+    return (
+        isinstance(value, Mapping) and set(value) == _ISSUE_IDENTITY_REQUIRED
+        and value.get("repository") == repository and value.get("number") == mission_issue
+        and isinstance(value.get("node_id"), str) and bool(value["node_id"].strip())
+        and value.get("url") == "https://github.com/%s/issues/%s" % (repository, mission_issue)
+        and value.get("state") == "open" and _sha(value.get("ready_event_hash"), 64)
+        and isinstance(value.get("ready_sequence"), int) and not isinstance(value.get("ready_sequence"), bool)
+        and value["ready_sequence"] > 0 and _sha(value.get("ready_declaration_sha256"), 64)
+    )
+
+
+def _run_provenance(value: Any, repository: str) -> bool:
+    return (
+        isinstance(value, Mapping) and set(value) == _RUN_PROVENANCE_REQUIRED
+        and value.get("repository") == repository
+        and value.get("workflow_path") == ".github/workflows/mission-command.yml"
+        and isinstance(value.get("workflow_ref"), str)
+        and value["workflow_ref"] == "%s/.github/workflows/mission-command.yml@%s" % (
+            repository, value.get("workflow_sha"))
+        and _sha(value.get("workflow_sha"), 40) and _sha(value.get("head_sha"), 40)
+        and _sha(value.get("head_tree"), 40) and value.get("workflow_sha") == value.get("head_sha")
+        and isinstance(value.get("run_id"), int) and not isinstance(value.get("run_id"), bool)
+        and value["run_id"] > 0 and isinstance(value.get("run_attempt"), int)
+        and not isinstance(value.get("run_attempt"), bool) and value["run_attempt"] > 0
+        and value.get("job") in {"prepare", "append"} and value.get("actor") == "github-actions[bot]"
+        and isinstance(value.get("trigger_actor"), str) and bool(value["trigger_actor"].strip())
+        and value.get("event") == "issue_comment"
+    )
+
+
+def _consumer_identity(value: Any, provenance: Any, repository: str) -> bool:
+    return (
+        isinstance(value, Mapping) and set(value) == _CONSUMER_IDENTITY_REQUIRED
+        and isinstance(provenance, Mapping) and value == {
+            "repository": repository,
+            "workflow_path": ".github/workflows/mission-command.yml",
+            "job": provenance.get("job"), "actor": "github-actions[bot]",
+        }
+    )
 
 
 def _activation_tuple(details: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     """Return a strict activation tuple, rejecting extra or malformed fields."""
     if not isinstance(details, Mapping) or set(details) != _ACTIVATION_REQUIRED:
         return None
-    text_fields = _ACTIVATION_REQUIRED - {"mission_issue", "single_use", "founder_authorization_sequence"}
+    text_fields = _ACTIVATION_REQUIRED - {
+        "mission_issue", "single_use", "founder_authorization_sequence",
+        "mission_issue_identity", "authorization_provenance",
+    }
     if any(not isinstance(details[key], str) or not details[key].strip() for key in text_fields):
         return None
     if not isinstance(details["mission_issue"], int) or isinstance(details["mission_issue"], bool):
         return None
     if details["mission_issue"] != 26 or not isinstance(details["single_use"], bool):
+        return None
+    if not _issue_identity(details["mission_issue_identity"], details["repository"], details["mission_issue"]):
+        return None
+    if not _run_provenance(details["authorization_provenance"], details["repository"]):
         return None
     if (not isinstance(details["founder_authorization_sequence"], int)
             or isinstance(details["founder_authorization_sequence"], bool)
@@ -226,7 +291,8 @@ def validate_activation_ledger(
                 not isinstance(details.get("authorization_event_hash"), str)
                 or not isinstance(details.get("authorization_sequence"), int)
                 or isinstance(details.get("authorization_sequence"), bool)
-                or not isinstance(details.get("consumer_identity"), str)
+                or not _run_provenance(details.get("consumer_provenance"), expected["repository"])
+                or not _consumer_identity(details.get("consumer_identity"), details.get("consumer_provenance"), expected["repository"])
                 or not isinstance(details.get("consumed_at"), str)
                 or not isinstance(details.get("consumption_result"), str)
                 or not isinstance(details.get("post_consumption_state"), str)
@@ -247,9 +313,13 @@ def validate_activation_ledger(
         elif event.get("type") == _ACTIVATION_ATTEMPTED:
             if event.get("actor_role") != "system":
                 return False, "ACTIVATION_CONSUMER_INVALID", {}
+            if details.get("consumer_provenance", {}).get("job") != "append":
+                return False, "ACTIVATION_CONSUMER_INVALID", {}
             attempts.append(event)
         else:
             if event.get("actor_role") != "system":
+                return False, "ACTIVATION_CONSUMER_INVALID", {}
+            if details.get("consumer_provenance", {}).get("job") != "append":
                 return False, "ACTIVATION_CONSUMER_INVALID", {}
             consumptions.append(event)
     valid_chain, _chain_code = validate_event_chain([dict(event) for event in events])
@@ -568,13 +638,14 @@ def validate_recovery_run(
 
 
 def validate_activation_run(run: Mapping[str, Any], repository: str, source_url: str,
-                            expected_head_sha: Optional[str] = None) -> bool:
+                            expected_head_sha: Optional[str] = None,
+                            provenance: Optional[Mapping[str, Any]] = None) -> bool:
     """Authenticate the existing mission-command workflow as activation source."""
     if not isinstance(run, Mapping) or not isinstance(repository, str):
         return False
     run_id = run.get("id")
     expected = "https://github.com/%s/actions/runs/%s" % (repository, run_id)
-    return (
+    valid = (
         isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0
         and source_url == expected and run.get("html_url") == expected
         and run.get("path") == ".github/workflows/mission-command.yml"
@@ -582,6 +653,18 @@ def validate_activation_run(run: Mapping[str, Any], repository: str, source_url:
         and isinstance(run.get("repository"), Mapping)
         and run["repository"].get("full_name") == repository
         and (expected_head_sha is None or run.get("head_sha") == expected_head_sha)
+    )
+    if not valid or provenance is None:
+        return valid and provenance is None
+    return (
+        _run_provenance(provenance, repository)
+        and provenance.get("run_id") == run_id
+        and provenance.get("run_attempt") == run.get("run_attempt")
+        and provenance.get("trigger_actor") == run.get("actor", {}).get("login")
+        and provenance.get("event") == run.get("event")
+        and provenance.get("head_sha") == run.get("head_sha")
+        and provenance.get("workflow_sha") == run.get("head_sha")
+        and provenance.get("workflow_path") == run.get("path")
     )
 def effective_limits(mission: Mapping[str, Any], policy: Mapping[str, Any]) -> Dict[str, Any]:
     """Return the most restrictive declared mission/repository cap per resource."""
@@ -730,8 +813,12 @@ def authenticate_event_history(
             matching_runs = [run for run in actions_runs if run.get("html_url") == source_url]
             if not matching_runs:
                 return _deny_history("EVENT_SYSTEM_RUN_NOT_FOUND", accepted, projection)
+            provenance = event.get("details", {}).get(
+                "consumer_provenance" if event_type in {_ACTIVATION_ATTEMPTED, _ACTIVATION_CONSUMED}
+                else "authorization_provenance"
+            )
             run_valid = (
-                validate_activation_run(matching_runs[0], repository, source_url)
+                validate_activation_run(matching_runs[0], repository, source_url, provenance=provenance)
                 if event_type in _ACTIVATION_EVENTS
                 else validate_recovery_run(matching_runs[0], repository, source_url, policy)
             )
@@ -756,6 +843,27 @@ def authenticate_event_history(
             nonce_key = "activation_nonce" if event_type in _ACTIVATION_EVENTS else "lease_nonce"
             if arguments and str(event.get("details", {}).get(nonce_key, "")).strip() != arguments[0].strip():
                 return _deny_history("EVENT_NONCE_MISMATCH", accepted, projection)
+
+            if event_type == _ACTIVATION_AUTHORIZED:
+                details = event.get("details", {})
+                identity = details.get("mission_issue_identity")
+                ready = next((item for item in accepted if item.get("type") == "mission.ready"), None)
+                if (
+                    not _issue_identity(identity, repository, 26)
+                    or not re.match(r"^https://github\.com/%s/issues/26#issuecomment-" % re.escape(repository), source_url)
+                    or ready is None
+                    or identity.get("ready_event_hash") != ready.get("event_hash")
+                    or identity.get("ready_sequence") != ready.get("sequence")
+                    or identity.get("ready_declaration_sha256") != ready.get("details", {}).get("mission_sha256")
+                ):
+                    return _deny_history("ACTIVATION_ISSUE_IDENTITY_INVALID", accepted, projection)
+                provenance = details.get("authorization_provenance")
+                matching = [run for run in actions_runs if run.get("id") == provenance.get("run_id")] if isinstance(provenance, Mapping) else []
+                run_url = "https://github.com/%s/actions/runs/%s" % (repository, provenance.get("run_id")) if isinstance(provenance, Mapping) else ""
+                if len(matching) != 1 or not validate_activation_run(
+                    matching[0], repository, run_url, provenance=provenance
+                ):
+                    return _deny_history("ACTIVATION_WORKFLOW_PROVENANCE_INVALID", accepted, projection)
 
         if event_type in {"mission.ready", "mission.claimed"} and validate_ready(dict(mission)):
             return _deny_history("MISSION_NOT_READY", accepted, projection)
@@ -976,16 +1084,19 @@ def authorize_command_proposal(
             policy,
         )
         return ProposalDecision(False, denied.code)
+    if event_type in _ACTIVATION_EVENTS:
+        provenance_key = "consumer_provenance" if activation_system_event else "authorization_provenance"
+        provenance = activation.get(provenance_key) if isinstance(activation, Mapping) else None
+        if not isinstance(activation_source_url, str) or not any(
+            validate_activation_run(run, repository, activation_source_url, provenance=provenance)
+            for run in actions_runs
+        ):
+            return ProposalDecision(False, "ACTIVATION_WORKFLOW_PROVENANCE_INVALID")
     if activation_system_event:
         # The founder command authorizes intent; only the authenticated current
         # mission-command run may emit the system lifecycle event.
         if "founder" not in roles:
             return ProposalDecision(False, "ACTIVATION_AUTHORITY_INVALID")
-        if not isinstance(activation_source_url, str) or not any(
-            validate_activation_run(run, repository, activation_source_url)
-            for run in actions_runs
-        ):
-            return ProposalDecision(False, "ACTIVATION_WORKFLOW_PROVENANCE_INVALID")
         role = "system"
     if event_type in {"mission.ready", "mission.claimed"} and validate_ready(dict(mission)):
         return ProposalDecision(False, "MISSION_NOT_READY")
@@ -1067,14 +1178,20 @@ def authorize_command_proposal(
                 event_details.update({
                     "authorization_event_hash": prior_auth.get("event_hash"),
                     "authorization_sequence": prior_auth.get("sequence"),
-                    "consumer_identity": "github-actions[bot]/mission-command",
+                    "consumer_identity": {
+                        "repository": repository,
+                        "workflow_path": ".github/workflows/mission-command.yml",
+                        "job": event_details.get("consumer_provenance", {}).get("job"),
+                        "actor": "github-actions[bot]",
+                    },
                     "consumed_at": occurred_at,
                     "consumption_result": "attempted" if event_type == _ACTIVATION_ATTEMPTED else "activated",
                     "post_consumption_state": "locked" if event_type == _ACTIVATION_ATTEMPTED else "active",
                     "attempt_event_hash": next((item.get("event_hash") for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), ""),
                 })
             try:
-                build_activation_event(event_type, event_details, actor="system", actor_role=role,
+                build_activation_event(event_type, event_details,
+                                       actor="system" if activation_system_event else actor, actor_role=role,
                                        occurred_at=occurred_at, source_url=activation_source_url,
                                        authorization_event=next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None),
                                        attempt_event=next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None))

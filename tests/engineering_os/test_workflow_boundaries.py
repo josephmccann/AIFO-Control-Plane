@@ -17,9 +17,6 @@ KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
 KERNEL_ACTION_SHA = "29eaa5811c6d161b17299ed177690343106cb31f"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
-    "docs/engineering-os/ENGINEERING_CONSTITUTION.md",
-    "scripts/engineering-os",
-    "schemas/engineering-os",
 )
 DEMO_CALLER_PATHS = {
     "reusable-airtable-mirror.yml": ".github/workflows/eos-airtable-mirror.yml",
@@ -973,6 +970,17 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             'if event["type"] == "test_integrity.baseline.authorized" and not ok:',
             workflow,
         )
+
+    def test_activation_boundary_binds_issue_checkout_run_attempt_and_consumer(self):
+        workflow = self.read("mission-command.yml")
+        for required in (
+            '"node_id": issue["node_id"]', '"ready_event_hash": ready["event_hash"]',
+            '"run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"])',
+            '"head_tree": tree', '"trigger_actor": os.environ["GITHUB_ACTOR"]',
+            'details["consumer_provenance"] = provenance',
+            'raise SystemExit("activation checkout/run provenance changed before append")',
+        ):
+            self.assertIn(required, workflow)
 
 
 if __name__ == "__main__":

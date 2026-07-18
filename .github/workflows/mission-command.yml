@@ -92,6 +92,7 @@ jobs:
         env:
           COMMAND_URL: ${{ github.event.comment.html_url }}
           COMMAND_BODY: ${{ github.event.comment.body }}
+          GITHUB_EVENT_ISSUE: ${{ toJSON(github.event.issue) }}
         run: |
           python3 -m engineering_os.commands authenticate-event-history \
             --comments "$RUNNER_TEMP/comments.json" \
@@ -121,8 +122,32 @@ jobs:
               raise SystemExit("invalid activation command")
           nonce = parsed[1][0]
           events = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events.json"), encoding="utf-8"))
+          ready = next((event for event in events if event.get("type") == "mission.ready"), None)
+          if ready is None:
+              raise SystemExit("authenticated Mission 26 Ready event is required")
+          import subprocess
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+          issue = json.loads(os.environ["GITHUB_EVENT_ISSUE"])
+          provenance = {
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "workflow_path": ".github/workflows/mission-command.yml",
+              "workflow_ref": "%s/.github/workflows/mission-command.yml@%s" % (os.environ["GITHUB_REPOSITORY"], head),
+              "workflow_sha": head, "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "job": "prepare" if parsed[0] == "authorize-baseline" else "append",
+              "actor": "github-actions[bot]", "trigger_actor": os.environ["GITHUB_ACTOR"],
+              "event": "issue_comment", "head_sha": head, "head_tree": tree,
+          }
           details = {
               "repository": "josephmccann/AIFO-Control-Plane", "mission_issue": 26,
+              "mission_issue_identity": {
+                  "repository": os.environ["GITHUB_REPOSITORY"], "number": issue["number"],
+                  "node_id": issue["node_id"], "url": issue["html_url"], "state": issue["state"],
+                  "ready_event_hash": ready["event_hash"], "ready_sequence": ready["sequence"],
+                  "ready_declaration_sha256": ready["details"]["mission_sha256"],
+              },
+              "authorization_provenance": provenance,
               "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
               "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
               "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
@@ -145,6 +170,7 @@ jobs:
               details = dict(existing["details"])
               if details.get("activation_nonce") != nonce:
                   raise SystemExit("activation nonce does not match the authorized tuple")
+              details["consumer_provenance"] = provenance
           json.dump(details, open(os.path.join(os.environ["RUNNER_TEMP"], "activation.json"), "w"), sort_keys=True)
           PY
             activation_args=(--activation "$RUNNER_TEMP/activation.json")
@@ -224,6 +250,22 @@ jobs:
           if not decision.allowed or decision.projection.violations:
               raise SystemExit("pre-append history rejected: %s" % decision.code)
           if event["type"].startswith("test_integrity.baseline."):
+              identity = event["details"].get("mission_issue_identity", {})
+              if identity != {
+                  **identity, "repository": os.environ["GITHUB_REPOSITORY"],
+                  "number": issue.get("number"), "node_id": issue.get("node_id"),
+                  "url": issue.get("html_url"), "state": issue.get("state"),
+              }:
+                  raise SystemExit("activation issue identity is stale or contradictory")
+              provenance = event["details"].get(
+                  "consumer_provenance" if event["type"] != "test_integrity.baseline.authorized"
+                  else "authorization_provenance", {})
+              import subprocess
+              if (provenance.get("head_sha") != subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+                      or provenance.get("head_tree") != subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+                      or provenance.get("run_id") != int(os.environ["GITHUB_RUN_ID"])
+                      or provenance.get("run_attempt") != int(os.environ["GITHUB_RUN_ATTEMPT"])):
+                  raise SystemExit("activation checkout/run provenance changed before append")
               activation = next((item for item in decision.events if item.get("type") == "test_integrity.baseline.authorized"), None)
               if event["type"] != "test_integrity.baseline.authorized" and activation is None:
                   raise SystemExit("activation authorization missing at append boundary")

@@ -10,6 +10,13 @@ class ActivationLedgerTests(unittest.TestCase):
         self.activation = {
             "repository": "josephmccann/AIFO-Control-Plane",
             "mission_issue": 26,
+            "mission_issue_identity": {
+                "repository": "josephmccann/AIFO-Control-Plane", "number": 26,
+                "node_id": "I_kwDOmission26", "url": "https://github.com/josephmccann/AIFO-Control-Plane/issues/26",
+                "state": "open", "ready_event_hash": "1" * 64, "ready_sequence": 1,
+                "ready_declaration_sha256": "2" * 64,
+            },
+            "authorization_provenance": self.provenance(1, "prepare"),
             "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
             "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
             "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
@@ -28,6 +35,15 @@ class ActivationLedgerTests(unittest.TestCase):
             "founder_authorization_sequence": 42,
         }
 
+    def provenance(self, run_id, job):
+        sha = "3" * 40
+        return {"repository": "josephmccann/AIFO-Control-Plane",
+                "workflow_path": ".github/workflows/mission-command.yml",
+                "workflow_ref": "josephmccann/AIFO-Control-Plane/.github/workflows/mission-command.yml@%s" % sha,
+                "workflow_sha": sha, "run_id": run_id, "run_attempt": 1, "job": job,
+                "actor": "github-actions[bot]", "trigger_actor": "josephmccann", "event": "issue_comment",
+                "head_sha": sha, "head_tree": "4" * 40}
+
     def auth(self):
         return {"type": "test_integrity.baseline.authorized", "actor_role": "founder",
                 "schema_version": "1.0.0", "mission_id": "mission-26",
@@ -40,7 +56,10 @@ class ActivationLedgerTests(unittest.TestCase):
         details = copy.deepcopy(self.activation)
         details.update({"authorization_event_hash": auth["event_hash"],
                         "authorization_sequence": auth["sequence"],
-                        "consumer_identity": "github-actions[bot]/test-integrity",
+                        "consumer_provenance": self.provenance(2, "append"),
+                        "consumer_identity": {"repository": self.activation["repository"],
+                                              "workflow_path": ".github/workflows/mission-command.yml",
+                                              "job": "append", "actor": "github-actions[bot]"},
                         "consumed_at": "2026-07-17T20:00:00Z",
                         "consumption_result": "activated",
                         "post_consumption_state": "active"})
@@ -54,11 +73,14 @@ class ActivationLedgerTests(unittest.TestCase):
         details = copy.deepcopy(self.activation)
         details.update({"authorization_event_hash": auth["event_hash"],
                         "authorization_sequence": auth["sequence"],
-                        "consumer_identity": "github-actions[bot]/test-integrity",
+                        "consumer_provenance": self.provenance(2, "append"),
+                        "consumer_identity": {"repository": self.activation["repository"],
+                                              "workflow_path": ".github/workflows/mission-command.yml",
+                                              "job": "append", "actor": "github-actions[bot]"},
                         "consumed_at": "2026-07-17T20:00:00Z",
                         "consumption_result": "attempted",
                         "post_consumption_state": "locked",
-                        "attempt_event_hash": "0" * 64})
+                        "attempt_event_hash": ""})
         return {"type": "test_integrity.baseline.consumption_attempted", "actor_role": "system",
                 "schema_version": "1.0.0", "mission_id": "mission-26",
                 "actor": "system", "occurred_at": "2026-07-17T20:00:00Z",
@@ -134,6 +156,22 @@ class ActivationLedgerTests(unittest.TestCase):
                                        repository=self.activation["repository"])[1],
             "ACTIVATION_HISTORY_INVALID",
         )
+
+    def test_identity_and_provenance_are_closed_and_canonical(self):
+        for field, value in (
+            ("mission_issue_identity", {**self.activation["mission_issue_identity"], "number": 27}),
+            ("authorization_provenance", {**self.activation["authorization_provenance"], "run_attempt": 0}),
+        ):
+            candidate = copy.deepcopy(self.activation)
+            candidate[field] = value
+            self.assertEqual(validate_activation_ledger([], candidate,
+                repository=self.activation["repository"])[1], "ACTIVATION_TUPLE_INVALID")
+        auth = self.chain([self.auth()])[0]
+        attempt = self.attempt(auth)
+        attempt["details"]["consumer_identity"]["job"] = "prepare"
+        self.chain([auth, attempt])
+        self.assertEqual(validate_activation_ledger([auth, attempt], self.activation,
+            repository=self.activation["repository"])[1], "ACTIVATION_TUPLE_MISMATCH")
         malformed = copy.deepcopy(auth)
         malformed["sequence"] = 0
         self.assertEqual(

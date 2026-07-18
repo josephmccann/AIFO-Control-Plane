@@ -66,6 +66,8 @@ def generate(base, head, records_path):
 
 def validate(path, head):
     closure = json.loads(path.read_text(encoding="utf-8"))
+    if set(closure) != {"schema_version", "mission", "base", "final", "files", "edges", "pins", "tests", "evidence", "reviews"}:
+        raise SystemExit("closure top-level structure is not closed")
     mission = closure.get("mission", {})
     allowed = set(mission.get("allowed_paths", []))
     declaration_sha = declaration_sha256()
@@ -101,11 +103,15 @@ def validate(path, head):
     if closure.get("pins") != expected_pins:
         raise SystemExit("closure transport pin set is missing, extra, or stale")
     if {item.get("path") for item in closure.get("evidence", [])} != {
-        "outputs/mission-31-analysis/implementation-plan.md", "outputs/mission-31-analysis/state-record.md"}:
+        "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md"}:
         raise SystemExit("closure evidence set is incomplete")
     for item in closure["evidence"]:
         if item["sha256"] != hashlib.sha256((ROOT / item["path"]).read_bytes()).hexdigest():
             raise SystemExit("closure evidence digest mismatch")
+    if not closure.get("tests") or len(closure.get("reviews", [])) != 2:
+        raise SystemExit("closure requires tests and two reviews")
+    reviewers = set()
+    report_paths = set()
     for collection in ("tests", "reviews"):
         for item in closure.get(collection, []):
             if item.get("head") != head or item.get("result", "pass") != "pass" or item.get("critical", 0) != 0 or item.get("important", 0) != 0:
@@ -115,11 +121,15 @@ def validate(path, head):
             if not isinstance(evidence_path, str) or not isinstance(evidence_sha, str):
                 raise SystemExit("closure %s record lacks durable evidence binding" % collection)
             evidence_file = ROOT / evidence_path
-            if evidence_file.is_file():
-                if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
-                    raise SystemExit("closure %s evidence is stale" % collection)
-            elif not evidence_path.startswith("outputs/mission-31-review/"):
+            if not evidence_file.is_file():
                 raise SystemExit("closure %s evidence is missing" % collection)
+            if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
+                raise SystemExit("closure %s evidence is stale" % collection)
+            if collection == "reviews":
+                if item["reviewer"] in reviewers or evidence_path in report_paths:
+                    raise SystemExit("closure reviews are not independent")
+                reviewers.add(item["reviewer"])
+                report_paths.add(evidence_path)
     if len(closure.get("reviews", [])) != 2 or len({item["checkpoint"] for item in closure["reviews"]}) != 2:
         raise SystemExit("two independent checkpointed reviews are required")
     return 0

@@ -24,7 +24,7 @@ class ActivationClosureTests(unittest.TestCase):
             data = subprocess.check_output(["git", "show", "%s:%s" % (SUBJECT, path)], cwd=ROOT)
             files.append({"path": path, "sha256": hashlib.sha256(data).hexdigest(), "reason": "Mission 31 closure"})
         evidence = []
-        for path in ("outputs/mission-31-analysis/implementation-plan.md", "outputs/mission-31-analysis/state-record.md"):
+        for path in ("docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md"):
             evidence.append({"path": path, "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest()})
         return {
             "schema_version": "1.0.0",
@@ -38,16 +38,16 @@ class ActivationClosureTests(unittest.TestCase):
             "files": files,
             "edges": [{"from": paths[1], "to": paths[0], "kind": "validates"}],
             "pins": [], "tests": [{"command": "focused", "result": "pass", "head": SUBJECT,
-                "evidence_path": "outputs/mission-31-analysis/implementation-plan.md",
-                "evidence_sha256": hashlib.sha256((ROOT / "outputs/mission-31-analysis/implementation-plan.md").read_bytes()).hexdigest()}],
+                "evidence_path": "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
+                "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
             "evidence": evidence,
             "reviews": [
                 {"reviewer": "review-a", "checkpoint": "1" * 64, "head": SUBJECT, "critical": 0, "important": 0,
                  "report_path": "outputs/mission-31-review/reviewer-a/final-review.md",
                  "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/reviewer-a/final-review.md").read_bytes()).hexdigest()},
                 {"reviewer": "review-b", "checkpoint": "2" * 64, "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/reviewer-a/final-review.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/reviewer-a/final-review.md").read_bytes()).hexdigest()},
+                 "report_path": "outputs/mission-31-review/reviewer-b/final-review.md",
+                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/reviewer-b/final-review.md").read_bytes()).hexdigest()},
             ],
         }
 

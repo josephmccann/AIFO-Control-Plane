@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Validate a Mission #31 activation closure artifact against one exact tree."""
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main(argv):
+    if len(argv) != 3:
+        raise SystemExit("usage: validate-activation-closure CLOSURE.json HEAD")
+    path, head = Path(argv[1]), argv[2]
+    closure = json.loads(path.read_text(encoding="utf-8"))
+    if closure["final"]["sha"] != head:
+        raise SystemExit("closure final SHA mismatch")
+    if subprocess.check_output(["git", "rev-parse", head], text=True).strip() != head:
+        raise SystemExit("unknown head")
+    seen = set()
+    for record in closure["files"]:
+        name = record["path"]
+        if name in seen or not record["declared"]:
+            raise SystemExit("duplicate or undeclared governed file: %s" % name)
+        seen.add(name)
+        data = subprocess.check_output(["git", "show", "%s:%s" % (head, name)])
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != record["sha256"]:
+            raise SystemExit("file digest mismatch: %s" % name)
+    for validation in closure["validation"]:
+        if validation["head"] != head or validation["result"] != "pass":
+            raise SystemExit("validation is not bound to the final head")
+    for review in closure["reviews"]:
+        if review["head"] != head or review["critical"] != 0 or review["important"] != 0:
+            raise SystemExit("review is not clean and head-bound")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

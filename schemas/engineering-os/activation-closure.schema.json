@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.getaifo.com/engineering-os/v1/activation-closure.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission", "base", "final", "files", "edges", "validation", "reviews"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "mission": {"type": "object", "additionalProperties": false, "required": ["repository", "issue", "ready_declaration_sha256"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "issue": {"const": 31}, "ready_declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "base": {"type": "object", "additionalProperties": false, "required": ["sha", "tree"], "properties": {"sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "final": {"type": "object", "additionalProperties": false, "required": ["sha", "tree"], "properties": {"sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "files": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "declared", "reason"], "properties": {"path": {"type": "string", "pattern": "^[^/].*"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "declared": {"type": "boolean"}, "reason": {"type": "string", "minLength": 1}}}},
+    "edges": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["from", "to", "kind"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "kind": {"enum": ["source", "materializes", "pins", "tests", "documents", "validates"]}}}},
+    "validation": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "result", "head"], "properties": {"name": {"type": "string"}, "result": {"const": "pass"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}}},
+    "reviews": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "head", "critical", "important"], "properties": {"path": {"type": "string"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "critical": {"const": 0}, "important": {"const": 0}}}}
+  }
+}

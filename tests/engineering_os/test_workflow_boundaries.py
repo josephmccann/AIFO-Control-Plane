@@ -965,6 +965,15 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("eos-airtable-mirror.yml", architecture)
         self.assertIn("Control Plane test-integrity caller", architecture)
 
+    def test_activation_append_boundary_rejects_every_invalid_lifecycle_event(self):
+        workflow = self.read("mission-command.yml")
+        guard = 'if not ok:\n                      raise SystemExit(code)'
+        self.assertIn(guard, workflow)
+        self.assertNotIn(
+            'if event["type"] == "test_integrity.baseline.authorized" and not ok:',
+            workflow,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

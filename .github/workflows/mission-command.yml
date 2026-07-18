@@ -230,7 +230,7 @@ jobs:
                       list(decision.events), activation["details"],
                       repository=os.environ["GITHUB_REPOSITORY"],
                   )
-                  if event["type"] == "test_integrity.baseline.authorized" and not ok:
+                  if not ok:
                       raise SystemExit(code)
           PY
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$body" >/dev/null

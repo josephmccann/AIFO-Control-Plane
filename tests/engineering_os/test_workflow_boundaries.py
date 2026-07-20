@@ -966,6 +966,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         workflow = self.read("mission-command.yml")
         guard = 'if not ok:\n                      raise SystemExit(code)'
         self.assertIn(guard, workflow)
+        self.assertNotIn("activation lifecycle requires a separately authorized activation mission", workflow)
         self.assertNotIn(
             'if event["type"] == "test_integrity.baseline.authorized" and not ok:',
             workflow,

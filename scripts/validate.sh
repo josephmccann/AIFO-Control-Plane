@@ -16,7 +16,36 @@ echo "Checking Engineering OS Python syntax."
 python3 -m py_compile "$ROOT_DIR"/engineering_os/*.py
 
 echo "Checking shell syntax."
-bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/engineering-os/* "$ROOT_DIR"/tests/*.sh
+SHELL_FILES=()
+PYTHON_FILES=()
+while IFS= read -r -d '' file; do
+  first_line=""
+  IFS= read -r first_line < "$file" || true
+  case "$file" in
+    *.sh) SHELL_FILES+=("$file") ;;
+    *.py) PYTHON_FILES+=("$file") ;;
+    *)
+      case "$first_line" in
+        '#!'*'/bash'|'#!'*'/sh'|'#!'*'/dash'|'#!'*'/ksh') SHELL_FILES+=("$file") ;;
+        '#!'*'/python'|'#!'*'/python3'|'#!'*'/python3.'*) PYTHON_FILES+=("$file") ;;
+        *)
+          if [[ -x "$file" ]]; then
+            echo "Unclassified executable script: ${file#"$ROOT_DIR"/}" >&2
+            exit 1
+          fi
+          ;;
+      esac
+      ;;
+  esac
+done < <(find "$ROOT_DIR/scripts" "$ROOT_DIR/tests" -type f -print0)
+
+if (( ${#SHELL_FILES[@]} > 0 )); then
+  bash -n "${SHELL_FILES[@]}"
+fi
+
+if (( ${#PYTHON_FILES[@]} > 0 )); then
+  python3 -m py_compile "${PYTHON_FILES[@]}"
+fi
 
 if ! command -v terraform >/dev/null 2>&1; then
   echo "Terraform is required for validation." >&2
@@ -36,7 +65,9 @@ done
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "Running shellcheck."
-  shellcheck "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/engineering-os/* "$ROOT_DIR"/tests/*.sh
+  if (( ${#SHELL_FILES[@]} > 0 )); then
+    shellcheck "${SHELL_FILES[@]}"
+  fi
 else
   MISSING_LINTERS+=("shellcheck")
 fi

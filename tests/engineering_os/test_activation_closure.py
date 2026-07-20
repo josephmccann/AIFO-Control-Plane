@@ -24,7 +24,8 @@ class ActivationClosureTests(unittest.TestCase):
         for path in sorted(path for path in paths if path.startswith(".github/workflows/")):
             content = subprocess.check_output(["git", "show", "%s:%s" % (SUBJECT, path)], cwd=ROOT, text=True)
             pins.extend({"consumer": path, "sha": sha} for sha in sorted(set(pattern.findall(content))))
-        allowed = sorted(set(paths) | {"docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"})
+        declaration = (ROOT / "outputs/successor-mission-declaration.md").read_text()
+        allowed = sorted(json.loads(re.search(r"<!-- EOS:MISSION:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:MISSION:END -->", declaration, re.S).group(1))["allowed_paths"])
         files = []
         for path in paths:
             data = subprocess.check_output(["git", "show", "%s:%s" % (SUBJECT, path)], cwd=ROOT)

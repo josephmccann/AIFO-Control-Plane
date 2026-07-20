@@ -131,6 +131,15 @@ class SchemaTests(unittest.TestCase):
         codes = {item.code for item in validate_document("audit-event", event)}
         self.assertIn("SCHEMA_ADDITIONAL_PROPERTY", codes)
 
+    def test_activation_schema_rejects_malformed_consumption_timestamp(self):
+        from tests.engineering_os.test_activation_ledger import ActivationLedgerTests
+        fixture = ActivationLedgerTests(); fixture.setUp()
+        event = fixture.chain([fixture.auth()])[0]
+        event["type"] = "test_integrity.baseline.consumed"
+        event["details"]["consumed_at"] = "not-a-timestamp"
+        codes = {item.code for item in validate_document("audit-event", event)}
+        self.assertIn("SCHEMA_FORMAT", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

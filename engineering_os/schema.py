@@ -3,6 +3,7 @@
 import json
 import math
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -74,6 +75,15 @@ def _walk(schema: Dict[str, Any], value: Any, path: str, kind: str) -> Iterable[
     if isinstance(value, float) and not math.isfinite(value):
         yield _violation("SCHEMA_NUMBER_NOT_FINITE", "JSON numbers must be finite", path)
         return
+
+    if schema.get("format") == "date-time":
+        if not isinstance(value, str) or not value.endswith("Z"):
+            yield _violation("SCHEMA_FORMAT", "value must be an RFC3339 UTC date-time", path)
+        else:
+            try:
+                datetime.fromisoformat(value[:-1] + "+00:00")
+            except ValueError:
+                yield _violation("SCHEMA_FORMAT", "value must be an RFC3339 UTC date-time", path)
 
     for clause in schema.get("allOf", []):
         condition = clause.get("if") if isinstance(clause, dict) else None

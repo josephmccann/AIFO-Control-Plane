@@ -155,11 +155,20 @@ def validate(path, head):
                 if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
                     raise SystemExit("closure review evidence is stale")
                 report = evidence_file.read_text(encoding="utf-8")
-                if (head not in report or re.search(r"(?m)^Critical:\s*0\s*$", report) is None
+                reviewer_match = re.search(r"(?m)^Reviewer:\s*(\S+)\s*$", report)
+                head_match = re.search(r"(?m)^HEAD:\s*`([0-9a-f]{40})`\s*$", report)
+                checkpoint_match = re.search(r"(?m)^Checkpoint:\s*([0-9a-f]{64})\s*$", report)
+                canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
+                expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
+                if (reviewer_match is None or reviewer_match.group(1) != item.get("reviewer")
+                        or head_match is None or head_match.group(1) != head
+                        or checkpoint_match is None or checkpoint_match.group(1) != expected_checkpoint
+                        or item.get("checkpoint") != expected_checkpoint
+                        or re.search(r"(?m)^Critical:\s*0\s*$", report) is None
                         or re.search(r"(?m)^Important:\s*0\s*$", report) is None
                         or re.search(r"(?m)^PASS\s*$", report) is None
-                        or re.search(r"(?m)^FAIL\s*$", report) is not None
-                        or item.get("checkpoint") not in report):
+                        or re.search(r"(?m)^(?:Critical|Important):\s*[1-9]\d*\s*$", report) is not None
+                        or re.search(r"(?m)^(?:FAIL|Verdict:\s*FAIL)\s*$", report) is not None):
                     raise SystemExit("closure review report is not head-bound")
             else:
                 if item.get("command") == "fixture":

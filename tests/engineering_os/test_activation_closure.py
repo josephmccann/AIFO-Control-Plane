@@ -51,10 +51,10 @@ class ActivationClosureTests(unittest.TestCase):
                 "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
             "evidence": evidence,
             "reviews": [
-                {"reviewer": "test-a", "checkpoint": "1" * 64, "head": SUBJECT, "critical": 0, "important": 0,
+                {"reviewer": "test-a", "checkpoint": "a60da2d8832bed1629da2bbf55c5f153663b1363a4a174af68bf7b0ab184ca51", "head": SUBJECT, "critical": 0, "important": 0,
                  "report_path": "outputs/mission-31-review/test-a.md",
                  "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/test-a.md").read_bytes()).hexdigest()},
-                {"reviewer": "test-b", "checkpoint": "2" * 64, "head": SUBJECT, "critical": 0, "important": 0,
+                {"reviewer": "test-b", "checkpoint": "d36074d9c42ab770bbe4929021310ae75d6943a522b872ed6a5768a85a01f29f", "head": SUBJECT, "critical": 0, "important": 0,
                  "report_path": "outputs/mission-31-review/test-b.md",
                  "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/test-b.md").read_bytes()).hexdigest()},
             ],

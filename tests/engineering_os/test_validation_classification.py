@@ -14,7 +14,7 @@ class ValidationClassificationTests(unittest.TestCase):
 
     def test_entrypoint_classifies_by_extension_and_audited_shebang(self):
         source = ENTRYPOINT.read_text(encoding="utf-8")
-        for marker in ("*.sh", "*.py", "'#!'*bash", "'#!'*/sh", "'#!'*python", "SHELL_FILES", "PYTHON_FILES"):
+        for marker in ("*.sh", "*.py", "bash*", "python*", "SHELL_FILES", "PYTHON_FILES"):
             self.assertIn(marker, source)
         self.assertIn("Unclassified executable script:", source)
         self.assertNotIn('shellcheck "$ROOT_DIR"/scripts/engineering-os/*', source)

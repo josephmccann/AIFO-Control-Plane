@@ -64,7 +64,7 @@ def generate(base, head, records_path):
         "final": {"sha": head, "tree": git("rev-parse", "%s^{tree}" % head)},
     "files": [{"path": path, "sha256": digest_at(head, path), "reason": "Mission 31 implementation"} for path in changed if path != CLOSURE_PATH],
         "edges": edges, "pins": pins, "tests": records["tests"],
-        "evidence": [{"path": path, "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest()} for path in evidence_paths],
+        "evidence": [{"path": path, "sha256": digest_at(head, path)} for path in evidence_paths],
         "reviews": records["reviews"],
     }
     print(json.dumps(closure, sort_keys=True, indent=2))
@@ -160,7 +160,13 @@ def validate(path, head):
                 checkpoint_match = re.search(r"(?m)^Checkpoint:\s*([0-9a-f]{64})\s*$", report)
                 canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
                 expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
-                if (reviewer_match is None or reviewer_match.group(1) != item.get("reviewer")
+                if (len(re.findall(r"(?m)^Reviewer:\s*\S+\s*$", report)) != 1
+                        or len(re.findall(r"(?m)^HEAD:\s*`[0-9a-f]{40}`\s*$", report)) != 1
+                        or len(re.findall(r"(?m)^Checkpoint:\s*[0-9a-f]{64}\s*$", report)) != 1
+                        or len(re.findall(r"(?m)^Critical:\s*[0-9]+\s*$", report)) != 1
+                        or len(re.findall(r"(?m)^Important:\s*[0-9]+\s*$", report)) != 1
+                        or len(re.findall(r"(?m)^PASS\s*$", report)) != 1
+                        or reviewer_match is None or reviewer_match.group(1) != item.get("reviewer")
                         or head_match is None or head_match.group(1) != head
                         or checkpoint_match is None or checkpoint_match.group(1) != expected_checkpoint
                         or item.get("checkpoint") != expected_checkpoint

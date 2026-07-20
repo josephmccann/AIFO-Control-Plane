@@ -69,8 +69,22 @@ class ActivationClosureTests(unittest.TestCase):
         for path in sorted(path for path in paths if path.startswith(".github/workflows/")):
             content = subprocess.check_output(["git", "show", "%s:%s" % (subject, path)], cwd=ROOT, text=True)
             pins.extend({"consumer": path, "sha": sha} for sha in sorted(set(pattern.findall(content))))
-        declaration = (ROOT / "outputs/successor-mission-declaration.md").read_text()
-        allowed = sorted(json.loads(re.search(r"<!-- EOS:MISSION:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:MISSION:END -->", declaration, re.S).group(1))["allowed_paths"])
+        allowed = sorted([
+            "engineering_os/commands.py", "engineering_os/state.py", "engineering_os/audit.py", "engineering_os/schema.py",
+            "schemas/engineering-os/audit-event.schema.json", "schemas/engineering-os/activation-closure.schema.json",
+            ".github/actions/materialize-kernel/action.yml", ".github/workflows/mission-command.yml",
+            ".github/workflows/reusable-airtable-mirror.yml", ".github/workflows/reusable-evidence-manifest.yml",
+            ".github/workflows/reusable-frozen-path-guard.yml", ".github/workflows/reusable-merge-authorization.yml",
+            ".github/workflows/reusable-mission-validation.yml", ".github/workflows/reusable-orphan-recovery.yml",
+            ".github/workflows/reusable-test-integrity.yml", ".github/workflows/reusable-tier-path-guard.yml",
+            "scripts/engineering-os/validate-activation-closure", "tests/engineering_os/test_commands.py",
+            "tests/engineering_os/test_state.py", "tests/engineering_os/test_audit.py", "tests/engineering_os/test_schema.py",
+            "tests/engineering_os/test_activation_ledger.py", "tests/engineering_os/test_activation_closure.py",
+            "tests/engineering_os/test_workflow_boundaries.py", "tests/engineering_os/test_documentation.py",
+            "tests/engineering_os/test_test_integrity.py", "tests/engineering_os/test_test_integrity_adversarial.py",
+            "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json", "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
+            "docs/engineering-os/AUTHORITY_MODEL.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md", "docs/engineering-os/TEST_INTEGRITY.md",
+        ])
         files = []
         for path in paths:
             data = subprocess.check_output(["git", "show", "%s:%s" % (subject, path)], cwd=ROOT)

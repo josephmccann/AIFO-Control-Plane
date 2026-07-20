@@ -26,8 +26,8 @@ while IFS= read -r -d '' file; do
     *.py) PYTHON_FILES+=("$file") ;;
     *)
       case "$first_line" in
-        '#!'*'/bash'|'#!'*'/sh'|'#!'*'/dash'|'#!'*'/ksh') SHELL_FILES+=("$file") ;;
-        '#!'*'/python'|'#!'*'/python3'|'#!'*'/python3.'*) PYTHON_FILES+=("$file") ;;
+        '#!'*bash*|'#!'*'/sh'|'#!'*'/dash'|'#!'*'/ksh') SHELL_FILES+=("$file") ;;
+        '#!'*python*|'#!'*'/python'|'#!'*'/python3'|'#!'*'/python3.'*) PYTHON_FILES+=("$file") ;;
         *)
           if [[ -x "$file" ]]; then
             echo "Unclassified executable script: ${file#"$ROOT_DIR"/}" >&2

@@ -51,12 +51,12 @@ class ActivationClosureTests(unittest.TestCase):
                 "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
             "evidence": evidence,
             "reviews": [
-                {"reviewer": "review-a", "checkpoint": "1" * 64, "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/frozen-a/final-review-c0.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/frozen-a/final-review-c0.md").read_bytes()).hexdigest()},
-                {"reviewer": "review-b", "checkpoint": "2" * 64, "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/frozen-b/final-review-c0.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/frozen-b/final-review-c0.md").read_bytes()).hexdigest()},
+                {"reviewer": "test-a", "checkpoint": "1" * 64, "head": SUBJECT, "critical": 0, "important": 0,
+                 "report_path": "outputs/mission-31-review/test-a.md",
+                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/test-a.md").read_bytes()).hexdigest()},
+                {"reviewer": "test-b", "checkpoint": "2" * 64, "head": SUBJECT, "critical": 0, "important": 0,
+                 "report_path": "outputs/mission-31-review/test-b.md",
+                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/test-b.md").read_bytes()).hexdigest()},
             ],
         }
 

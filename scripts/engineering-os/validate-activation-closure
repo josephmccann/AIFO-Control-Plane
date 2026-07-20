@@ -155,7 +155,9 @@ def validate(path, head):
                 if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
                     raise SystemExit("closure review evidence is stale")
                 report = evidence_file.read_text(encoding="utf-8")
-                if head not in report or "Critical" not in report or "Important" not in report:
+                if (head not in report or "Critical: 0" not in report
+                        or "Important: 0" not in report or "PASS" not in report
+                        or item.get("checkpoint") not in report):
                     raise SystemExit("closure review report is not head-bound")
             else:
                 if item.get("command") == "fixture":
@@ -165,6 +167,10 @@ def validate(path, head):
                 if not evidence_path.startswith("outputs/mission-31-validation/"):
                     raise SystemExit("closure test evidence is not bound to the attested revision")
                 evidence_file = ROOT / evidence_path
+                try:
+                    evidence_file.resolve().relative_to((ROOT / "outputs/mission-31-validation").resolve())
+                except ValueError:
+                    raise SystemExit("closure test evidence escapes its governed directory")
                 if not evidence_file.is_file() or hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
                     raise SystemExit("closure test evidence is missing or stale")
                 evidence_text = evidence_file.read_text(encoding="utf-8")

@@ -309,6 +309,8 @@ def validate_activation_ledger(
             if (not isinstance(details, Mapping)
                     or details.get("founder_authorization_identity") != event.get("actor")):
                 return False, "ACTIVATION_AUTHORITY_INVALID", {}
+            if details.get("founder_authorization_sequence") != event.get("sequence"):
+                return False, "ACTIVATION_AUTHORITY_INVALID", {}
             authorizations.append(event)
         elif event.get("type") == _ACTIVATION_ATTEMPTED:
             if event.get("actor_role") != "system":
@@ -665,6 +667,7 @@ def validate_activation_run(run: Mapping[str, Any], repository: str, source_url:
         and provenance.get("head_sha") == run.get("head_sha")
         and provenance.get("workflow_sha") == run.get("head_sha")
         and provenance.get("workflow_path") == run.get("path")
+        and (run.get("workflow_ref") is None or provenance.get("workflow_ref") == run.get("workflow_ref"))
     )
 def effective_limits(mission: Mapping[str, Any], policy: Mapping[str, Any]) -> Dict[str, Any]:
     """Return the most restrictive declared mission/repository cap per resource."""

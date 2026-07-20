@@ -32,7 +32,7 @@ class ActivationLedgerTests(unittest.TestCase):
             "activation_type": "initial_test_integrity_baseline",
             "single_use": True,
             "founder_authorization_identity": "founder@example.test",
-            "founder_authorization_sequence": 42,
+            "founder_authorization_sequence": 1,
         }
 
     def provenance(self, run_id, job):

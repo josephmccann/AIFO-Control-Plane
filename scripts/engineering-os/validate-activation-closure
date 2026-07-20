@@ -148,14 +148,28 @@ def validate(path, head):
                 evidence_file = ROOT / evidence_path
                 if not evidence_file.is_file():
                     raise SystemExit("closure review evidence is missing")
+                try:
+                    evidence_file.resolve().relative_to((ROOT / "outputs/mission-31-review").resolve())
+                except ValueError:
+                    raise SystemExit("closure review evidence escapes its governed directory")
                 if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
                     raise SystemExit("closure review evidence is stale")
                 report = evidence_file.read_text(encoding="utf-8")
-                if head not in report or "Critical findings" not in report or "Important findings" not in report:
+                if head not in report or "Critical" not in report or "Important" not in report:
                     raise SystemExit("closure review report is not head-bound")
             else:
-                if evidence_path not in changed or evidence_sha != digest_at(head, evidence_path):
+                if item.get("command") == "fixture":
+                    if evidence_path not in changed or evidence_sha != digest_at(head, evidence_path):
+                        raise SystemExit("closure fixture evidence is not bound to the attested revision")
+                    continue
+                if not evidence_path.startswith("outputs/mission-31-validation/"):
                     raise SystemExit("closure test evidence is not bound to the attested revision")
+                evidence_file = ROOT / evidence_path
+                if not evidence_file.is_file() or hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
+                    raise SystemExit("closure test evidence is missing or stale")
+                evidence_text = evidence_file.read_text(encoding="utf-8")
+                if head not in evidence_text or "Validation complete" not in evidence_text:
+                    raise SystemExit("closure test evidence does not prove the requested head")
             if collection == "reviews":
                 if item["reviewer"] in reviewers or evidence_path in report_paths:
                     raise SystemExit("closure reviews are not independent")

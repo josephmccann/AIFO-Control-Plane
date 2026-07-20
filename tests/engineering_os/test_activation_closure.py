@@ -19,14 +19,24 @@ class ActivationClosureTests(unittest.TestCase):
 
     def setUp(self):
         self.review_dir = ROOT / "outputs/mission-31-review"
+        self.validation_dir = ROOT / "outputs/mission-31-validation"
         self.review_dir.mkdir(parents=True, exist_ok=True)
+        self.validation_dir.mkdir(parents=True, exist_ok=True)
         self.review_paths = []
+        self.validation_path = self.validation_dir / "closure-generated.log"
+        self.validation_path.write_text(
+            "Validation command: generated closure acceptance\n"
+            "HEAD: %s\nValidation complete\n" % self.subject(),
+            encoding="utf-8",
+        )
         self.addCleanup(self.cleanup_review_fixtures)
 
     def cleanup_review_fixtures(self):
         for path in self.review_paths:
             if path.exists():
                 path.unlink()
+        if self.validation_path.exists():
+            self.validation_path.unlink()
 
     def review_fixture(self, reviewer):
         path = self.review_dir / (reviewer + "-generated.md")
@@ -77,9 +87,9 @@ class ActivationClosureTests(unittest.TestCase):
             "edges": [{"from": test, "to": source, "kind": "tests"}
                       for test in sorted(path for path in paths if path.startswith("tests/"))
                       for source in sorted(path for path in paths if not path.startswith("tests/"))],
-            "pins": pins, "tests": [{"command": "fixture", "result": "pass", "head": subject,
-                "evidence_path": "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
-                "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
+            "pins": pins, "tests": [{"command": "validate-all", "result": "pass", "head": subject,
+                "evidence_path": self.validation_path.relative_to(ROOT).as_posix(),
+                "evidence_sha256": hashlib.sha256(self.validation_path.read_bytes()).hexdigest()}],
             "evidence": evidence,
             "reviews": [
                 {"reviewer": "test-a", "checkpoint": checkpoint_a, "head": subject, "critical": 0, "important": 0,

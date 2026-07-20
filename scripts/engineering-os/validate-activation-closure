@@ -177,10 +177,6 @@ def validate(path, head):
                         or re.search(r"(?m)^(?:FAIL|Verdict:\s*FAIL)\s*$", report) is not None):
                     raise SystemExit("closure review report is not head-bound")
             else:
-                if item.get("command") == "fixture":
-                    if evidence_path not in changed or evidence_sha != digest_at(head, evidence_path):
-                        raise SystemExit("closure fixture evidence is not bound to the attested revision")
-                    continue
                 if not evidence_path.startswith("outputs/mission-31-validation/"):
                     raise SystemExit("closure test evidence is not bound to the attested revision")
                 evidence_file = ROOT / evidence_path

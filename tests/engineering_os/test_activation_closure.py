@@ -10,11 +10,35 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/engineering-os/validate-activation-closure"
-SUBJECT = "c0b358d6659b9866f324187bf5c0b40f525eebe4"
+SUBJECT = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 BASE = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
 
 
 class ActivationClosureTests(unittest.TestCase):
+    def setUp(self):
+        self.review_dir = ROOT / "outputs/mission-31-review"
+        self.review_dir.mkdir(parents=True, exist_ok=True)
+        self.review_paths = []
+        self.addCleanup(self.cleanup_review_fixtures)
+
+    def cleanup_review_fixtures(self):
+        for path in self.review_paths:
+            path.unlink(missing_ok=True)
+
+    def review_fixture(self, reviewer):
+        path = self.review_dir / (reviewer + "-generated.md")
+        body = (
+            "Reviewer: %s\n"
+            "HEAD: `%s`\n"
+            "Critical: 0\n"
+            "Important: 0\n"
+            "PASS\n"
+        ) % (reviewer, SUBJECT)
+        checkpoint = hashlib.sha256(body.encode()).hexdigest()
+        path.write_text(body + "Checkpoint: " + checkpoint + "\n", encoding="utf-8")
+        self.review_paths.append(path)
+        return path, checkpoint
+
     def artifact(self):
         paths = subprocess.check_output(
             ["git", "diff", "--name-only", BASE, SUBJECT], cwd=ROOT, text=True
@@ -33,6 +57,8 @@ class ActivationClosureTests(unittest.TestCase):
         evidence = []
         for path in ("docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md"):
             evidence.append({"path": path, "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest()})
+        review_a, checkpoint_a = self.review_fixture("test-a")
+        review_b, checkpoint_b = self.review_fixture("test-b")
         return {
             "schema_version": "1.0.0",
             "mission": {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
@@ -51,12 +77,12 @@ class ActivationClosureTests(unittest.TestCase):
                 "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
             "evidence": evidence,
             "reviews": [
-                {"reviewer": "test-a", "checkpoint": "a60da2d8832bed1629da2bbf55c5f153663b1363a4a174af68bf7b0ab184ca51", "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/test-a.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/test-a.md").read_bytes()).hexdigest()},
-                {"reviewer": "test-b", "checkpoint": "d36074d9c42ab770bbe4929021310ae75d6943a522b872ed6a5768a85a01f29f", "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/test-b.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/test-b.md").read_bytes()).hexdigest()},
+                {"reviewer": "test-a", "checkpoint": checkpoint_a, "head": SUBJECT, "critical": 0, "important": 0,
+                 "report_path": review_a.relative_to(ROOT).as_posix(),
+                 "report_sha256": hashlib.sha256(review_a.read_bytes()).hexdigest()},
+                {"reviewer": "test-b", "checkpoint": checkpoint_b, "head": SUBJECT, "critical": 0, "important": 0,
+                 "report_path": review_b.relative_to(ROOT).as_posix(),
+                 "report_sha256": hashlib.sha256(review_b.read_bytes()).hexdigest()},
             ],
         }
 

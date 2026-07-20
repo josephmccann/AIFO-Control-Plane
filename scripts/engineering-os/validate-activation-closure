@@ -94,7 +94,7 @@ def validate(path, head):
     records = closure.get("files")
     if not isinstance(records, list) or {item.get("path") for item in records} != changed:
         raise SystemExit("closure file set is missing, extra, or stale")
-    if not changed <= allowed or CLOSURE_PATH not in allowed:
+    if sorted(allowed) != sorted(changed | {CLOSURE_PATH}):
         raise SystemExit("closure contains a path outside Mission 31 authority")
     for item in records:
         if set(item) != {"path", "sha256", "reason"} or item["sha256"] != digest_at(head, item["path"]):
@@ -137,11 +137,18 @@ def validate(path, head):
             evidence_sha = item.get("evidence_sha256") if collection == "tests" else item.get("report_sha256")
             if not isinstance(evidence_path, str) or not isinstance(evidence_sha, str):
                 raise SystemExit("closure %s record lacks durable evidence binding" % collection)
-            evidence_file = ROOT / evidence_path
-            if not evidence_file.is_file():
-                raise SystemExit("closure %s evidence is missing" % collection)
-            if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
-                raise SystemExit("closure %s evidence is stale" % collection)
+            if collection == "reviews":
+                evidence_file = ROOT / evidence_path
+                if not evidence_file.is_file():
+                    raise SystemExit("closure review evidence is missing")
+                if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
+                    raise SystemExit("closure review evidence is stale")
+                report = evidence_file.read_text(encoding="utf-8")
+                if head not in report or "Critical findings" not in report or "Important findings" not in report:
+                    raise SystemExit("closure review report is not head-bound")
+            else:
+                if evidence_path not in changed or evidence_sha != digest_at(head, evidence_path):
+                    raise SystemExit("closure test evidence is not bound to the attested revision")
             if collection == "reviews":
                 if item["reviewer"] in reviewers or evidence_path in report_paths:
                     raise SystemExit("closure reviews are not independent")

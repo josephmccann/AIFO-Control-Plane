@@ -77,7 +77,7 @@ def _walk(schema: Dict[str, Any], value: Any, path: str, kind: str) -> Iterable[
         return
 
     if schema.get("format") == "date-time":
-        if not isinstance(value, str) or not value.endswith("Z"):
+        if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", value) is None:
             yield _violation("SCHEMA_FORMAT", "value must be an RFC3339 UTC date-time", path)
         else:
             try:

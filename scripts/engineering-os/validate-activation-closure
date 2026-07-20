@@ -143,6 +143,8 @@ def validate(path, head):
             if not isinstance(evidence_path, str) or not isinstance(evidence_sha, str):
                 raise SystemExit("closure %s record lacks durable evidence binding" % collection)
             if collection == "reviews":
+                if not evidence_path.startswith("outputs/mission-31-review/") or ".." in Path(evidence_path).parts:
+                    raise SystemExit("closure review evidence path is not governed")
                 evidence_file = ROOT / evidence_path
                 if not evidence_file.is_file():
                     raise SystemExit("closure review evidence is missing")

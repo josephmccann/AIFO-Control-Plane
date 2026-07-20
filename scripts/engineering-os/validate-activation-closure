@@ -177,6 +177,8 @@ def validate(path, head):
                         or re.search(r"(?m)^(?:FAIL|Verdict:\s*FAIL)\s*$", report) is not None):
                     raise SystemExit("closure review report is not head-bound")
             else:
+                if item.get("command") not in {"validate-all", "focused-tests"}:
+                    raise SystemExit("closure test command is not approved")
                 if not evidence_path.startswith("outputs/mission-31-validation/"):
                     raise SystemExit("closure test evidence is not bound to the attested revision")
                 evidence_file = ROOT / evidence_path
@@ -187,7 +189,9 @@ def validate(path, head):
                 if not evidence_file.is_file() or hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
                     raise SystemExit("closure test evidence is missing or stale")
                 evidence_text = evidence_file.read_text(encoding="utf-8")
-                if head not in evidence_text or "Validation complete" not in evidence_text:
+                if (head not in evidence_text or "Validation complete" not in evidence_text
+                        or "Command: %s" % item["command"] not in evidence_text
+                        or "Ran " not in evidence_text or "OK" not in evidence_text):
                     raise SystemExit("closure test evidence does not prove the requested head")
             if collection == "reviews":
                 if item["reviewer"] in reviewers or evidence_path in report_paths:

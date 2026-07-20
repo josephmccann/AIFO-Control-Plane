@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -24,10 +25,14 @@ class ActivationClosureTests(unittest.TestCase):
         self.validation_dir.mkdir(parents=True, exist_ok=True)
         self.review_paths = []
         self.validation_path = self.validation_dir / "closure-generated.log"
+        result = subprocess.run(
+            ["python3", "-m", "unittest", "tests.engineering_os.test_schema"],
+            cwd=ROOT, env={**os.environ, "PYTHONPATH": "."},
+            text=True, capture_output=True, check=True,
+        )
         self.validation_path.write_text(
-            "Validation command: generated closure acceptance\n"
-            "HEAD: %s\nValidation complete\n" % self.subject(),
-            encoding="utf-8",
+            "Command: focused-tests\n%s%sHEAD: %s\nValidation complete\n"
+            % (result.stdout, result.stderr, self.subject()), encoding="utf-8"
         )
         self.addCleanup(self.cleanup_review_fixtures)
 
@@ -87,7 +92,7 @@ class ActivationClosureTests(unittest.TestCase):
             "edges": [{"from": test, "to": source, "kind": "tests"}
                       for test in sorted(path for path in paths if path.startswith("tests/"))
                       for source in sorted(path for path in paths if not path.startswith("tests/"))],
-            "pins": pins, "tests": [{"command": "validate-all", "result": "pass", "head": subject,
+            "pins": pins, "tests": [{"command": "focused-tests", "result": "pass", "head": subject,
                 "evidence_path": self.validation_path.relative_to(ROOT).as_posix(),
                 "evidence_sha256": hashlib.sha256(self.validation_path.read_bytes()).hexdigest()}],
             "evidence": evidence,

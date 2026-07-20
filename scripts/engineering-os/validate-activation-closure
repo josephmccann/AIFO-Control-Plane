@@ -179,6 +179,12 @@ def validate(path, head):
             else:
                 if item.get("command") not in {"validate-all", "focused-tests"}:
                     raise SystemExit("closure test command is not approved")
+                if item.get("workflow_path") != ".github/workflows/mission-command.yml":
+                    raise SystemExit("closure test workflow is not approved")
+                if not isinstance(item.get("run_id"), int) or item["run_id"] < 1:
+                    raise SystemExit("closure test run identity is invalid")
+                if not isinstance(item.get("run_attempt"), int) or item["run_attempt"] < 1:
+                    raise SystemExit("closure test run attempt is invalid")
                 if not evidence_path.startswith("outputs/mission-31-validation/"):
                     raise SystemExit("closure test evidence is not bound to the attested revision")
                 evidence_file = ROOT / evidence_path
@@ -191,6 +197,9 @@ def validate(path, head):
                 evidence_text = evidence_file.read_text(encoding="utf-8")
                 if (head not in evidence_text or "Validation complete" not in evidence_text
                         or "Command: %s" % item["command"] not in evidence_text
+                        or "Run ID: %s" % item["run_id"] not in evidence_text
+                        or "Run attempt: %s" % item["run_attempt"] not in evidence_text
+                        or "Workflow: %s" % item["workflow_path"] not in evidence_text
                         or "Ran " not in evidence_text or "OK" not in evidence_text):
                     raise SystemExit("closure test evidence does not prove the requested head")
             if collection == "reviews":

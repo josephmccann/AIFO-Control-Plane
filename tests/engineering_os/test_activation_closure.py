@@ -31,7 +31,8 @@ class ActivationClosureTests(unittest.TestCase):
             text=True, capture_output=True, check=True,
         )
         self.validation_path.write_text(
-            "Command: focused-tests\n%s%sHEAD: %s\nValidation complete\n"
+            "Command: focused-tests\nWorkflow: .github/workflows/mission-command.yml\n"
+            "Run ID: 1\nRun attempt: 1\n%s%sHEAD: %s\nValidation complete\n"
             % (result.stdout, result.stderr, self.subject()), encoding="utf-8"
         )
         self.addCleanup(self.cleanup_review_fixtures)
@@ -93,6 +94,7 @@ class ActivationClosureTests(unittest.TestCase):
                       for test in sorted(path for path in paths if path.startswith("tests/"))
                       for source in sorted(path for path in paths if not path.startswith("tests/"))],
             "pins": pins, "tests": [{"command": "focused-tests", "result": "pass", "head": subject,
+                "workflow_path": ".github/workflows/mission-command.yml", "run_id": 1, "run_attempt": 1,
                 "evidence_path": self.validation_path.relative_to(ROOT).as_posix(),
                 "evidence_sha256": hashlib.sha256(self.validation_path.read_bytes()).hexdigest()}],
             "evidence": evidence,

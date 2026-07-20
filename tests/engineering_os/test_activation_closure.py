@@ -23,7 +23,8 @@ class ActivationClosureTests(unittest.TestCase):
 
     def cleanup_review_fixtures(self):
         for path in self.review_paths:
-            path.unlink(missing_ok=True)
+            if path.exists():
+                path.unlink()
 
     def review_fixture(self, reviewer):
         path = self.review_dir / (reviewer + "-generated.md")

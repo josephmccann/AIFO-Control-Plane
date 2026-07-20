@@ -78,10 +78,12 @@ class ActivationClosureTests(unittest.TestCase):
             ".github/workflows/reusable-mission-validation.yml", ".github/workflows/reusable-orphan-recovery.yml",
             ".github/workflows/reusable-test-integrity.yml", ".github/workflows/reusable-tier-path-guard.yml",
             "scripts/engineering-os/validate-activation-closure", "tests/engineering_os/test_commands.py",
+            "scripts/validate.sh",
             "tests/engineering_os/test_state.py", "tests/engineering_os/test_audit.py", "tests/engineering_os/test_schema.py",
             "tests/engineering_os/test_activation_ledger.py", "tests/engineering_os/test_activation_closure.py",
             "tests/engineering_os/test_workflow_boundaries.py", "tests/engineering_os/test_documentation.py",
             "tests/engineering_os/test_test_integrity.py", "tests/engineering_os/test_test_integrity_adversarial.py",
+            "tests/engineering_os/test_validation_classification.py",
             "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json", "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
             "docs/engineering-os/AUTHORITY_MODEL.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md", "docs/engineering-os/TEST_INTEGRITY.md",
         ])

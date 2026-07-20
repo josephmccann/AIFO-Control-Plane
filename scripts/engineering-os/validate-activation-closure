@@ -13,7 +13,7 @@ from engineering_os.schema import validate_document
 ROOT = Path(__file__).resolve().parents[2]
 READY_SHA = "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0"
 BASE_SHA = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
-AUTHORIZED_PATHS_SHA256 = "ef0e506895e4f10edfdd7c242519f964f2503d7be48a0ef4c77a020af1ad6859"
+AUTHORIZED_PATHS_SHA256 = "3f48fdb2ca302c30c3fdfd96caf13c88acee0cb28d257c91e55c2746d9c46e51"
 CLOSURE_PATH = "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
 
 

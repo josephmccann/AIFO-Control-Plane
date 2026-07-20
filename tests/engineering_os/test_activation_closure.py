@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/engineering-os/validate-activation-closure"
-SUBJECT = "9571dabf16113cacaee84b291f96348ab45e31b0"
+SUBJECT = "ebeffabc7f3e5256bdd8e176ddc20416277d9a39"
 BASE = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
 
 
@@ -51,11 +51,11 @@ class ActivationClosureTests(unittest.TestCase):
             "evidence": evidence,
             "reviews": [
                 {"reviewer": "review-a", "checkpoint": "1" * 64, "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/reviewer-a/final-review.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/reviewer-a/final-review.md").read_bytes()).hexdigest()},
+                 "report_path": "outputs/mission-31-review/frozen-a/final-review.md",
+                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/frozen-a/final-review.md").read_bytes()).hexdigest()},
                 {"reviewer": "review-b", "checkpoint": "2" * 64, "head": SUBJECT, "critical": 0, "important": 0,
-                 "report_path": "outputs/mission-31-review/reviewer-b/final-review.md",
-                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/reviewer-b/final-review.md").read_bytes()).hexdigest()},
+                 "report_path": "outputs/mission-31-review/frozen-b/final-review.md",
+                 "report_sha256": hashlib.sha256((ROOT / "outputs/mission-31-review/frozen-b/final-review.md").read_bytes()).hexdigest()},
             ],
         }
 

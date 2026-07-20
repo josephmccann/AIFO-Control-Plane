@@ -28,6 +28,10 @@ classify_script() {
   first_line=""
   extension_class=""
   shebang_class=""
+  if [[ -L "$file" ]]; then
+    echo "Symlinked validation path is not allowed: ${file#"$ROOT_DIR"/}" >&2
+    return 1
+  fi
   IFS= read -r first_line < "$file" || true
   case "$file" in
     *.sh) extension_class="shell" ;;
@@ -82,7 +86,7 @@ main() {
         return 1
         ;;
     esac
-  done < <(find "$ROOT_DIR/scripts" "$ROOT_DIR/tests" -type f -print0)
+  done < <(find "$ROOT_DIR/scripts" "$ROOT_DIR/tests" \( -type f -o -type l \) -print0)
 
   echo "Checking shell syntax."
   if (( ${#shell_files[@]} > 0 )); then

@@ -82,6 +82,21 @@ class ValidationClassificationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "ignore")
 
+    def test_symlinked_script_fails_closed_and_discovery_includes_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.sh"
+            target.write_text("#!/usr/bin/env bash\necho ok\n", encoding="utf-8")
+            target.chmod(0o755)
+            link = Path(directory) / "linked-script"
+            link.symlink_to(target)
+            result = subprocess.run(
+                ["bash", "-c", 'source "$1"; classify_script "$2"', "bash", str(ENTRYPOINT), str(link)],
+                cwd=ROOT, capture_output=True, text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Symlinked validation path", result.stderr)
+        self.assertIn("-type l", ENTRYPOINT.read_text(encoding="utf-8"))
+
     def test_ci_bootstraps_pinned_linters_before_validation(self):
         source = ENTRYPOINT.read_text(encoding="utf-8")
         self.assertIn('if [[ "${CI:-}" == "true" ]]', source)

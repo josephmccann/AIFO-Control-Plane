@@ -128,7 +128,7 @@ def validate(path, head):
         "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md"}:
         raise SystemExit("closure evidence set is incomplete")
     for item in closure["evidence"]:
-        if item["sha256"] != hashlib.sha256((ROOT / item["path"]).read_bytes()).hexdigest():
+        if item["path"] not in changed or item["sha256"] != digest_at(head, item["path"]):
             raise SystemExit("closure evidence digest mismatch")
     if not closure.get("tests") or len(closure.get("reviews", [])) != 2:
         raise SystemExit("closure requires tests and two reviews")

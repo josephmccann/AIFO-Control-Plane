@@ -10,11 +10,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/engineering-os/validate-activation-closure"
-SUBJECT = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 BASE = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
 
 
 class ActivationClosureTests(unittest.TestCase):
+    def subject(self):
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+
     def setUp(self):
         self.review_dir = ROOT / "outputs/mission-31-review"
         self.review_dir.mkdir(parents=True, exist_ok=True)
@@ -28,32 +30,34 @@ class ActivationClosureTests(unittest.TestCase):
 
     def review_fixture(self, reviewer):
         path = self.review_dir / (reviewer + "-generated.md")
+        subject = self.subject()
         body = (
             "Reviewer: %s\n"
             "HEAD: `%s`\n"
             "Critical: 0\n"
             "Important: 0\n"
             "PASS\n"
-        ) % (reviewer, SUBJECT)
+        ) % (reviewer, subject)
         checkpoint = hashlib.sha256(body.encode()).hexdigest()
         path.write_text(body + "Checkpoint: " + checkpoint + "\n", encoding="utf-8")
         self.review_paths.append(path)
         return path, checkpoint
 
     def artifact(self):
+        subject = self.subject()
         paths = subprocess.check_output(
-            ["git", "diff", "--name-only", BASE, SUBJECT], cwd=ROOT, text=True
+            ["git", "diff", "--name-only", BASE, subject], cwd=ROOT, text=True
         ).splitlines()
         pins = []
         pattern = re.compile(r"josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@([0-9a-f]{40})")
         for path in sorted(path for path in paths if path.startswith(".github/workflows/")):
-            content = subprocess.check_output(["git", "show", "%s:%s" % (SUBJECT, path)], cwd=ROOT, text=True)
+            content = subprocess.check_output(["git", "show", "%s:%s" % (subject, path)], cwd=ROOT, text=True)
             pins.extend({"consumer": path, "sha": sha} for sha in sorted(set(pattern.findall(content))))
         declaration = (ROOT / "outputs/successor-mission-declaration.md").read_text()
         allowed = sorted(json.loads(re.search(r"<!-- EOS:MISSION:BEGIN -->\s*(\{.*?\})\s*<!-- EOS:MISSION:END -->", declaration, re.S).group(1))["allowed_paths"])
         files = []
         for path in paths:
-            data = subprocess.check_output(["git", "show", "%s:%s" % (SUBJECT, path)], cwd=ROOT)
+            data = subprocess.check_output(["git", "show", "%s:%s" % (subject, path)], cwd=ROOT)
             files.append({"path": path, "sha256": hashlib.sha256(data).hexdigest(), "reason": "Mission 31 closure"})
         evidence = []
         for path in ("docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md"):
@@ -68,20 +72,20 @@ class ActivationClosureTests(unittest.TestCase):
                         "ready_declaration_sha256": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
                         "allowed_paths": allowed},
             "base": {"sha": BASE, "tree": subprocess.check_output(["git", "rev-parse", BASE + "^{tree}"], cwd=ROOT, text=True).strip()},
-            "final": {"sha": SUBJECT, "tree": subprocess.check_output(["git", "rev-parse", SUBJECT + "^{tree}"], cwd=ROOT, text=True).strip()},
+            "final": {"sha": subject, "tree": subprocess.check_output(["git", "rev-parse", subject + "^{tree}"], cwd=ROOT, text=True).strip()},
             "files": files,
             "edges": [{"from": test, "to": source, "kind": "tests"}
                       for test in sorted(path for path in paths if path.startswith("tests/"))
                       for source in sorted(path for path in paths if not path.startswith("tests/"))],
-            "pins": pins, "tests": [{"command": "fixture", "result": "pass", "head": SUBJECT,
+            "pins": pins, "tests": [{"command": "fixture", "result": "pass", "head": subject,
                 "evidence_path": "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
                 "evidence_sha256": hashlib.sha256((ROOT / "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md").read_bytes()).hexdigest()}],
             "evidence": evidence,
             "reviews": [
-                {"reviewer": "test-a", "checkpoint": checkpoint_a, "head": SUBJECT, "critical": 0, "important": 0,
+                {"reviewer": "test-a", "checkpoint": checkpoint_a, "head": subject, "critical": 0, "important": 0,
                  "report_path": review_a.relative_to(ROOT).as_posix(),
                  "report_sha256": hashlib.sha256(review_a.read_bytes()).hexdigest()},
-                {"reviewer": "test-b", "checkpoint": checkpoint_b, "head": SUBJECT, "critical": 0, "important": 0,
+                {"reviewer": "test-b", "checkpoint": checkpoint_b, "head": subject, "critical": 0, "important": 0,
                  "report_path": review_b.relative_to(ROOT).as_posix(),
                  "report_sha256": hashlib.sha256(review_b.read_bytes()).hexdigest()},
             ],
@@ -91,7 +95,7 @@ class ActivationClosureTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile("w", suffix=".json") as stream:
             json.dump(artifact, stream)
             stream.flush()
-            return subprocess.run([str(SCRIPT), stream.name, SUBJECT], cwd=ROOT,
+            return subprocess.run([str(SCRIPT), stream.name, self.subject()], cwd=ROOT,
                                   text=True, capture_output=True)
 
     def test_exact_closure_is_accepted(self):

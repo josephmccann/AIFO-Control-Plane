@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/engineering-os/validate-activation-closure"
-SUBJECT = "da301963cc430883bdd3623e734aed0e06d52d18"
+SUBJECT = "9571dabf16113cacaee84b291f96348ab45e31b0"
 BASE = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
 
 

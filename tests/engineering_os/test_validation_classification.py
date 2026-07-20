@@ -29,7 +29,7 @@ class ValidationClassificationTests(unittest.TestCase):
 
     def test_entrypoint_classifies_by_extension_and_audited_shebang(self):
         source = ENTRYPOINT.read_text(encoding="utf-8")
-        for marker in ("*.sh", "*.py", "bash|sh|dash|ksh", "python", "shell_files", "python_files"):
+        for marker in ("*.sh", "*.py", "bash|sh|dash|ksh", "python", "SHELL_FILES", "PYTHON_FILES"):
             self.assertIn(marker, source)
         self.assertIn("Unclassified executable script:", source)
         self.assertNotIn('shellcheck "$ROOT_DIR"/scripts/engineering-os/*', source)
@@ -96,6 +96,28 @@ class ValidationClassificationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Symlinked validation path", result.stderr)
         self.assertIn("-type l", ENTRYPOINT.read_text(encoding="utf-8"))
+
+    def test_partial_discovery_failure_is_propagated_to_the_parent_shell(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "partial.py"
+            path.write_text("print('partial')\n", encoding="utf-8")
+            command = r'''
+source "$1"
+partial="$2"
+find() { printf '%s\0' "$partial"; return 7; }
+exercise() {
+  local -a shell_files=()
+  local -a python_files=()
+  classify_discovered_paths
+}
+exercise
+'''
+            result = subprocess.run(
+                ["bash", "-c", command, "bash", str(ENTRYPOINT), str(path)],
+                cwd=ROOT, capture_output=True, text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Validation file discovery failed with status 7", result.stderr)
 
     def test_ci_bootstraps_pinned_linters_before_validation(self):
         source = ENTRYPOINT.read_text(encoding="utf-8")

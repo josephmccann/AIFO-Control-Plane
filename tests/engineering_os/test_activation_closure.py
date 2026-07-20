@@ -155,6 +155,7 @@ class ActivationClosureTests(unittest.TestCase):
                 "python_interpreters": ["python", "python3", "python3.x"],
                 "shell_interpreters": ["bash", "dash", "ksh", "sh"],
                 "conflicting_signals": "fail",
+                "discovery_error": "fail",
                 "symlink_path": "fail",
                 "unknown_executable": "fail",
             },

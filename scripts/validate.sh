@@ -7,6 +7,9 @@ TF_ROOTS=(
   "$ROOT_DIR/terraform/bootstrap/github-oidc"
   "$ROOT_DIR/terraform/environments/control-plane"
 )
+DISCOVERY_STATUS_PREFIX="AIFO_VALIDATION_DISCOVERY_STATUS:"
+SHELL_FILES=()
+PYTHON_FILES=()
 classify_shebang() {
   local first_line="$1"
 
@@ -61,12 +64,56 @@ classify_script() {
   fi
 }
 
-main() {
+discover_validation_paths() {
+  local status
+
+  if find "$ROOT_DIR/scripts" "$ROOT_DIR/tests" \( -type f -o -type l \) -print0; then
+    status=0
+  else
+    status=$?
+  fi
+  printf '%s%s\0' "$DISCOVERY_STATUS_PREFIX" "$status"
+}
+
+classify_discovered_paths() {
   local file
   local classification
-  local -a shell_files=()
-  local -a python_files=()
+  local discovery_status=""
+
+  while IFS= read -r -d '' file; do
+    case "$file" in
+      "$DISCOVERY_STATUS_PREFIX"*)
+        discovery_status="${file#"$DISCOVERY_STATUS_PREFIX"}"
+        continue
+        ;;
+    esac
+    classification="$(classify_script "$file")"
+    case "$classification" in
+      shell) SHELL_FILES+=("$file") ;;
+      python) PYTHON_FILES+=("$file") ;;
+      ignore) ;;
+      *)
+        echo "Internal classification error: ${file#"$ROOT_DIR"/}" >&2
+        return 1
+        ;;
+    esac
+  done < <(discover_validation_paths)
+
+  if [[ ! "$discovery_status" =~ ^[0-9]+$ ]]; then
+    echo "Validation file discovery did not produce a terminal status." >&2
+    return 1
+  fi
+  if (( discovery_status != 0 )); then
+    echo "Validation file discovery failed with status $discovery_status." >&2
+    return 1
+  fi
+}
+
+main() {
   local -a missing_linters=()
+
+  SHELL_FILES=()
+  PYTHON_FILES=()
 
   echo "Running Engineering OS tests."
   python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v
@@ -75,27 +122,16 @@ main() {
   python3 -m py_compile "$ROOT_DIR"/engineering_os/*.py
 
   echo "Classifying validation files."
-  while IFS= read -r -d '' file; do
-    classification="$(classify_script "$file")"
-    case "$classification" in
-      shell) shell_files+=("$file") ;;
-      python) python_files+=("$file") ;;
-      ignore) ;;
-      *)
-        echo "Internal classification error: ${file#"$ROOT_DIR"/}" >&2
-        return 1
-        ;;
-    esac
-  done < <(find "$ROOT_DIR/scripts" "$ROOT_DIR/tests" \( -type f -o -type l \) -print0)
+  classify_discovered_paths
 
   echo "Checking shell syntax."
-  if (( ${#shell_files[@]} > 0 )); then
-    bash -n "${shell_files[@]}"
+  if (( ${#SHELL_FILES[@]} > 0 )); then
+    bash -n "${SHELL_FILES[@]}"
   fi
 
   echo "Checking classified Python syntax."
-  if (( ${#python_files[@]} > 0 )); then
-    python3 -m py_compile "${python_files[@]}"
+  if (( ${#PYTHON_FILES[@]} > 0 )); then
+    python3 -m py_compile "${PYTHON_FILES[@]}"
   fi
 
   if ! command -v terraform >/dev/null 2>&1; then
@@ -132,8 +168,8 @@ main() {
   fi
 
   echo "Running shellcheck."
-  if (( ${#shell_files[@]} > 0 )); then
-    shellcheck "${shell_files[@]}"
+  if (( ${#SHELL_FILES[@]} > 0 )); then
+    shellcheck "${SHELL_FILES[@]}"
   fi
 
   echo "Running actionlint."

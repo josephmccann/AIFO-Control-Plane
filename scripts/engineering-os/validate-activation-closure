@@ -155,8 +155,10 @@ def validate(path, head):
                 if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
                     raise SystemExit("closure review evidence is stale")
                 report = evidence_file.read_text(encoding="utf-8")
-                if (head not in report or "Critical: 0" not in report
-                        or "Important: 0" not in report or "PASS" not in report
+                if (head not in report or re.search(r"(?m)^Critical:\s*0\s*$", report) is None
+                        or re.search(r"(?m)^Important:\s*0\s*$", report) is None
+                        or re.search(r"(?m)^PASS\s*$", report) is None
+                        or re.search(r"(?m)^FAIL\s*$", report) is not None
                         or item.get("checkpoint") not in report):
                     raise SystemExit("closure review report is not head-bound")
             else:

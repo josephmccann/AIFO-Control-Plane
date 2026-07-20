@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate or validate the deterministic Mission #31 dependency closure."""
+"""Generate or validate the deterministic Mission #32 dependency closure."""
 import hashlib
 import json
 import re
@@ -11,10 +11,77 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from engineering_os.schema import validate_document
 
 ROOT = Path(__file__).resolve().parents[2]
-READY_SHA = "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0"
-BASE_SHA = "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
-AUTHORIZED_PATHS_SHA256 = "3f48fdb2ca302c30c3fdfd96caf13c88acee0cb28d257c91e55c2746d9c46e51"
+BASE_SHA = "283f37b97a9df24ca056c5115197464043312185"
+PRE_READY_HEAD = "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7"
+PRE_READY_TREE = "aae7823d40235779f914a5486aa90ea91b106c1d"
+PRE_READY_CLOSURE_SHA = "7c51214965441ef93008fdff629c0637e3e208de626c1e933920cb5308e70ebb"
+READY_SHA = "72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9"
+READY_EVENT_HASH = "f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d"
 CLOSURE_PATH = "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+RECORDS_PATH = "outputs/mission-32-closure-records-ready.json"
+RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
+VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
+REVIEW_PATHS = {
+    "outputs/mission-32-review-a-ready.md",
+    "outputs/mission-32-review-b-ready.md",
+}
+HISTORICAL_EVIDENCE_PATHS = {
+    "outputs/mission-31-validation/ci-29772912364.log",
+    "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+    "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+}
+AUTHORIZED_PATHS = sorted([
+    "scripts/validate.sh",
+    "tests/engineering_os/test_validation_classification.py",
+    "scripts/engineering-os/validate-activation-closure",
+    "tests/engineering_os/test_activation_closure.py",
+    "schemas/engineering-os/activation-closure.schema.json",
+    CLOSURE_PATH,
+    "outputs/mission-31-review/closure-records-d68c5da.json",
+    *HISTORICAL_EVIDENCE_PATHS,
+    "outputs/mission-32-reconciliation.md",
+    RECORDS_PATH,
+    VALIDATION_PATH,
+    *REVIEW_PATHS,
+    RECONCILIATION_PATH,
+])
+MISSION = {
+    "repository": "josephmccann/AIFO-Control-Plane",
+    "issue": 32,
+    "mission_id": "aifo-control-plane-validation-classification-successor-ready-exception-2026-07-20",
+    "declaration_path": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32",
+    "declaration_sha256": READY_SHA,
+    "ready_declaration_sha256": READY_SHA,
+    "ready_event": {
+        "event_hash": READY_EVENT_HASH,
+        "sequence": 1,
+        "actor": "josephmccann",
+        "occurred_at": "2026-07-20T20:25:03Z",
+        "source_url": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32#issuecomment-5026935272",
+    },
+    "allowed_paths": AUTHORIZED_PATHS,
+}
+CLASSIFICATION = {
+    "discovery_roots": ["scripts", "tests"],
+    "extensionless_python": ["scripts/engineering-os/validate-activation-closure"],
+    "python_extensions": [".py"],
+    "shell_extensions": [".sh"],
+    "python_interpreters": ["python", "python3", "python3.x"],
+    "shell_interpreters": ["bash", "dash", "ksh", "sh"],
+    "conflicting_signals": "fail",
+    "unknown_executable": "fail",
+}
+HISTORICAL_IDENTITY = {
+    "issue": 31,
+    "ready_declaration_sha256": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
+    "ready_event_hash": "7c796c64513b21732975999db7bbca695d3209207c5f26bcbdd7b313c489bb47",
+    "candidate": {"sha": PRE_READY_HEAD, "tree": PRE_READY_TREE},
+    "superseded_closure_sha256": PRE_READY_CLOSURE_SHA,
+}
+TOP_LEVEL = {
+    "schema_version", "mission", "historical", "base", "final", "files", "edges",
+    "pins", "classification", "records", "tests", "evidence", "reviews", "reconciliation",
+}
 
 
 def git(*args):
@@ -22,50 +89,81 @@ def git(*args):
 
 
 def digest_at(revision, path):
-    return hashlib.sha256(subprocess.check_output(["git", "show", "%s:%s" % (revision, path)], cwd=ROOT)).hexdigest()
+    return hashlib.sha256(
+        subprocess.check_output(["git", "show", "%s:%s" % (revision, path)], cwd=ROOT)
+    ).hexdigest()
 
 
-def declaration_sha256():
-    # The Ready event is the authority for this declaration.  The validator
-    # never reads mutable issue exports or ambient worktree files.
-    return "69f1acaee16c266ae727af7261c1ea8b33f0812c133cf9b730be71ec1561ab62"
+def governed_file(path, expected_path=None):
+    if not isinstance(path, str) or ".." in Path(path).parts or Path(path).is_absolute():
+        raise SystemExit("evidence path is not governed")
+    if expected_path is not None and path != expected_path:
+        raise SystemExit("evidence path is not canonical")
+    target = ROOT / path
+    if not target.is_file():
+        raise SystemExit("evidence is missing: %s" % path)
+    try:
+        target.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        raise SystemExit("evidence escapes the repository: %s" % path)
+    return target
+
+
+def file_record(path):
+    relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
+    return {"path": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+def verify_file_record(record, expected_path=None):
+    if not isinstance(record, dict) or set(record) != {"path", "sha256"}:
+        raise SystemExit("evidence record is malformed")
+    target = governed_file(record.get("path"), expected_path)
+    if hashlib.sha256(target.read_bytes()).hexdigest() != record.get("sha256"):
+        raise SystemExit("evidence digest is stale: %s" % record.get("path"))
+
+
+def expected_edges(changed):
+    return [
+        {"from": test, "to": source, "kind": "tests"}
+        for test in sorted(path for path in changed if path.startswith("tests/"))
+        for source in sorted(path for path in changed if not path.startswith("tests/"))
+    ]
 
 
 def generate(base, head, records_path):
-    """Emit canonical closure JSON; test/review claims come from explicit records."""
-    records = json.loads(records_path.read_text(encoding="utf-8"))
-    if set(records) != {"allowed_paths", "tests", "reviews"}:
-        raise SystemExit("generation records must contain exactly allowed_paths, tests, and reviews")
-    allowed = set(records.get("allowed_paths", []))
-    if hashlib.sha256(json.dumps(sorted(allowed), separators=(",", ":")).encode()).hexdigest() != AUTHORIZED_PATHS_SHA256:
-        raise SystemExit("generation scope does not match Mission 31 Ready authority")
-    declaration_sha = declaration_sha256()
+    """Emit canonical closure JSON; claims come only from explicit governed records."""
+    if base != BASE_SHA:
+        raise SystemExit("generation base is not the Mission 32 rollback/base")
+    if git("rev-parse", head) != head:
+        raise SystemExit("generation head must be a full commit SHA")
+    if records_path.resolve() != (ROOT / RECORDS_PATH).resolve():
+        raise SystemExit("generation records path is not governed")
+    records = json.loads(governed_file(RECORDS_PATH).read_text(encoding="utf-8"))
+    if set(records) != {"allowed_paths", "historical", "tests", "reviews", "reconciliation"}:
+        raise SystemExit("generation records structure is not closed")
+    if sorted(records.get("allowed_paths", [])) != AUTHORIZED_PATHS:
+        raise SystemExit("generation scope does not match Mission 32 Ready authority")
     changed = sorted(filter(None, git("diff", "--name-only", base, head).splitlines()))
-    if not set(changed) <= allowed:
-        raise SystemExit("implementation contains a path outside Mission 31 authority")
-    evidence_paths = ("docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md")
-    edges = []
-    for test in sorted(path for path in changed if path.startswith("tests/")):
-        for source in sorted(path for path in changed if not path.startswith("tests/")):
-            edges.append({"from": test, "to": source, "kind": "tests"})
-    pins = []
-    pin_pattern = re.compile(r"josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@([0-9a-f]{40})")
-    for consumer in sorted(path for path in changed if path.startswith(".github/workflows/")):
-        content = subprocess.check_output(["git", "show", "%s:%s" % (head, consumer)], cwd=ROOT, text=True)
-        for sha in sorted(set(pin_pattern.findall(content))):
-            pins.append({"consumer": consumer, "sha": sha})
+    if not set(changed) <= set(AUTHORIZED_PATHS):
+        raise SystemExit("implementation contains a path outside Mission 32 authority")
     closure = {
         "schema_version": "1.0.0",
-    "mission": {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
-                    "declaration_path": "outputs/successor-mission-declaration.md",
-                    "declaration_sha256": declaration_sha, "ready_declaration_sha256": READY_SHA,
-                    "allowed_paths": sorted(allowed)},
+        "mission": MISSION,
+        "historical": records["historical"],
         "base": {"sha": base, "tree": git("rev-parse", "%s^{tree}" % base)},
         "final": {"sha": head, "tree": git("rev-parse", "%s^{tree}" % head)},
-    "files": [{"path": path, "sha256": digest_at(head, path), "reason": "Mission 31 implementation"} for path in changed if path != CLOSURE_PATH],
-        "edges": edges, "pins": pins, "tests": records["tests"],
-        "evidence": [{"path": path, "sha256": digest_at(head, path)} for path in evidence_paths],
+        "files": [
+            {"path": path, "sha256": digest_at(head, path), "reason": "Mission 32 implementation"}
+            for path in changed
+        ],
+        "edges": expected_edges(changed),
+        "pins": [],
+        "classification": CLASSIFICATION,
+        "records": file_record(records_path),
+        "tests": records["tests"],
+        "evidence": records["historical"]["mission_31"]["evidence"],
         "reviews": records["reviews"],
+        "reconciliation": records["reconciliation"],
     }
     print(json.dumps(closure, sort_keys=True, indent=2))
     return 0
@@ -76,139 +174,110 @@ def validate(path, head):
     violations = validate_document("activation-closure", closure)
     if violations:
         raise SystemExit("activation closure schema rejected: " + "; ".join(item.code for item in violations))
-    if set(closure) != {"schema_version", "mission", "base", "final", "files", "edges", "pins", "tests", "evidence", "reviews"}:
+    if set(closure) != TOP_LEVEL:
         raise SystemExit("closure top-level structure is not closed")
-    mission = closure.get("mission", {})
-    allowed = set(mission.get("allowed_paths", []))
-    if hashlib.sha256(json.dumps(sorted(allowed), separators=(",", ":")).encode()).hexdigest() != AUTHORIZED_PATHS_SHA256:
-        raise SystemExit("closure scope does not match Mission 31 Ready authority")
-    declaration_sha = declaration_sha256()
-    if mission != {"repository": "josephmccann/AIFO-Control-Plane", "issue": 31,
-            "declaration_path": "outputs/successor-mission-declaration.md", "declaration_sha256": declaration_sha,
-            "ready_declaration_sha256": READY_SHA, "allowed_paths": sorted(allowed)}:
-        raise SystemExit("mission identity is not canonical")
+    if closure.get("mission") != MISSION:
+        raise SystemExit("Mission 32 Ready identity or scope is not canonical")
     final = closure.get("final", {})
     if final.get("sha") != head or git("rev-parse", head) != head or final.get("tree") != git("rev-parse", "%s^{tree}" % head):
         raise SystemExit("closure final revision mismatch")
     base = closure.get("base", {})
-    if base.get("sha") != BASE_SHA:
-        raise SystemExit("closure base is not the Mission 31 rollback/base")
-    if git("rev-parse", base.get("sha", "")) != base.get("sha") or git("rev-parse", "%s^{tree}" % base["sha"]) != base.get("tree"):
-        raise SystemExit("closure base revision mismatch")
-    changed = set(git("diff", "--name-only", base["sha"], head).splitlines()) - {CLOSURE_PATH}
+    if base.get("sha") != BASE_SHA or git("rev-parse", "%s^{tree}" % BASE_SHA) != base.get("tree"):
+        raise SystemExit("closure base is not the Mission 32 rollback/base")
+    changed = set(git("diff", "--name-only", BASE_SHA, head).splitlines())
     records = closure.get("files")
     if not isinstance(records, list) or {item.get("path") for item in records} != changed:
         raise SystemExit("closure file set is missing, extra, or stale")
-    if not (changed | {CLOSURE_PATH}) <= allowed:
-        raise SystemExit("closure contains a path outside Mission 31 authority")
+    if not (changed | {CLOSURE_PATH}) <= set(AUTHORIZED_PATHS):
+        raise SystemExit("closure contains a path outside Mission 32 authority")
     for item in records:
-        if set(item) != {"path", "sha256", "reason"} or item["sha256"] != digest_at(head, item["path"]):
+        if (set(item) != {"path", "sha256", "reason"}
+                or item.get("reason") != "Mission 32 implementation"
+                or item.get("sha256") != digest_at(head, item.get("path"))):
             raise SystemExit("closure file digest mismatch: %s" % item.get("path"))
-    nodes = changed | {item.get("path") for item in closure.get("evidence", [])}
-    expected_edges = []
-    for test in sorted(item for item in changed if item.startswith("tests/")):
-        for source in sorted(item for item in changed if not item.startswith("tests/")):
-            expected_edges.append({"from": test, "to": source, "kind": "tests"})
-    if closure.get("edges") != expected_edges:
+    edges = expected_edges(changed)
+    if not edges or closure.get("edges") != edges:
         raise SystemExit("closure dependency edges are incomplete or contradictory")
-    if not closure.get("edges"):
-        raise SystemExit("closure dependency edges are empty")
-    for edge in closure.get("edges", []):
-        if set(edge) != {"from", "to", "kind"} or edge["from"] not in nodes or edge["to"] not in nodes:
-            raise SystemExit("closure dependency edge is dangling")
-    expected_pins = []
-    pin_pattern = re.compile(r"josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@([0-9a-f]{40})")
-    for consumer in sorted(path for path in changed if path.startswith(".github/workflows/")):
-        content = subprocess.check_output(["git", "show", "%s:%s" % (head, consumer)], cwd=ROOT, text=True)
-        for sha in sorted(set(pin_pattern.findall(content))):
-            expected_pins.append({"consumer": consumer, "sha": sha})
-    if closure.get("pins") != expected_pins:
-        raise SystemExit("closure transport pin set is missing, extra, or stale")
-    if {item.get("path") for item in closure.get("evidence", [])} != {
-        "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md"}:
-        raise SystemExit("closure evidence set is incomplete")
-    for item in closure["evidence"]:
-        if item["path"] not in changed or item["sha256"] != digest_at(head, item["path"]):
-            raise SystemExit("closure evidence digest mismatch")
-    if not closure.get("tests") or len(closure.get("reviews", [])) != 2:
-        raise SystemExit("closure requires tests and two reviews")
+    if closure.get("pins") != []:
+        raise SystemExit("Mission 32 must not claim transport pins")
+    if closure.get("classification") != CLASSIFICATION:
+        raise SystemExit("classification rules are not canonical and fail-closed")
+
+    historical = closure.get("historical", {}).get("mission_31", {})
+    historical_identity = {key: value for key, value in historical.items() if key != "evidence"}
+    if historical_identity != HISTORICAL_IDENTITY:
+        raise SystemExit("Mission 31 historical identity is not canonical")
+    historical_evidence = historical.get("evidence", [])
+    if {item.get("path") for item in historical_evidence} != HISTORICAL_EVIDENCE_PATHS:
+        raise SystemExit("Mission 31 historical evidence set is incomplete")
+    for item in historical_evidence:
+        verify_file_record(item)
+    if closure.get("evidence") != historical_evidence:
+        raise SystemExit("historical evidence binding is contradictory")
+
+    verify_file_record(closure.get("records"), RECORDS_PATH)
+    tests = closure.get("tests", [])
+    if len(tests) != 1:
+        raise SystemExit("closure requires one exact-head CI validation record")
+    test = tests[0]
+    if (test.get("head") != head or test.get("command") != "validate-all"
+            or test.get("result") != "pass"
+            or test.get("workflow_path") != ".github/workflows/terraform-validate.yml"
+            or not isinstance(test.get("run_id"), int) or test["run_id"] < 1
+            or not isinstance(test.get("run_attempt"), int) or test["run_attempt"] < 1):
+        raise SystemExit("CI validation record is not clean and head-bound")
+    verify_file_record(
+        {"path": test.get("evidence_path"), "sha256": test.get("evidence_sha256")},
+        VALIDATION_PATH,
+    )
+    validation_text = governed_file(VALIDATION_PATH).read_text(encoding="utf-8")
+    required_validation = (
+        head, "Command: validate-all", "Workflow: .github/workflows/terraform-validate.yml",
+        "Run ID: %s" % test["run_id"], "Run attempt: %s" % test["run_attempt"],
+        "Terraform: PASS", "Actionlint: PASS", "ShellCheck: PASS", "Python: PASS",
+        "Classification: PASS", "Closure: PASS", "Ran ", "OK", "Validation complete",
+    )
+    if any(marker not in validation_text for marker in required_validation):
+        raise SystemExit("CI evidence does not prove all required validators at the requested head")
+
+    reviews = closure.get("reviews", [])
+    if len(reviews) != 2 or {item.get("report_path") for item in reviews} != REVIEW_PATHS:
+        raise SystemExit("two governed independent reviews are required")
     reviewers = set()
-    report_paths = set()
-    for collection in ("tests", "reviews"):
-        for item in closure.get(collection, []):
-            if item.get("head") != head or item.get("result", "pass") != "pass" or item.get("critical", 0) != 0 or item.get("important", 0) != 0:
-                raise SystemExit("closure %s record is not clean and head-bound" % collection)
-            evidence_path = item.get("evidence_path") if collection == "tests" else item.get("report_path")
-            evidence_sha = item.get("evidence_sha256") if collection == "tests" else item.get("report_sha256")
-            if not isinstance(evidence_path, str) or not isinstance(evidence_sha, str):
-                raise SystemExit("closure %s record lacks durable evidence binding" % collection)
-            if collection == "reviews":
-                if not evidence_path.startswith("outputs/mission-31-review/") or ".." in Path(evidence_path).parts:
-                    raise SystemExit("closure review evidence path is not governed")
-                evidence_file = ROOT / evidence_path
-                if not evidence_file.is_file():
-                    raise SystemExit("closure review evidence is missing")
-                try:
-                    evidence_file.resolve().relative_to((ROOT / "outputs/mission-31-review").resolve())
-                except ValueError:
-                    raise SystemExit("closure review evidence escapes its governed directory")
-                if hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
-                    raise SystemExit("closure review evidence is stale")
-                report = evidence_file.read_text(encoding="utf-8")
-                reviewer_match = re.search(r"(?m)^Reviewer:\s*(\S+)\s*$", report)
-                head_match = re.search(r"(?m)^HEAD:\s*`([0-9a-f]{40})`\s*$", report)
-                checkpoint_match = re.search(r"(?m)^Checkpoint:\s*([0-9a-f]{64})\s*$", report)
-                canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
-                expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
-                if (len(re.findall(r"(?m)^Reviewer:\s*\S+\s*$", report)) != 1
-                        or len(re.findall(r"(?m)^HEAD:\s*`[0-9a-f]{40}`\s*$", report)) != 1
-                        or len(re.findall(r"(?m)^Checkpoint:\s*[0-9a-f]{64}\s*$", report)) != 1
-                        or len(re.findall(r"(?m)^Critical:\s*[0-9]+\s*$", report)) != 1
-                        or len(re.findall(r"(?m)^Important:\s*[0-9]+\s*$", report)) != 1
-                        or len(re.findall(r"(?m)^PASS\s*$", report)) != 1
-                        or reviewer_match is None or reviewer_match.group(1) != item.get("reviewer")
-                        or head_match is None or head_match.group(1) != head
-                        or checkpoint_match is None or checkpoint_match.group(1) != expected_checkpoint
-                        or item.get("checkpoint") != expected_checkpoint
-                        or re.search(r"(?m)^Critical:\s*0\s*$", report) is None
-                        or re.search(r"(?m)^Important:\s*0\s*$", report) is None
-                        or re.search(r"(?m)^PASS\s*$", report) is None
-                        or re.search(r"(?m)^(?:Critical|Important):\s*[1-9]\d*\s*$", report) is not None
-                        or re.search(r"(?m)^(?:FAIL|Verdict:\s*FAIL)\s*$", report) is not None):
-                    raise SystemExit("closure review report is not head-bound")
-            else:
-                if item.get("command") not in {"validate-all", "focused-tests"}:
-                    raise SystemExit("closure test command is not approved")
-                if item.get("workflow_path") not in {".github/workflows/mission-command.yml", ".github/workflows/terraform-validate.yml"}:
-                    raise SystemExit("closure test workflow is not approved")
-                if not isinstance(item.get("run_id"), int) or item["run_id"] < 1:
-                    raise SystemExit("closure test run identity is invalid")
-                if not isinstance(item.get("run_attempt"), int) or item["run_attempt"] < 1:
-                    raise SystemExit("closure test run attempt is invalid")
-                if not evidence_path.startswith("outputs/mission-31-validation/"):
-                    raise SystemExit("closure test evidence is not bound to the attested revision")
-                evidence_file = ROOT / evidence_path
-                try:
-                    evidence_file.resolve().relative_to((ROOT / "outputs/mission-31-validation").resolve())
-                except ValueError:
-                    raise SystemExit("closure test evidence escapes its governed directory")
-                if not evidence_file.is_file() or hashlib.sha256(evidence_file.read_bytes()).hexdigest() != evidence_sha:
-                    raise SystemExit("closure test evidence is missing or stale")
-                evidence_text = evidence_file.read_text(encoding="utf-8")
-                if (head not in evidence_text or "Validation complete" not in evidence_text
-                        or "Command: %s" % item["command"] not in evidence_text
-                        or "Run ID: %s" % item["run_id"] not in evidence_text
-                        or "Run attempt: %s" % item["run_attempt"] not in evidence_text
-                        or "Workflow: %s" % item["workflow_path"] not in evidence_text
-                        or "Ran " not in evidence_text or "OK" not in evidence_text):
-                    raise SystemExit("closure test evidence does not prove the requested head")
-            if collection == "reviews":
-                if item["reviewer"] in reviewers or evidence_path in report_paths:
-                    raise SystemExit("closure reviews are not independent")
-                reviewers.add(item["reviewer"])
-                report_paths.add(evidence_path)
-    if len(closure.get("reviews", [])) != 2 or len({item["checkpoint"] for item in closure["reviews"]}) != 2:
-        raise SystemExit("two independent checkpointed reviews are required")
+    checkpoints = set()
+    for item in reviews:
+        if (item.get("head") != head or item.get("critical") != 0 or item.get("important") != 0
+                or item.get("reviewer") in reviewers or item.get("checkpoint") in checkpoints):
+            raise SystemExit("closure review is not independent, clean, and head-bound")
+        verify_file_record(
+            {"path": item.get("report_path"), "sha256": item.get("report_sha256")},
+            item.get("report_path"),
+        )
+        report = governed_file(item["report_path"]).read_text(encoding="utf-8")
+        canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
+        expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
+        required_report = (
+            "Reviewer: %s" % item["reviewer"], "HEAD: `%s`" % head,
+            "Critical: 0", "Important: 0", "PASS", "Checkpoint: %s" % expected_checkpoint,
+        )
+        if item.get("checkpoint") != expected_checkpoint or any(marker not in report for marker in required_report):
+            raise SystemExit("closure review report is not checkpointed and head-bound")
+        reviewers.add(item["reviewer"])
+        checkpoints.add(item["checkpoint"])
+
+    reconciliation = closure.get("reconciliation", {})
+    if (reconciliation.get("head") != head or reconciliation.get("critical") != 0
+            or reconciliation.get("important") != 0 or reconciliation.get("result") != "pass"):
+        raise SystemExit("reconciliation is not clean and head-bound")
+    verify_file_record(
+        {"path": reconciliation.get("path"), "sha256": reconciliation.get("sha256")},
+        RECONCILIATION_PATH,
+    )
+    reconciliation_text = governed_file(RECONCILIATION_PATH).read_text(encoding="utf-8")
+    if any(marker not in reconciliation_text for marker in (
+        "HEAD: `%s`" % head, "Critical: 0", "Important: 0", "Reconciliation: PASS",
+    )):
+        raise SystemExit("reconciliation evidence is incomplete")
     return 0
 
 

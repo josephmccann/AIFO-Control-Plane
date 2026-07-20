@@ -1,18 +1,79 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.getaifo.com/engineering-os/v1/activation-closure.schema.json",
-  "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "mission", "base", "final", "files", "edges", "pins", "tests", "evidence", "reviews"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mission", "historical", "base", "final", "files", "edges", "pins", "classification", "records", "tests", "evidence", "reviews", "reconciliation"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "mission": {"type": "object", "additionalProperties": false, "required": ["repository", "issue", "declaration_path", "declaration_sha256", "ready_declaration_sha256", "allowed_paths"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "issue": {"const": 31}, "declaration_path": {"const": "outputs/successor-mission-declaration.md"}, "declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "ready_declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "allowed_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}},
-    "base": {"type": "object", "additionalProperties": false, "required": ["sha", "tree"], "properties": {"sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
-    "final": {"type": "object", "additionalProperties": false, "required": ["sha", "tree"], "properties": {"sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "mission": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository", "issue", "mission_id", "declaration_path", "declaration_sha256", "ready_declaration_sha256", "ready_event", "allowed_paths"],
+      "properties": {
+        "repository": {"const": "josephmccann/AIFO-Control-Plane"},
+        "issue": {"const": 32},
+        "mission_id": {"const": "aifo-control-plane-validation-classification-successor-ready-exception-2026-07-20"},
+        "declaration_path": {"const": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32"},
+        "declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "ready_declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "ready_event": {
+          "type": "object", "additionalProperties": false,
+          "required": ["event_hash", "sequence", "actor", "occurred_at", "source_url"],
+          "properties": {
+            "event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "sequence": {"const": 1},
+            "actor": {"const": "josephmccann"},
+            "occurred_at": {"const": "2026-07-20T20:25:03Z"},
+            "source_url": {"const": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32#issuecomment-5026935272"}
+          }
+        },
+        "allowed_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "historical": {
+      "type": "object", "additionalProperties": false, "required": ["mission_31"],
+      "properties": {
+        "mission_31": {
+          "type": "object", "additionalProperties": false,
+          "required": ["issue", "ready_declaration_sha256", "ready_event_hash", "candidate", "superseded_closure_sha256", "evidence"],
+          "properties": {
+            "issue": {"const": 31},
+            "ready_declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "ready_event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "candidate": {"$ref": "#/$defs/revision"},
+            "superseded_closure_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "evidence": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/fileDigest"}}
+          }
+        }
+      }
+    },
+    "base": {"$ref": "#/$defs/revision"},
+    "final": {"$ref": "#/$defs/revision"},
     "files": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "reason"], "properties": {"path": {"type": "string", "pattern": "^[^/].+$"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "reason": {"type": "string", "minLength": 1}}}},
-    "edges": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["from", "to", "kind"], "properties": {"from": {"type": "string", "minLength": 1}, "to": {"type": "string", "minLength": 1}, "kind": {"enum": ["materializes", "pins", "tests", "documents", "validates"]}}}},
-    "pins": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["consumer", "sha"], "properties": {"consumer": {"type": "string", "minLength": 1}, "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}}},
-    "tests": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["command", "result", "head", "evidence_path", "evidence_sha256", "workflow_path", "run_id", "run_attempt"], "properties": {"command": {"type": "string", "minLength": 1}, "result": {"const": "pass"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "evidence_path": {"type": "string", "minLength": 1}, "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "workflow_path": {"enum": [".github/workflows/mission-command.yml", ".github/workflows/terraform-validate.yml"]}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}}}},
-    "evidence": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}},
-    "reviews": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "object", "additionalProperties": false, "required": ["reviewer", "checkpoint", "head", "critical", "important", "report_path", "report_sha256"], "properties": {"reviewer": {"type": "string", "minLength": 1}, "checkpoint": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "critical": {"const": 0}, "important": {"const": 0}, "report_path": {"type": "string", "minLength": 1}, "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}
+    "edges": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["from", "to", "kind"], "properties": {"from": {"type": "string", "minLength": 1}, "to": {"type": "string", "minLength": 1}, "kind": {"enum": ["tests"]}}}},
+    "pins": {"type": "array", "maxItems": 0},
+    "classification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["discovery_roots", "extensionless_python", "python_extensions", "shell_extensions", "python_interpreters", "shell_interpreters", "conflicting_signals", "unknown_executable"],
+      "properties": {
+        "discovery_roots": {"const": ["scripts", "tests"]},
+        "extensionless_python": {"const": ["scripts/engineering-os/validate-activation-closure"]},
+        "python_extensions": {"const": [".py"]},
+        "shell_extensions": {"const": [".sh"]},
+        "python_interpreters": {"const": ["python", "python3", "python3.x"]},
+        "shell_interpreters": {"const": ["bash", "dash", "ksh", "sh"]},
+        "conflicting_signals": {"const": "fail"},
+        "unknown_executable": {"const": "fail"}
+      }
+    },
+    "records": {"$ref": "#/$defs/fileDigest"},
+    "tests": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["command", "result", "head", "evidence_path", "evidence_sha256", "workflow_path", "run_id", "run_attempt"], "properties": {"command": {"const": "validate-all"}, "result": {"const": "pass"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "evidence_path": {"const": "outputs/mission-32-validation/exact-head-ci-ready.log"}, "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "workflow_path": {"const": ".github/workflows/terraform-validate.yml"}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}}}},
+    "evidence": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/fileDigest"}},
+    "reviews": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "object", "additionalProperties": false, "required": ["reviewer", "checkpoint", "head", "critical", "important", "report_path", "report_sha256"], "properties": {"reviewer": {"type": "string", "minLength": 1}, "checkpoint": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "critical": {"const": 0}, "important": {"const": 0}, "report_path": {"enum": ["outputs/mission-32-review-a-ready.md", "outputs/mission-32-review-b-ready.md"]}, "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}},
+    "reconciliation": {"type": "object", "additionalProperties": false, "required": ["head", "critical", "important", "result", "path", "sha256"], "properties": {"head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "critical": {"const": 0}, "important": {"const": 0}, "result": {"const": "pass"}, "path": {"const": "outputs/mission-32-reconciliation-ready.md"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+  },
+  "$defs": {
+    "revision": {"type": "object", "additionalProperties": false, "required": ["sha", "tree"], "properties": {"sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "fileDigest": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
   }
 }

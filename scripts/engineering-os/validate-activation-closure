@@ -179,7 +179,7 @@ def validate(path, head):
             else:
                 if item.get("command") not in {"validate-all", "focused-tests"}:
                     raise SystemExit("closure test command is not approved")
-                if item.get("workflow_path") != ".github/workflows/mission-command.yml":
+                if item.get("workflow_path") not in {".github/workflows/mission-command.yml", ".github/workflows/terraform-validate.yml"}:
                     raise SystemExit("closure test workflow is not approved")
                 if not isinstance(item.get("run_id"), int) or item["run_id"] < 1:
                     raise SystemExit("closure test run identity is invalid")

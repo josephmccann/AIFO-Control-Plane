@@ -17,6 +17,83 @@
     "tests/engineering_os/test_activation_closure.py",
     "tests/engineering_os/test_validation_classification.py"
   ],
+  "bootstrap_disposition": {
+    "pull_request": 33,
+    "base": {
+      "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+      "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b"
+    },
+    "candidate": {
+      "sha": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+      "tree": "57f00268956be9556e67c2551684df2b0630e083"
+    },
+    "prior_interim_closure_sha256": "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8",
+    "materialization_required": true,
+    "required_contexts": [
+      "Validate Terraform",
+      "GitGuardian Security Checks"
+    ],
+    "checks": [
+      {
+        "name": "Validate Terraform",
+        "conclusion": "failure",
+        "required": true,
+        "check_run_id": 88559657092
+      },
+      {
+        "name": "GitGuardian Security Checks",
+        "conclusion": "success",
+        "required": true,
+        "check_run_id": 88559651850
+      },
+      {
+        "name": "Test Integrity / Authorize exact caller and workflow provenance",
+        "conclusion": "success",
+        "required": false,
+        "check_run_id": 88559654670
+      },
+      {
+        "name": "Test Integrity / Test Integrity",
+        "conclusion": "failure",
+        "required": false,
+        "check_run_id": 88559672936
+      }
+    ],
+    "test_integrity": {
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+      "run_id": 29807038091,
+      "run_attempt": 1,
+      "caller_authorized": true,
+      "allowed": false,
+      "expected_bootstrap_denial": true,
+      "suppressed": false,
+      "overridden": false,
+      "finding_counts": {
+        "TEST_FILE_UNPARSABLE": 55,
+        "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10
+      },
+      "report_sha256": "b89bdb041faf4c0e14fa858f94d6a0a69adbfeca71cfaa93e77233e0d17f5523",
+      "artifact_id": 8485881542,
+      "artifact_digest": "27a535a4164cbc4a6dbb5c4677f8d8a632c2577d488f236fb4d4c5c215896ed7"
+    },
+    "deployment_audit": {
+      "deployment_id": 5528959623,
+      "status_id": 15719997167,
+      "state": "inactive",
+      "environment": "production",
+      "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "description": "Accidental API audit record; no deployment executed",
+      "runtime_executed": false
+    },
+    "activation_events": [],
+    "runtime_deployment": false,
+    "preserved_pull_request": {
+      "number": 24,
+      "state": "open",
+      "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+      "merged": false
+    }
+  },
   "historical": {
     "mission_31": {
       "issue": 31,
@@ -46,41 +123,41 @@
   "tests": [
     {
       "command": "validate-all",
-      "result": "pass",
-      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "result": "expected_materialization_denial",
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
       "workflow_path": ".github/workflows/terraform-validate.yml",
-      "run_id": 29779004655,
+      "run_id": 29807038982,
       "run_attempt": 1,
       "evidence_path": "outputs/mission-32-validation/exact-head-ci-ready.log",
-      "evidence_sha256": "61f59e2323f3a39b1dc3db35f0e9eb8b43849ac0384ba68c287c3d12421c54f6"
+      "evidence_sha256": "cc5960e885cbcce502f02c76effe98073bb8749557dcf1598e1ca58318c24614"
     }
   ],
   "reviews": [
     {
       "reviewer": "mission-32-reviewer-a-ready",
-      "checkpoint": "9902f606ea3a10fc2ab079f4d0a2a62e23ee436d404fa52e21d910c8d8d6babd",
-      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "checkpoint": "e163b62d993fef199d77c11f0ef93daeafcee948ead3dfbf942326292fa16280",
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
       "critical": 0,
       "important": 0,
       "report_path": "outputs/mission-32-review-a-ready.md",
-      "report_sha256": "b7eb69ab6dc0d211a85b07d4ffdbb0f7d95b91a1c637271c232bba6981568960"
+      "report_sha256": "78013c0c4216b68d985d5bee57a2ded06d1fd66a3b86bf089058579d0598e5e9"
     },
     {
       "reviewer": "mission-32-reviewer-b-ready",
-      "checkpoint": "9f2b8f05d429a4b5e47707421741f6e7963e9097f32a38c4252bf85531e4a504",
-      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "checkpoint": "fe9fdc2ff88ed4563078cf12438322a710b99ca4bc8f1dc2bc798dc0c12c113f",
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
       "critical": 0,
       "important": 0,
       "report_path": "outputs/mission-32-review-b-ready.md",
-      "report_sha256": "77070d04760ff1e8bb46acf9e838a0d2fcc396d59d25d694d58f24591e1f88c8"
+      "report_sha256": "b0ec432af67f1d6f4d5acec5828c84fe03b60c9ccf09c34d00ba296fee6c20bb"
     }
   ],
   "reconciliation": {
-    "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+    "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
     "critical": 0,
     "important": 0,
     "result": "pass",
     "path": "outputs/mission-32-reconciliation-ready.md",
-    "sha256": "26d7d1e8de99ac9c5d4083b111346819a852b3a85829ab157d7a2ff0501377d1"
+    "sha256": "e3f0eacf684e7888e4d89ca86ec7aecbdb9dc2afed6d56d064146db2a76fb994"
   }
 }

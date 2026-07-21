@@ -1,32 +1,65 @@
 Mission: #32
+PR: 33
 Ready declaration SHA-256: 72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9
 Ready event hash: f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d
-HEAD: dc8ef949c8da6fd343628e92cc377003071530c6
-Tree: e5e99a3cfeeb0dbeaf67f97f5edc6131e01f1a0e
+HEAD: 003cd6085bdec2fdd389a3cc53bd44ce28c18415
+Tree: 57f00268956be9556e67c2551684df2b0630e083
+Base: 77af0e93780134349abb15bd8d8b665c6de939a3
 Branch: codex/eos-activation-integration
 Command: validate-all
 Workflow: .github/workflows/terraform-validate.yml
-Run ID: 29779004655
+Run ID: 29807038982
 Run attempt: 1
-Event: workflow_dispatch
-Job ID: 88475364544
-Run URL: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29779004655
-Conclusion: success
-Ran 495 tests in 19.820s
+Event: pull_request
+Job ID: 88559657092
+Run URL: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29807038982
+Conclusion: failure
+Ran 502 tests in 21.012s
 OK
 Python: PASS
 Classification: PASS
 Terraform: PASS
 ShellCheck: PASS
 Actionlint: PASS
-Closure: PASS
+Closure: EXPECTED MATERIALIZATION DENIAL
+Expected terminal: closure materialization must be the direct child of the reviewed head
+GitGuardian Security Checks: PASS
+GitGuardian check run ID: 88559651850
+Test Integrity caller authorization: PASS
+Test Integrity caller job ID: 88559654670
+Test Integrity run ID: 29807038091
+Test Integrity run attempt: 1
+Test Integrity analysis job ID: 88559672936
+Test Integrity allowed: false
+Test Integrity expected bootstrap denial: true
+Test Integrity suppressed: false
+Test Integrity overridden: false
+TEST_FILE_UNPARSABLE: 55
+VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10
+Test Integrity report SHA-256: b89bdb041faf4c0e14fa858f94d6a0a69adbfeca71cfaa93e77233e0d17f5523
+Test Integrity embedded report SHA-256: 53883fa58503e5fb0c81e7634c6d36ac8ef21f7d0826555a45c5921d433e85aa
+Test Integrity artifact ID: 8485881542
+Test Integrity artifact digest: 27a535a4164cbc4a6dbb5c4677f8d8a632c2577d488f236fb4d4c5c215896ed7
+Required contexts: Validate Terraform; GitGuardian Security Checks
+Deployment 5528959623: inactive
+Deployment status 15719997167: inactive
+Activation events: none
+Runtime deployment: none
+PR 24: open, unmerged
 Pinned actionlint: 1.7.12
 Pinned ShellCheck: 0.11.0
-Validation complete
 
-Authenticated run metadata and the complete GitHub Actions log were retrieved with
-GitHub CLI after completion. The successful canonical validation step checked out
-the exact HEAD above; its log contains the test count and OK result, classification
-and Python syntax phases, three successful Terraform validations, installation of
-the pinned linters, explicit ShellCheck and Actionlint execution, and the terminal
-Validation complete marker.
+Authenticated GitHub run, job, check, artifact, deployment, deployment-status,
+and pull-request metadata were retrieved after completion with read-only GitHub
+API requests. The implementation-parent job checked out the exact revision
+above. All 502 deterministic tests passed, Python and script classification
+passed, three Terraform validations passed, and ShellCheck and Actionlint ran
+successfully. The job then failed closed at the sole expected terminal because
+the required direct evidence-only materialization child did not yet exist.
+
+The separate caller-authorized Test Integrity job generated and retained its
+complete machine report, then correctly denied at enforcement. The denial is
+preserved as expected fail-closed bootstrap evidence and is not represented as
+passing, waived, suppressed, or overridden. The materialization child must
+receive a fresh successful required check before merge. No Mission #26
+activation command or runtime deployment occurred.

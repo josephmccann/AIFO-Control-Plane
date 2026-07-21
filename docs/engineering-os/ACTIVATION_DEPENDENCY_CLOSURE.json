@@ -3,6 +3,83 @@
     "sha": "283f37b97a9df24ca056c5115197464043312185",
     "tree": "a5eeb371beb8b83d693339721e5bbc15ceca272d"
   },
+  "bootstrap_disposition": {
+    "activation_events": [],
+    "base": {
+      "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+      "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b"
+    },
+    "candidate": {
+      "sha": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+      "tree": "57f00268956be9556e67c2551684df2b0630e083"
+    },
+    "checks": [
+      {
+        "check_run_id": 88559657092,
+        "conclusion": "failure",
+        "name": "Validate Terraform",
+        "required": true
+      },
+      {
+        "check_run_id": 88559651850,
+        "conclusion": "success",
+        "name": "GitGuardian Security Checks",
+        "required": true
+      },
+      {
+        "check_run_id": 88559654670,
+        "conclusion": "success",
+        "name": "Test Integrity / Authorize exact caller and workflow provenance",
+        "required": false
+      },
+      {
+        "check_run_id": 88559672936,
+        "conclusion": "failure",
+        "name": "Test Integrity / Test Integrity",
+        "required": false
+      }
+    ],
+    "deployment_audit": {
+      "deployment_id": 5528959623,
+      "description": "Accidental API audit record; no deployment executed",
+      "environment": "production",
+      "runtime_executed": false,
+      "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "state": "inactive",
+      "status_id": 15719997167
+    },
+    "materialization_required": true,
+    "preserved_pull_request": {
+      "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+      "merged": false,
+      "number": 24,
+      "state": "open"
+    },
+    "prior_interim_closure_sha256": "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8",
+    "pull_request": 33,
+    "required_contexts": [
+      "Validate Terraform",
+      "GitGuardian Security Checks"
+    ],
+    "runtime_deployment": false,
+    "test_integrity": {
+      "allowed": false,
+      "artifact_digest": "27a535a4164cbc4a6dbb5c4677f8d8a632c2577d488f236fb4d4c5c215896ed7",
+      "artifact_id": 8485881542,
+      "caller_authorized": true,
+      "expected_bootstrap_denial": true,
+      "finding_counts": {
+        "TEST_FILE_UNPARSABLE": 55,
+        "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10
+      },
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+      "overridden": false,
+      "report_sha256": "b89bdb041faf4c0e14fa858f94d6a0a69adbfeca71cfaa93e77233e0d17f5523",
+      "run_attempt": 1,
+      "run_id": 29807038091,
+      "suppressed": false
+    }
+  },
   "classification": {
     "conflicting_signals": "fail",
     "discovery_error": "fail",
@@ -37,6 +114,61 @@
     {
       "from": "tests/engineering_os/test_activation_closure.py",
       "kind": "tests",
+      "to": "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-review/closure-records-d68c5da.json"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-review/mission-32-review-a-final-r2.md"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-review/mission-32-review-b-final-r2.md"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-validation/ci-29772912364.log"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-closure-records-ready.json"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-reconciliation-ready.md"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-reconciliation.md"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-review-a-ready.md"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-review-b-ready.md"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-validation/exact-head-ci-ready.log"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
       "to": "schemas/engineering-os/activation-closure.schema.json"
     },
     {
@@ -48,6 +180,61 @@
       "from": "tests/engineering_os/test_activation_closure.py",
       "kind": "tests",
       "to": "scripts/validate.sh"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-review/closure-records-d68c5da.json"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-review/mission-32-review-a-final-r2.md"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-review/mission-32-review-b-final-r2.md"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-31-validation/ci-29772912364.log"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-closure-records-ready.json"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-reconciliation-ready.md"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-reconciliation.md"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-review-a-ready.md"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-review-b-ready.md"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "outputs/mission-32-validation/exact-head-ci-ready.log"
     },
     {
       "from": "tests/engineering_os/test_validation_classification.py",
@@ -81,34 +268,89 @@
   ],
   "files": [
     {
+      "path": "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json",
+      "reason": "Mission 32 implementation",
+      "sha256": "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"
+    },
+    {
+      "path": "outputs/mission-31-review/closure-records-d68c5da.json",
+      "reason": "Mission 32 implementation",
+      "sha256": "7d7bc75add7f66f3fb2c401c4b4e31d55d1a16387b9bf1332ef5d8c7a94788e2"
+    },
+    {
+      "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+      "reason": "Mission 32 implementation",
+      "sha256": "6ddfcfdfc5cbd722008ea7bf3cdc64233a81a3f13f115a487c4bdcc1df7bfcb6"
+    },
+    {
+      "path": "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+      "reason": "Mission 32 implementation",
+      "sha256": "c25a42750cad2367e3ebfbcbb3fd4ec49f5695673e0d6be224ba4345b8cced99"
+    },
+    {
+      "path": "outputs/mission-31-validation/ci-29772912364.log",
+      "reason": "Mission 32 implementation",
+      "sha256": "0241997220430121bba353f29680cc4efc1e5e2a895f1cb2a2157399f63d6686"
+    },
+    {
+      "path": "outputs/mission-32-closure-records-ready.json",
+      "reason": "Mission 32 implementation",
+      "sha256": "4b74eefa4d61235b4587e29064704c411593ffaa1eb540d6f7d4445a63680db5"
+    },
+    {
+      "path": "outputs/mission-32-reconciliation-ready.md",
+      "reason": "Mission 32 implementation",
+      "sha256": "26d7d1e8de99ac9c5d4083b111346819a852b3a85829ab157d7a2ff0501377d1"
+    },
+    {
+      "path": "outputs/mission-32-reconciliation.md",
+      "reason": "Mission 32 implementation",
+      "sha256": "6d51e922ba93ef34a4f150f8db52bef57b90b45071f6a1ec0625888ee62e3f64"
+    },
+    {
+      "path": "outputs/mission-32-review-a-ready.md",
+      "reason": "Mission 32 implementation",
+      "sha256": "b7eb69ab6dc0d211a85b07d4ffdbb0f7d95b91a1c637271c232bba6981568960"
+    },
+    {
+      "path": "outputs/mission-32-review-b-ready.md",
+      "reason": "Mission 32 implementation",
+      "sha256": "77070d04760ff1e8bb46acf9e838a0d2fcc396d59d25d694d58f24591e1f88c8"
+    },
+    {
+      "path": "outputs/mission-32-validation/exact-head-ci-ready.log",
+      "reason": "Mission 32 implementation",
+      "sha256": "61f59e2323f3a39b1dc3db35f0e9eb8b43849ac0384ba68c287c3d12421c54f6"
+    },
+    {
       "path": "schemas/engineering-os/activation-closure.schema.json",
       "reason": "Mission 32 implementation",
-      "sha256": "c15b28073abbcf62314149ded48596cf6b5b3d77843c614ee673a84783e6f345"
+      "sha256": "deaca4af2750f975897edda91b3f718ac9a97455d5c8657f8190c79fbeaf451c"
     },
     {
       "path": "scripts/engineering-os/validate-activation-closure",
       "reason": "Mission 32 implementation",
-      "sha256": "ca8c8319c559b86c44b3b5f3efdb304e5b1e3fce33fc503a3236b8ff7baefae6"
+      "sha256": "0694b397c94cf83167887f43203ac5bcf978040193ae22a2bf0b4030cc8e42fb"
     },
     {
       "path": "scripts/validate.sh",
       "reason": "Mission 32 implementation",
-      "sha256": "9a4942e69a6ec0482fc947c9e35f32c1467fe9520571f1ef7cfb5f1cec4b77d0"
+      "sha256": "c0f4ed336ee6d7f79e9b8df20c099af852d141576092f6f97f174d46870ef492"
     },
     {
       "path": "tests/engineering_os/test_activation_closure.py",
       "reason": "Mission 32 implementation",
-      "sha256": "ccde92709ebd230ec3cd336aec01a26940617b9b2d627220d9af02e743f58e14"
+      "sha256": "7114bd68de3f5a7647e258c667210ec1e9f8951a3033a9d817d802912105fd75"
     },
     {
       "path": "tests/engineering_os/test_validation_classification.py",
       "reason": "Mission 32 implementation",
-      "sha256": "4fa51ab26cf7682a3352384e5606878beced3a63934fd4d6e03b8c0c22e98abc"
+      "sha256": "40fed8de625fb10ed685b621fe8df7fbdcd42256677582f429b7d705d1e2f447"
     }
   ],
   "final": {
-    "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
-    "tree": "e5e99a3cfeeb0dbeaf67f97f5edc6131e01f1a0e"
+    "sha": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+    "tree": "57f00268956be9556e67c2551684df2b0630e083"
   },
   "historical": {
     "mission_31": {
@@ -172,33 +414,33 @@
   "pins": [],
   "reconciliation": {
     "critical": 0,
-    "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+    "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
     "important": 0,
     "path": "outputs/mission-32-reconciliation-ready.md",
     "result": "pass",
-    "sha256": "26d7d1e8de99ac9c5d4083b111346819a852b3a85829ab157d7a2ff0501377d1"
+    "sha256": "e3f0eacf684e7888e4d89ca86ec7aecbdb9dc2afed6d56d064146db2a76fb994"
   },
   "records": {
     "path": "outputs/mission-32-closure-records-ready.json",
-    "sha256": "4b74eefa4d61235b4587e29064704c411593ffaa1eb540d6f7d4445a63680db5"
+    "sha256": "bbee3650cac12aed1c99ad5a6e6f07c3d13d8f161c79ab1ffdd196ff13eb1b25"
   },
   "reviews": [
     {
-      "checkpoint": "9902f606ea3a10fc2ab079f4d0a2a62e23ee436d404fa52e21d910c8d8d6babd",
+      "checkpoint": "e163b62d993fef199d77c11f0ef93daeafcee948ead3dfbf942326292fa16280",
       "critical": 0,
-      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
       "important": 0,
       "report_path": "outputs/mission-32-review-a-ready.md",
-      "report_sha256": "b7eb69ab6dc0d211a85b07d4ffdbb0f7d95b91a1c637271c232bba6981568960",
+      "report_sha256": "78013c0c4216b68d985d5bee57a2ded06d1fd66a3b86bf089058579d0598e5e9",
       "reviewer": "mission-32-reviewer-a-ready"
     },
     {
-      "checkpoint": "9f2b8f05d429a4b5e47707421741f6e7963e9097f32a38c4252bf85531e4a504",
+      "checkpoint": "fe9fdc2ff88ed4563078cf12438322a710b99ca4bc8f1dc2bc798dc0c12c113f",
       "critical": 0,
-      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
       "important": 0,
       "report_path": "outputs/mission-32-review-b-ready.md",
-      "report_sha256": "77070d04760ff1e8bb46acf9e838a0d2fcc396d59d25d694d58f24591e1f88c8",
+      "report_sha256": "b0ec432af67f1d6f4d5acec5828c84fe03b60c9ccf09c34d00ba296fee6c20bb",
       "reviewer": "mission-32-reviewer-b-ready"
     }
   ],
@@ -207,11 +449,11 @@
     {
       "command": "validate-all",
       "evidence_path": "outputs/mission-32-validation/exact-head-ci-ready.log",
-      "evidence_sha256": "61f59e2323f3a39b1dc3db35f0e9eb8b43849ac0384ba68c287c3d12421c54f6",
-      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
-      "result": "pass",
+      "evidence_sha256": "cc5960e885cbcce502f02c76effe98073bb8749557dcf1598e1ca58318c24614",
+      "head": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+      "result": "expected_materialization_denial",
       "run_attempt": 1,
-      "run_id": 29779004655,
+      "run_id": 29807038982,
       "workflow_path": ".github/workflows/terraform-validate.yml"
     }
   ]

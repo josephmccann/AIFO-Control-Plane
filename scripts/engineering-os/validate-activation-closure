@@ -241,23 +241,28 @@ def verify_bootstrap_transport(disposition, validation_text):
     """Bind every disposition identifier to the governed authenticated transport record."""
     integrity = disposition["test_integrity"]
     checks = {item["name"]: item for item in disposition["checks"]}
-    required = (
-        "Job ID: %s" % checks["Validate Terraform"]["check_run_id"],
-        "GitGuardian check run ID: %s"
+    required = {
+        "Job ID:": "Job ID: %s" % checks["Validate Terraform"]["check_run_id"],
+        "GitGuardian check run ID:": "GitGuardian check run ID: %s"
         % checks["GitGuardian Security Checks"]["check_run_id"],
-        "Test Integrity caller job ID: %s"
+        "Test Integrity caller job ID:": "Test Integrity caller job ID: %s"
         % checks["Test Integrity / Authorize exact caller and workflow provenance"]["check_run_id"],
-        "Test Integrity run ID: %s" % integrity["run_id"],
-        "Test Integrity run attempt: %s" % integrity["run_attempt"],
-        "Test Integrity analysis job ID: %s"
+        "Test Integrity run ID:": "Test Integrity run ID: %s" % integrity["run_id"],
+        "Test Integrity run attempt:":
+            "Test Integrity run attempt: %s" % integrity["run_attempt"],
+        "Test Integrity analysis job ID:": "Test Integrity analysis job ID: %s"
         % checks["Test Integrity / Test Integrity"]["check_run_id"],
-        "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
-        "Test Integrity artifact ID: %s" % integrity["artifact_id"],
-        "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
-    )
-    evidence_lines = set(validation_text.splitlines())
-    if any(marker not in evidence_lines for marker in required):
-        raise SystemExit("bootstrap evidence is not bound to authenticated transport")
+        "Test Integrity report SHA-256:":
+            "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+        "Test Integrity artifact ID:":
+            "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+        "Test Integrity artifact digest:":
+            "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+    }
+    evidence_lines = validation_text.splitlines()
+    for prefix, expected in required.items():
+        if [line for line in evidence_lines if line.startswith(prefix)] != [expected]:
+            raise SystemExit("bootstrap evidence is not bound to authenticated transport")
 
 
 def verify_ci_validation(test, head, validation_text, integrity=None):

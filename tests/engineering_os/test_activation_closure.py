@@ -166,12 +166,12 @@ class ActivationClosureTests(unittest.TestCase):
             "Test Integrity artifact ID: 8483765340",
             "Test Integrity artifact digest: 0653b33641d65dac59ea84748f6c02724c5459d8f0d63d24e337f08be4d01688",
         ))
-        def validate(candidate):
+        def validate(candidate, evidence_text=evidence):
             with tempfile.NamedTemporaryFile("w", suffix=".json") as disposition_file:
                 with tempfile.NamedTemporaryFile("w", suffix=".log") as evidence_file:
                     json.dump(candidate, disposition_file)
                     disposition_file.flush()
-                    evidence_file.write(evidence)
+                    evidence_file.write(evidence_text)
                     evidence_file.flush()
                     return subprocess.run([
                         str(SCRIPT), "--validate-bootstrap-transport",
@@ -221,6 +221,22 @@ class ActivationClosureTests(unittest.TestCase):
         for candidate in mutations:
             with self.subTest(candidate=candidate):
                 self.assertNotEqual(validate(candidate).returncode, 0)
+        for contradictory in (
+            "Job ID: 1",
+            "GitGuardian check run ID: 1",
+            "Test Integrity caller job ID: 1",
+            "Test Integrity run ID: 2",
+            "Test Integrity run attempt: 2",
+            "Test Integrity analysis job ID: 1",
+            "Test Integrity report SHA-256: " + "0" * 64,
+            "Test Integrity artifact ID: 1",
+            "Test Integrity artifact digest: " + "1" * 64,
+        ):
+            with self.subTest(contradictory=contradictory):
+                self.assertNotEqual(
+                    validate(disposition, evidence + "\n" + contradictory).returncode,
+                    0,
+                )
 
     def test_ci_validation_record_requires_exact_identifier_lines(self):
         head = "a" * 40

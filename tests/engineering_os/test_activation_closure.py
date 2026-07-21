@@ -24,6 +24,53 @@ class ActivationClosureTests(unittest.TestCase):
             return subprocess.run([str(SCRIPT), stream.name, artifact["final"]["sha"]], cwd=ROOT,
                                   text=True, capture_output=True)
 
+    def bootstrap_disposition(self, artifact):
+        return {
+            "pull_request": 33,
+            "base": {
+                "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+                "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b",
+            },
+            "candidate": dict(artifact["final"]),
+            "prior_interim_closure_sha256":
+                "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8",
+            "required_contexts": ["Validate Terraform", "GitGuardian Security Checks"],
+            "checks": [
+                {"name": "Validate Terraform", "conclusion": "success", "required": True, "check_run_id": 1},
+                {"name": "GitGuardian Security Checks", "conclusion": "success", "required": True, "check_run_id": 2},
+                {"name": "Test Integrity / Authorize exact caller and workflow provenance", "conclusion": "success", "required": False, "check_run_id": 3},
+                {"name": "Test Integrity / Test Integrity", "conclusion": "failure", "required": False, "check_run_id": 4},
+            ],
+            "test_integrity": {
+                "head": artifact["final"]["sha"], "run_id": 1, "run_attempt": 1,
+                "caller_authorized": True, "allowed": False,
+                "expected_bootstrap_denial": True, "suppressed": False,
+                "overridden": False,
+                "finding_counts": {
+                    "TEST_FILE_UNPARSABLE": 55,
+                    "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10,
+                },
+                "report_sha256":
+                    "918ebaa3f50bf82b14f006295a9f1dcfe7a5e0d7f54b7122c159b975bb51f02e",
+                "artifact_id": 8481441480,
+                "artifact_digest":
+                    "0bbc386232a92680b31727a7474999310d6dd474fe0daab40f2043ed30bd9eac",
+            },
+            "deployment_audit": {
+                "deployment_id": 5528959623, "status_id": 15719997167,
+                "state": "inactive", "environment": "production",
+                "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+                "description": "Accidental API audit record; no deployment executed",
+                "runtime_executed": False,
+            },
+            "activation_events": [], "runtime_deployment": False,
+            "preserved_pull_request": {
+                "number": 24, "state": "open",
+                "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+                "merged": False,
+            },
+        }
+
     def test_exact_mission_32_closure_is_accepted(self):
         result = self.run_validator(self.artifact())
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -69,6 +116,41 @@ class ActivationClosureTests(unittest.TestCase):
         for artifact in mutations:
             with self.subTest(artifact=artifact):
                 self.assertNotEqual(self.run_validator(artifact).returncode, 0)
+
+    def test_bootstrap_disposition_is_exact_head_bound_and_fail_closed(self):
+        artifact = self.artifact()
+        artifact["bootstrap_disposition"] = self.bootstrap_disposition(artifact)
+        disposition = artifact["bootstrap_disposition"]
+        self.assertEqual(disposition["pull_request"], 33)
+        self.assertFalse(disposition["test_integrity"]["allowed"])
+        self.assertEqual(
+            disposition["test_integrity"]["finding_counts"],
+            {
+                "TEST_FILE_UNPARSABLE": 55,
+                "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10,
+            },
+        )
+        self.assertEqual(
+            disposition["test_integrity"]["report_sha256"],
+            "918ebaa3f50bf82b14f006295a9f1dcfe7a5e0d7f54b7122c159b975bb51f02e",
+        )
+        self.assertEqual(disposition["deployment_audit"]["state"], "inactive")
+        self.assertEqual(disposition["activation_events"], [])
+        result = self.run_validator(artifact)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        mutations = []
+        for key, value in (("allowed", True),):
+            candidate = self.artifact()
+            candidate["bootstrap_disposition"] = self.bootstrap_disposition(candidate)
+            candidate["bootstrap_disposition"]["test_integrity"][key] = value
+            mutations.append(candidate)
+        required = self.artifact(); required["bootstrap_disposition"] = self.bootstrap_disposition(required); required["bootstrap_disposition"]["required_contexts"].append("Test Integrity"); mutations.append(required)
+        activation = self.artifact(); activation["bootstrap_disposition"] = self.bootstrap_disposition(activation); activation["bootstrap_disposition"]["activation_events"].append("test_integrity.baseline.authorized"); mutations.append(activation)
+        deployment = self.artifact(); deployment["bootstrap_disposition"] = self.bootstrap_disposition(deployment); deployment["bootstrap_disposition"]["deployment_audit"]["state"] = "active"; mutations.append(deployment)
+        for candidate in mutations:
+            with self.subTest(candidate=candidate):
+                self.assertNotEqual(self.run_validator(candidate).returncode, 0)
 
     def test_missing_extra_stale_and_contradictory_records_fail(self):
         mutations = []

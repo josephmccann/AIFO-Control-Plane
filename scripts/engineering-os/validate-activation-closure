@@ -83,6 +83,13 @@ HISTORICAL_IDENTITY = {
 TOP_LEVEL = {
     "schema_version", "mission", "historical", "base", "final", "files", "edges",
     "pins", "classification", "records", "tests", "evidence", "reviews", "reconciliation",
+    "bootstrap_disposition",
+}
+LEGACY_TOP_LEVEL = TOP_LEVEL - {"bootstrap_disposition"}
+LEGACY_CLOSURE_HEAD = "dc8ef949c8da6fd343628e92cc377003071530c6"
+PR_BASE = {
+    "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+    "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b",
 }
 
 
@@ -160,7 +167,10 @@ def generate(base, head, records_path):
     if records_path.resolve() != (ROOT / RECORDS_PATH).resolve():
         raise SystemExit("generation records path is not governed")
     records = json.loads(governed_file(RECORDS_PATH).read_text(encoding="utf-8"))
-    if set(records) != {"allowed_paths", "historical", "tests", "reviews", "reconciliation"}:
+    if set(records) != {
+        "allowed_paths", "historical", "tests", "reviews", "reconciliation",
+        "bootstrap_disposition",
+    }:
         raise SystemExit("generation records structure is not closed")
     if sorted(records.get("allowed_paths", [])) != AUTHORIZED_PATHS:
         raise SystemExit("generation scope does not match Mission 32 Ready authority")
@@ -180,6 +190,7 @@ def generate(base, head, records_path):
         "edges": expected_edges(changed),
         "pins": [],
         "classification": CLASSIFICATION,
+        "bootstrap_disposition": records["bootstrap_disposition"],
         "records": file_record(records_path),
         "tests": records["tests"],
         "evidence": records["historical"]["mission_31"]["evidence"],
@@ -195,7 +206,7 @@ def validate(path, head):
     violations = validate_document("activation-closure", closure)
     if violations:
         raise SystemExit("activation closure schema rejected: " + "; ".join(item.code for item in violations))
-    if set(closure) != TOP_LEVEL:
+    if set(closure) not in {frozenset(TOP_LEVEL), frozenset(LEGACY_TOP_LEVEL)}:
         raise SystemExit("closure top-level structure is not closed")
     if closure.get("mission") != MISSION:
         raise SystemExit("Mission 32 Ready identity or scope is not canonical")
@@ -223,6 +234,68 @@ def validate(path, head):
         raise SystemExit("Mission 32 must not claim transport pins")
     if closure.get("classification") != CLASSIFICATION:
         raise SystemExit("classification rules are not canonical and fail-closed")
+
+    disposition = closure.get("bootstrap_disposition")
+    if disposition is None:
+        if head != LEGACY_CLOSURE_HEAD:
+            raise SystemExit("bootstrap disposition is required after the legacy closure")
+        disposition = {}
+    integrity = disposition.get("test_integrity", {})
+    checks = disposition.get("checks", [])
+    deployment = disposition.get("deployment_audit", {})
+    pull_request_24 = disposition.get("preserved_pull_request", {})
+    expected_check_results = {
+        "Validate Terraform": ("success", True),
+        "GitGuardian Security Checks": ("success", True),
+        "Test Integrity / Authorize exact caller and workflow provenance": ("success", False),
+        "Test Integrity / Test Integrity": ("failure", False),
+    }
+    actual_check_results = {
+        item.get("name"): (item.get("conclusion"), item.get("required"))
+        for item in checks if isinstance(item, dict)
+    }
+    if "bootstrap_disposition" in closure and (
+        disposition.get("pull_request") != 33
+        or disposition.get("base") != PR_BASE
+        or disposition.get("candidate") != final
+        or disposition.get("prior_interim_closure_sha256")
+        != "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"
+        or disposition.get("required_contexts")
+        != ["Validate Terraform", "GitGuardian Security Checks"]
+        or disposition.get("activation_events") != []
+        or disposition.get("runtime_deployment") is not False
+        or actual_check_results != expected_check_results
+        or integrity.get("head") != head
+        or integrity.get("caller_authorized") is not True
+        or integrity.get("allowed") is not False
+        or integrity.get("expected_bootstrap_denial") is not True
+        or integrity.get("suppressed") is not False
+        or integrity.get("overridden") is not False
+        or integrity.get("finding_counts") != {
+            "TEST_FILE_UNPARSABLE": 55,
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10,
+        }
+        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("report_sha256", "")) is None
+        or not isinstance(integrity.get("artifact_id"), int)
+        or integrity.get("artifact_id", 0) < 1
+        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("artifact_digest", "")) is None
+        or deployment != {
+            "deployment_id": 5528959623,
+            "status_id": 15719997167,
+            "state": "inactive",
+            "environment": "production",
+            "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+            "description": "Accidental API audit record; no deployment executed",
+            "runtime_executed": False,
+        }
+        or pull_request_24 != {
+            "number": 24,
+            "state": "open",
+            "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+            "merged": False,
+        }
+    ):
+        raise SystemExit("bootstrap disposition is incomplete, stale, or contradictory")
 
     historical = closure.get("historical", {}).get("mission_31", {})
     historical_identity = {key: value for key, value in historical.items() if key != "evidence"}
@@ -258,6 +331,17 @@ def validate(path, head):
         "Terraform: PASS", "Actionlint: PASS", "ShellCheck: PASS", "Python: PASS",
         "Classification: PASS", "Closure: PASS", "Ran ", "OK", "Validation complete",
     )
+    if "bootstrap_disposition" in closure and head != LEGACY_CLOSURE_HEAD:
+        required_validation += (
+            "PR: 33", "Test Integrity caller authorization: PASS",
+            "Test Integrity allowed: false", "TEST_FILE_UNPARSABLE: 55",
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10",
+            "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+            "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+            "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+            "GitGuardian Security Checks: PASS", "Deployment 5528959623: inactive",
+            "Activation events: none", "Runtime deployment: none", "PR 24: open, unmerged",
+        )
     if any(marker not in validation_text for marker in required_validation):
         raise SystemExit("CI evidence does not prove all required validators at the requested head")
 

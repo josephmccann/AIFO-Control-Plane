@@ -252,6 +252,46 @@ def verify_bootstrap_transport(disposition, validation_text):
         raise SystemExit("bootstrap evidence is not bound to authenticated transport")
 
 
+def verify_ci_validation(test, head, validation_text, integrity=None):
+    """Require exact evidence lines for the claimed CI validation record."""
+    required = (
+        "HEAD: %s" % head,
+        "Command: validate-all",
+        "Workflow: .github/workflows/terraform-validate.yml",
+        "Run ID: %s" % test["run_id"],
+        "Run attempt: %s" % test["run_attempt"],
+        "Terraform: PASS",
+        "Actionlint: PASS",
+        "ShellCheck: PASS",
+        "Python: PASS",
+        "Classification: PASS",
+        "Closure: PASS",
+        "OK",
+        "Validation complete",
+    )
+    if integrity is not None:
+        required += (
+            "PR: 33",
+            "Test Integrity caller authorization: PASS",
+            "Test Integrity allowed: false",
+            "TEST_FILE_UNPARSABLE: 55",
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10",
+            "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+            "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+            "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+            "GitGuardian Security Checks: PASS",
+            "Deployment 5528959623: inactive",
+            "Activation events: none",
+            "Runtime deployment: none",
+            "PR 24: open, unmerged",
+        )
+    evidence_lines = set(validation_text.splitlines())
+    if any(marker not in evidence_lines for marker in required):
+        raise SystemExit("CI evidence does not prove all required validators at the requested head")
+    if not any(re.fullmatch(r"Ran [1-9][0-9]* tests in .+", line) for line in evidence_lines):
+        raise SystemExit("CI evidence does not contain an exact deterministic test result")
+
+
 def generate(base, head, records_path):
     """Emit canonical closure JSON; claims come only from explicit governed records."""
     if base != BASE_SHA:
@@ -365,25 +405,7 @@ def validate(path, head):
         VALIDATION_PATH,
     )
     validation_text = validation_data.decode("utf-8")
-    required_validation = (
-        head, "Command: validate-all", "Workflow: .github/workflows/terraform-validate.yml",
-        "Run ID: %s" % test["run_id"], "Run attempt: %s" % test["run_attempt"],
-        "Terraform: PASS", "Actionlint: PASS", "ShellCheck: PASS", "Python: PASS",
-        "Classification: PASS", "Closure: PASS", "Ran ", "OK", "Validation complete",
-    )
-    if "bootstrap_disposition" in closure and head != LEGACY_CLOSURE_HEAD:
-        required_validation += (
-            "PR: 33", "Test Integrity caller authorization: PASS",
-            "Test Integrity allowed: false", "TEST_FILE_UNPARSABLE: 55",
-            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10",
-            "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
-            "Test Integrity artifact ID: %s" % integrity["artifact_id"],
-            "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
-            "GitGuardian Security Checks: PASS", "Deployment 5528959623: inactive",
-            "Activation events: none", "Runtime deployment: none", "PR 24: open, unmerged",
-        )
-    if any(marker not in validation_text for marker in required_validation):
-        raise SystemExit("CI evidence does not prove all required validators at the requested head")
+    verify_ci_validation(test, head, validation_text, integrity if disposition is not None else None)
     if disposition is not None:
         verify_bootstrap_transport(disposition, validation_text)
 
@@ -429,6 +451,11 @@ def validate(path, head):
 
 
 def main(argv):
+    if len(argv) == 5 and argv[1] == "--validate-ci-record":
+        test = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
+        validation_text = Path(argv[3]).read_text(encoding="utf-8")
+        verify_ci_validation(test, argv[4], validation_text)
+        return 0
     if len(argv) == 6 and argv[1] == "--validate-bootstrap-transport":
         disposition = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
         validation_text = Path(argv[3]).read_text(encoding="utf-8")

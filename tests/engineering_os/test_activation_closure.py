@@ -221,6 +221,41 @@ class ActivationClosureTests(unittest.TestCase):
             with self.subTest(candidate=candidate):
                 self.assertNotEqual(validate(candidate).returncode, 0)
 
+    def test_ci_validation_record_requires_exact_identifier_lines(self):
+        head = "a" * 40
+        record = {
+            "head": head, "command": "validate-all", "result": "pass",
+            "workflow_path": ".github/workflows/terraform-validate.yml",
+            "run_id": 29804158042, "run_attempt": 1,
+        }
+        evidence = "\n".join((
+            "HEAD: " + head,
+            "Command: validate-all",
+            "Workflow: .github/workflows/terraform-validate.yml",
+            "Run ID: 29804158042",
+            "Run attempt: 1",
+            "Terraform: PASS", "Actionlint: PASS", "ShellCheck: PASS",
+            "Python: PASS", "Classification: PASS", "Closure: PASS",
+            "Ran 499 tests in 19.963s", "OK", "Validation complete",
+        ))
+
+        def validate(candidate):
+            with tempfile.NamedTemporaryFile("w", suffix=".json") as record_file:
+                with tempfile.NamedTemporaryFile("w", suffix=".log") as evidence_file:
+                    json.dump(candidate, record_file)
+                    record_file.flush()
+                    evidence_file.write(evidence)
+                    evidence_file.flush()
+                    return subprocess.run([
+                        str(SCRIPT), "--validate-ci-record", record_file.name,
+                        evidence_file.name, head,
+                    ], cwd=ROOT, text=True, capture_output=True)
+
+        self.assertEqual(validate(record).returncode, 0)
+        prefix = dict(record)
+        prefix["run_id"] = 2
+        self.assertNotEqual(validate(prefix).returncode, 0)
+
     def test_missing_extra_stale_and_contradictory_records_fail(self):
         mutations = []
         missing = self.artifact(); missing["files"].pop(); mutations.append(missing)

@@ -429,11 +429,18 @@ def verify_successor_head(final_head, successor_head):
     """Preserve a reviewed closure while validating a descendant successor."""
     if git("merge-base", final_head, successor_head) != final_head:
         raise SystemExit("closure successor is not descended from the reviewed head")
-    try:
-        changed = set(git("diff", "--name-only", "origin/main", successor_head).splitlines())
-    except Exception:
-        changed = set(git("diff", "--name-only", final_head, successor_head).splitlines())
-    if not changed or not changed <= SUCCESSOR_ALLOWED_PATHS:
+    # Diff from the reviewed closure head, not from origin/main.  Once this
+    # lands, an up-to-date checkout has origin/main == successor_head, which
+    # yields an empty diff and would reject the successor -- making the normal
+    # local validation entrypoint impossible to run from a clean checkout.
+    # "What has this successor changed since the reviewed closure" is the
+    # question that actually bounds re-review, and it does not depend on where
+    # any remote ref happens to point.
+    changed = set(git("diff", "--name-only", final_head, successor_head).splitlines())
+    # The range from the reviewed closure head necessarily contains the closure
+    # materialization child, which adds exactly the reviewed evidence paths.
+    # Those are part of the reviewed closure, not undeclared successor drift.
+    if not changed or not changed <= (SUCCESSOR_ALLOWED_PATHS | MATERIALIZATION_PATHS):
         raise SystemExit("successor changed an undeclared path")
     # Re-validate the closure's own content and hashes at the reviewed head;
     # successor implementation commits may carry refreshed historical evidence.

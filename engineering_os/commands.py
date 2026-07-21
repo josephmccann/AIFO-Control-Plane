@@ -179,6 +179,20 @@ def _consumer_identity(value: Any, provenance: Any, repository: str) -> bool:
     )
 
 
+def _is_superseded_authorization(event: Any) -> bool:
+    """True for a preserved pre-identity-separation authorization.
+
+    Such an event pairs an opaque historical baseline artifact digest with
+    whatever the default branch has since become.  It is never usable, but it
+    is authentic history and must neither be rewritten nor allowed to block a
+    replacement authorization.
+    """
+    if not isinstance(event, Mapping) or event.get("type") != _ACTIVATION_AUTHORIZED:
+        return False
+    details = event.get("details")
+    return isinstance(details, Mapping) and set(details) == _LEGACY_ACTIVATION_REQUIRED
+
+
 def _invariant_blobs(value: Any) -> Optional[Dict[str, str]]:
     """Return an exact invariant path/blob map, rejecting partial coverage."""
     if not isinstance(value, Mapping) or set(value) != set(_INVARIANT_BASELINE_PATHS):
@@ -467,12 +481,20 @@ def validate_activation_ledger(
     if not strict_chain:
         return False, "ACTIVATION_HISTORY_INVALID", {}
     activation_events = []
+    superseded = []
     for event in events:
         if event.get("type") not in _ACTIVATION_EVENTS:
             if isinstance(event.get("type"), str) and event["type"].startswith("test_integrity.baseline."):
                 return False, "ACTIVATION_HISTORY_INVALID", {}
             continue
         activation_events.append(event)
+        if _is_superseded_authorization(event):
+            # Preserved pre-separation authorization.  It is authentic history
+            # and stays visible, but it can never be attempted or consumed, so
+            # it must not be compared against the current tuple nor block the
+            # replacement authorization that identity separation requires.
+            superseded.append(event)
+            continue
         if (not isinstance(event.get("sequence"), int)
                 or isinstance(event.get("sequence"), bool)
                 or event["sequence"] < 1
@@ -1364,7 +1386,12 @@ def authorize_command_proposal(
             if not isinstance(activation, Mapping):
                 return ProposalDecision(False, "ACTIVATION_BINDING_REQUIRED")
             event_details = dict(activation)
-            existing_authorization = next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None)
+            # A superseded pre-separation authorization is unusable, so it must
+            # not count as the existing authorization; otherwise no replacement
+            # can ever be appended and activation is permanently stuck.
+            existing_authorization = next((item for item in history.events
+                                           if item.get("type") == _ACTIVATION_AUTHORIZED
+                                           and not _is_superseded_authorization(item)), None)
             existing_attempt = next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None)
             existing_consumption = next((item for item in history.events if item.get("type") == _ACTIVATION_CONSUMED), None)
             if event_type == _ACTIVATION_AUTHORIZED and existing_authorization:
@@ -1397,7 +1424,9 @@ def authorize_command_proposal(
                 build_activation_event(event_type, event_details,
                                        actor="system" if activation_system_event else actor, actor_role=role,
                                        occurred_at=occurred_at, source_url=activation_source_url,
-                                       authorization_event=next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None),
+                                       authorization_event=next((item for item in history.events
+                                                                 if item.get("type") == _ACTIVATION_AUTHORIZED
+                                                                 and not _is_superseded_authorization(item)), None),
                                        attempt_event=next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None))
             except ValueError as error:
                 return ProposalDecision(False, str(error))

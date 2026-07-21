@@ -419,6 +419,57 @@ class ActivationIdentityRoleTests(ActivationLedgerTests):
                                        repository=self.activation["repository"])[1],
             "ACTIVATION_AUTHORIZATION_SUPERSEDED")
 
+    def legacy_details(self):
+        legacy = copy.deepcopy(self.activation)
+        for field in ("baseline_generation_commit", "baseline_generation_tree",
+                      "active_execution_commit", "active_execution_tree",
+                      "compatibility_proof"):
+            legacy.pop(field)
+        return legacy
+
+    def test_superseded_authorization_can_be_replaced(self):
+        """A superseded authorization must not strand activation forever.
+
+        It can never be attempted or consumed, so if it also blocked a
+        replacement the baseline could never be activated by any means short of
+        rewriting authenticated history.
+        """
+        current = copy.deepcopy(self.activation)
+        current["founder_authorization_sequence"] = 2
+        legacy = self.auth()
+        legacy["details"] = self.legacy_details()
+        legacy["sequence"] = 1
+        replacement = self.auth()
+        replacement["details"] = copy.deepcopy(current)
+        replacement["sequence"] = 2
+        events = self.chain([legacy, replacement])
+        ok, code, _ = validate_activation_ledger(
+            events, current, repository=self.activation["repository"])
+        self.assertEqual((ok, code), (True, "ACTIVATION_AUTHORIZED"))
+
+    def test_superseded_authorization_is_never_selected_for_consumption(self):
+        current = copy.deepcopy(self.activation)
+        current["founder_authorization_sequence"] = 2
+        legacy = self.auth()
+        legacy["details"] = self.legacy_details()
+        legacy["sequence"] = 1
+        replacement = self.auth()
+        replacement["details"] = copy.deepcopy(current)
+        replacement["sequence"] = 2
+        events = self.chain([legacy, replacement])
+        _, _, details = validate_activation_ledger(
+            events, current, repository=self.activation["repository"])
+        self.assertEqual(details["authorization_event_hash"], events[1]["event_hash"])
+
+    def test_duplicate_current_authorization_still_fails_closed(self):
+        first = self.auth()
+        second = self.auth()
+        second["sequence"] = 1
+        self.assertEqual(
+            validate_activation_ledger(self.chain([first, second]), self.activation,
+                                       repository=self.activation["repository"])[1],
+            "ACTIVATION_HISTORY_INVALID")
+
     def test_default_branch_advance_after_authorization_fails_closed(self):
         self.assertEqual(
             self.ledger(self.activation, current_commit="9" * 40)[1],

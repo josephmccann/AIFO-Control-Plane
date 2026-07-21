@@ -249,7 +249,10 @@ jobs:
               "founder_authorization_sequence": len(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events.json")))) + 1,
           }
           if parsed[0] != "authorize-baseline":
-              existing = next((event for event in events if event.get("type") == "test_integrity.baseline.authorized"), None)
+              from engineering_os.commands import _is_superseded_authorization
+              existing = next((event for event in events
+                               if event.get("type") == "test_integrity.baseline.authorized"
+                               and not _is_superseded_authorization(event)), None)
               if not existing:
                   raise SystemExit("activation authorization is required before consumption")
               details = dict(existing["details"])

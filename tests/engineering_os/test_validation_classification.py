@@ -109,7 +109,7 @@ class ValidationClassificationTests(unittest.TestCase):
                 text=True,
             )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("modified tracked repository state", result.stderr)
+        self.assertIn("changed the tracked closure runtime surface", result.stderr)
 
     def test_symlinked_script_fails_closed_and_discovery_includes_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:

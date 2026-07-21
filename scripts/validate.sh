@@ -10,6 +10,19 @@ TF_ROOTS=(
 DISCOVERY_STATUS_PREFIX="AIFO_VALIDATION_DISCOVERY_STATUS:"
 SHELL_FILES=()
 PYTHON_FILES=()
+VALIDATION_RUNTIME_PATHS=(
+  "scripts/validate.sh"
+  "scripts/engineering-os/validate-activation-closure"
+  "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+  "outputs/mission-32-closure-records-ready.json"
+  "outputs/mission-32-validation/exact-head-ci-ready.log"
+  "outputs/mission-32-review-a-ready.md"
+  "outputs/mission-32-review-b-ready.md"
+  "outputs/mission-32-reconciliation-ready.md"
+  "schemas/engineering-os/activation-closure.schema.json"
+  "engineering_os/schema.py"
+  "engineering_os/errors.py"
+)
 classify_shebang() {
   local first_line="$1"
 
@@ -68,9 +81,9 @@ classify_script() {
 }
 
 verify_tracked_validation_state() {
-  if ! git -C "$ROOT_DIR" diff --quiet HEAD -- \
-      || ! git -C "$ROOT_DIR" diff --cached --quiet HEAD --; then
-    echo "Validation tests modified tracked repository state." >&2
+  if ! git -C "$ROOT_DIR" diff --quiet HEAD -- "${VALIDATION_RUNTIME_PATHS[@]}" \
+      || ! git -C "$ROOT_DIR" diff --cached --quiet HEAD -- "${VALIDATION_RUNTIME_PATHS[@]}"; then
+    echo "Validation changed the tracked closure runtime surface." >&2
     return 1
   fi
 }

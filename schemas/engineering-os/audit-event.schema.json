@@ -109,12 +109,7 @@
               "activation_type",
               "single_use",
               "founder_authorization_identity",
-              "founder_authorization_sequence",
-              "baseline_generation_commit",
-              "baseline_generation_tree",
-              "active_execution_commit",
-              "active_execution_tree",
-              "compatibility_proof"
+              "founder_authorization_sequence"
             ],
             "properties": {
               "repository": {
@@ -439,12 +434,7 @@
               "consumed_at",
               "consumption_result",
               "post_consumption_state",
-              "attempt_event_hash",
-              "baseline_generation_commit",
-              "baseline_generation_tree",
-              "active_execution_commit",
-              "active_execution_tree",
-              "compatibility_proof"
+              "attempt_event_hash"
             ],
             "properties": {
               "repository": {

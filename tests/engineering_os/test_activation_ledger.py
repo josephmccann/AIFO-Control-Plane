@@ -4,7 +4,9 @@ import unittest
 from engineering_os.canonical import content_sha256
 from engineering_os.commands import (
     _INVARIANT_BASELINE_PATHS, validate_activation_ledger, validate_compatibility_chain,
+    validate_event_chain,
 )
+from engineering_os.schema import validate_document
 
 
 class ActivationLedgerTests(unittest.TestCase):
@@ -391,6 +393,31 @@ class ActivationIdentityRoleTests(ActivationLedgerTests):
         self.assertEqual(code, "ACTIVATION_AUTHORIZATION_SUPERSEDED")
         self.assertTrue(details["superseded"])
         self.assertFalse(details["consumed"])
+
+    def test_legacy_authorization_stays_schema_valid_and_chain_valid(self):
+        """Authenticated history is not rewritten by a later identity model.
+
+        A pre-separation authorization was well-formed when it was written, so
+        it must still validate structurally and keep the event chain intact.
+        Making the new fields schema-required would reject it during
+        ``authenticate_event_history`` before the ledger could report it as
+        superseded, bricking every mission command on the issue.
+        """
+        legacy = copy.deepcopy(self.activation)
+        for field in ("baseline_generation_commit", "baseline_generation_tree",
+                      "active_execution_commit", "active_execution_tree",
+                      "compatibility_proof"):
+            legacy.pop(field)
+        event = self.chain([self.auth()])[0]
+        event["details"] = legacy
+        event["event_hash"] = content_sha256(event)
+        self.assertEqual(validate_document("audit-event", event), [])
+        self.assertEqual(validate_event_chain([copy.deepcopy(event)])[0], True)
+        # Structurally valid, yet permanently unusable.
+        self.assertEqual(
+            validate_activation_ledger([event], legacy,
+                                       repository=self.activation["repository"])[1],
+            "ACTIVATION_AUTHORIZATION_SUPERSEDED")
 
     def test_default_branch_advance_after_authorization_fails_closed(self):
         self.assertEqual(

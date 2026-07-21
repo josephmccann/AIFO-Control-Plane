@@ -197,25 +197,29 @@ class ActivationClosureTests(unittest.TestCase):
         mismatched = json.loads(json.dumps(disposition))
         mismatched["checks"][3]["check_run_id"] += 1
         mutations.append(mismatched)
+        for target, field in (("checks", "check_run_id"), ("test_integrity", "run_id"),
+                              ("test_integrity", "artifact_id")):
+            prefix = json.loads(json.dumps(disposition))
+            if target == "checks":
+                prefix[target][0][field] = 8
+            else:
+                prefix[target][field] = 2 if field == "run_id" else 8
+            mutations.append(prefix)
+        allowed = json.loads(json.dumps(disposition))
+        allowed["test_integrity"]["allowed"] = True
+        mutations.append(allowed)
+        required = json.loads(json.dumps(disposition))
+        required["required_contexts"].append("Test Integrity")
+        mutations.append(required)
+        activation = json.loads(json.dumps(disposition))
+        activation["activation_events"].append("test_integrity.baseline.authorized")
+        mutations.append(activation)
+        deployment = json.loads(json.dumps(disposition))
+        deployment["deployment_audit"]["state"] = "active"
+        mutations.append(deployment)
         for candidate in mutations:
             with self.subTest(candidate=candidate):
                 self.assertNotEqual(validate(candidate).returncode, 0)
-
-    def test_bootstrap_disposition_is_fail_closed(self):
-        artifact = self.artifact()
-
-        mutations = []
-        for key, value in (("allowed", True),):
-            candidate = self.artifact()
-            candidate["bootstrap_disposition"] = self.bootstrap_disposition(candidate)
-            candidate["bootstrap_disposition"]["test_integrity"][key] = value
-            mutations.append(candidate)
-        required = self.artifact(); required["bootstrap_disposition"] = self.bootstrap_disposition(required); required["bootstrap_disposition"]["required_contexts"].append("Test Integrity"); mutations.append(required)
-        activation = self.artifact(); activation["bootstrap_disposition"] = self.bootstrap_disposition(activation); activation["bootstrap_disposition"]["activation_events"].append("test_integrity.baseline.authorized"); mutations.append(activation)
-        deployment = self.artifact(); deployment["bootstrap_disposition"] = self.bootstrap_disposition(deployment); deployment["bootstrap_disposition"]["deployment_audit"]["state"] = "active"; mutations.append(deployment)
-        for candidate in mutations:
-            with self.subTest(candidate=candidate):
-                self.assertNotEqual(self.run_validator(candidate).returncode, 0)
 
     def test_missing_extra_stale_and_contradictory_records_fail(self):
         mutations = []

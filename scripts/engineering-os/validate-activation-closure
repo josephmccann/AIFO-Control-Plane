@@ -247,7 +247,8 @@ def verify_bootstrap_transport(disposition, validation_text):
         "Test Integrity artifact ID: %s" % integrity["artifact_id"],
         "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
     )
-    if any(marker not in validation_text for marker in required):
+    evidence_lines = set(validation_text.splitlines())
+    if any(marker not in evidence_lines for marker in required):
         raise SystemExit("bootstrap evidence is not bound to authenticated transport")
 
 

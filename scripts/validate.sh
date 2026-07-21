@@ -59,7 +59,7 @@ classify_script() {
   elif [[ -x "$file" ]]; then
     echo "Unclassified executable script: ${file#"$ROOT_DIR"/}" >&2
     return 1
-  elif [[ "$file" == "$ROOT_DIR/scripts/"* || "${file##*/}" != *.* ]]; then
+  elif [[ "${file##*/}" != *.* ]]; then
     echo "Unclassified script path: ${file#"$ROOT_DIR"/}" >&2
     return 1
   else

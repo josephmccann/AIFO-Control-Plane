@@ -1,0 +1,86 @@
+{
+  "allowed_paths": [
+    "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json",
+    "outputs/mission-31-review/closure-records-d68c5da.json",
+    "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+    "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+    "outputs/mission-31-validation/ci-29772912364.log",
+    "outputs/mission-32-closure-records-ready.json",
+    "outputs/mission-32-reconciliation-ready.md",
+    "outputs/mission-32-reconciliation.md",
+    "outputs/mission-32-review-a-ready.md",
+    "outputs/mission-32-review-b-ready.md",
+    "outputs/mission-32-validation/exact-head-ci-ready.log",
+    "schemas/engineering-os/activation-closure.schema.json",
+    "scripts/engineering-os/validate-activation-closure",
+    "scripts/validate.sh",
+    "tests/engineering_os/test_activation_closure.py",
+    "tests/engineering_os/test_validation_classification.py"
+  ],
+  "historical": {
+    "mission_31": {
+      "issue": 31,
+      "ready_declaration_sha256": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
+      "ready_event_hash": "7c796c64513b21732975999db7bbca695d3209207c5f26bcbdd7b313c489bb47",
+      "candidate": {
+        "sha": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7",
+        "tree": "aae7823d40235779f914a5486aa90ea91b106c1d"
+      },
+      "superseded_closure_sha256": "7c51214965441ef93008fdff629c0637e3e208de626c1e933920cb5308e70ebb",
+      "evidence": [
+        {
+          "path": "outputs/mission-31-validation/ci-29772912364.log",
+          "sha256": "0241997220430121bba353f29680cc4efc1e5e2a895f1cb2a2157399f63d6686"
+        },
+        {
+          "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+          "sha256": "6ddfcfdfc5cbd722008ea7bf3cdc64233a81a3f13f115a487c4bdcc1df7bfcb6"
+        },
+        {
+          "path": "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+          "sha256": "c25a42750cad2367e3ebfbcbb3fd4ec49f5695673e0d6be224ba4345b8cced99"
+        }
+      ]
+    }
+  },
+  "tests": [
+    {
+      "command": "validate-all",
+      "result": "pass",
+      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "workflow_path": ".github/workflows/terraform-validate.yml",
+      "run_id": 29779004655,
+      "run_attempt": 1,
+      "evidence_path": "outputs/mission-32-validation/exact-head-ci-ready.log",
+      "evidence_sha256": "61f59e2323f3a39b1dc3db35f0e9eb8b43849ac0384ba68c287c3d12421c54f6"
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "mission-32-reviewer-a-ready",
+      "checkpoint": "9902f606ea3a10fc2ab079f4d0a2a62e23ee436d404fa52e21d910c8d8d6babd",
+      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "critical": 0,
+      "important": 0,
+      "report_path": "outputs/mission-32-review-a-ready.md",
+      "report_sha256": "b7eb69ab6dc0d211a85b07d4ffdbb0f7d95b91a1c637271c232bba6981568960"
+    },
+    {
+      "reviewer": "mission-32-reviewer-b-ready",
+      "checkpoint": "9f2b8f05d429a4b5e47707421741f6e7963e9097f32a38c4252bf85531e4a504",
+      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "critical": 0,
+      "important": 0,
+      "report_path": "outputs/mission-32-review-b-ready.md",
+      "report_sha256": "77070d04760ff1e8bb46acf9e838a0d2fcc396d59d25d694d58f24591e1f88c8"
+    }
+  ],
+  "reconciliation": {
+    "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+    "critical": 0,
+    "important": 0,
+    "result": "pass",
+    "path": "outputs/mission-32-reconciliation-ready.md",
+    "sha256": "26d7d1e8de99ac9c5d4083b111346819a852b3a85829ab157d7a2ff0501377d1"
+  }
+}

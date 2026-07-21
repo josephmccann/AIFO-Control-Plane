@@ -1,0 +1,32 @@
+Mission: #32
+Ready declaration SHA-256: 72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9
+Ready event hash: f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d
+HEAD: dc8ef949c8da6fd343628e92cc377003071530c6
+Tree: e5e99a3cfeeb0dbeaf67f97f5edc6131e01f1a0e
+Branch: codex/eos-activation-integration
+Command: validate-all
+Workflow: .github/workflows/terraform-validate.yml
+Run ID: 29779004655
+Run attempt: 1
+Event: workflow_dispatch
+Job ID: 88475364544
+Run URL: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29779004655
+Conclusion: success
+Ran 495 tests in 19.820s
+OK
+Python: PASS
+Classification: PASS
+Terraform: PASS
+ShellCheck: PASS
+Actionlint: PASS
+Closure: PASS
+Pinned actionlint: 1.7.12
+Pinned ShellCheck: 0.11.0
+Validation complete
+
+Authenticated run metadata and the complete GitHub Actions log were retrieved with
+GitHub CLI after completion. The successful canonical validation step checked out
+the exact HEAD above; its log contains the test count and OK result, classification
+and Python syntax phases, three successful Terraform validations, installation of
+the pinned linters, explicit ShellCheck and Actionlint execution, and the terminal
+Validation complete marker.

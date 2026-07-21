@@ -68,7 +68,7 @@
   "evidence": [
     {
       "path": "outputs/mission-31-validation/ci-29772912364.log",
-      "sha256": "141909357e141c380f2d3a69f76f055a69248dffc192235af4bff6e686c16384"
+      "sha256": "0241997220430121bba353f29680cc4efc1e5e2a895f1cb2a2157399f63d6686"
     },
     {
       "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
@@ -119,7 +119,7 @@
       "evidence": [
         {
           "path": "outputs/mission-31-validation/ci-29772912364.log",
-          "sha256": "141909357e141c380f2d3a69f76f055a69248dffc192235af4bff6e686c16384"
+          "sha256": "0241997220430121bba353f29680cc4efc1e5e2a895f1cb2a2157399f63d6686"
         },
         {
           "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
@@ -176,11 +176,11 @@
     "important": 0,
     "path": "outputs/mission-32-reconciliation-ready.md",
     "result": "pass",
-    "sha256": "adb96739ab58f38e9f12d2da4a91fbb6dc4e862b817a9b803f16a8e7fffdd941"
+    "sha256": "26d7d1e8de99ac9c5d4083b111346819a852b3a85829ab157d7a2ff0501377d1"
   },
   "records": {
     "path": "outputs/mission-32-closure-records-ready.json",
-    "sha256": "94e1f5966eb2222a066dcc66b278da9912b8481813d4fad124c54ad31fd80e3e"
+    "sha256": "4b74eefa4d61235b4587e29064704c411593ffaa1eb540d6f7d4445a63680db5"
   },
   "reviews": [
     {

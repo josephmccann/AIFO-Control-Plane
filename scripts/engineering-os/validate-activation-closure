@@ -111,6 +111,24 @@ def governed_file(path, expected_path=None):
     return target
 
 
+def tracked_evidence(path, expected_path=None):
+    if not isinstance(path, str) or ".." in Path(path).parts or Path(path).is_absolute():
+        raise SystemExit("evidence path is not governed")
+    if expected_path is not None and path != expected_path:
+        raise SystemExit("evidence path is not canonical")
+    try:
+        entry = git("ls-tree", "HEAD", "--", path)
+    except subprocess.CalledProcessError:
+        raise SystemExit("evidence is missing from the attestation revision: %s" % path)
+    fields = entry.split(None, 3)
+    if len(fields) != 4 or fields[0] not in {"100644", "100755"} or fields[1] != "blob" or fields[3] != path:
+        raise SystemExit("evidence is not one regular tracked file: %s" % path)
+    try:
+        return subprocess.check_output(["git", "show", "HEAD:%s" % path], cwd=ROOT)
+    except subprocess.CalledProcessError:
+        raise SystemExit("evidence blob cannot be read: %s" % path)
+
+
 def file_record(path):
     relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
     return {"path": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
@@ -119,9 +137,10 @@ def file_record(path):
 def verify_file_record(record, expected_path=None):
     if not isinstance(record, dict) or set(record) != {"path", "sha256"}:
         raise SystemExit("evidence record is malformed")
-    target = governed_file(record.get("path"), expected_path)
-    if hashlib.sha256(target.read_bytes()).hexdigest() != record.get("sha256"):
+    data = tracked_evidence(record.get("path"), expected_path)
+    if hashlib.sha256(data).hexdigest() != record.get("sha256"):
         raise SystemExit("evidence digest is stale: %s" % record.get("path"))
+    return data
 
 
 def expected_edges(changed):
@@ -228,11 +247,11 @@ def validate(path, head):
             or not isinstance(test.get("run_id"), int) or test["run_id"] < 1
             or not isinstance(test.get("run_attempt"), int) or test["run_attempt"] < 1):
         raise SystemExit("CI validation record is not clean and head-bound")
-    verify_file_record(
+    validation_data = verify_file_record(
         {"path": test.get("evidence_path"), "sha256": test.get("evidence_sha256")},
         VALIDATION_PATH,
     )
-    validation_text = governed_file(VALIDATION_PATH).read_text(encoding="utf-8")
+    validation_text = validation_data.decode("utf-8")
     required_validation = (
         head, "Command: validate-all", "Workflow: .github/workflows/terraform-validate.yml",
         "Run ID: %s" % test["run_id"], "Run attempt: %s" % test["run_attempt"],
@@ -251,11 +270,11 @@ def validate(path, head):
         if (item.get("head") != head or item.get("critical") != 0 or item.get("important") != 0
                 or item.get("reviewer") in reviewers or item.get("checkpoint") in checkpoints):
             raise SystemExit("closure review is not independent, clean, and head-bound")
-        verify_file_record(
+        report_data = verify_file_record(
             {"path": item.get("report_path"), "sha256": item.get("report_sha256")},
             item.get("report_path"),
         )
-        report = governed_file(item["report_path"]).read_text(encoding="utf-8")
+        report = report_data.decode("utf-8")
         canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
         expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
         required_report = (
@@ -271,11 +290,11 @@ def validate(path, head):
     if (reconciliation.get("head") != head or reconciliation.get("critical") != 0
             or reconciliation.get("important") != 0 or reconciliation.get("result") != "pass"):
         raise SystemExit("reconciliation is not clean and head-bound")
-    verify_file_record(
+    reconciliation_data = verify_file_record(
         {"path": reconciliation.get("path"), "sha256": reconciliation.get("sha256")},
         RECONCILIATION_PATH,
     )
-    reconciliation_text = governed_file(RECONCILIATION_PATH).read_text(encoding="utf-8")
+    reconciliation_text = reconciliation_data.decode("utf-8")
     if any(marker not in reconciliation_text for marker in (
         "HEAD: `%s`" % head, "Critical: 0", "Important: 0", "Reconciliation: PASS",
     )):

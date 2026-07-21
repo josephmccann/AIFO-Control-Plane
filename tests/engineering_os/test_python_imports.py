@@ -1,0 +1,545 @@
+import hashlib
+from pathlib import Path
+import tempfile
+import unittest
+
+from engineering_os.python_imports import PythonImportError, PythonImportGraph
+from engineering_os.test_integrity import ResourceBudget, _test_stats
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+LIMITS = {
+    "max_files": 1000,
+    "max_total_bytes": 1024 * 1024,
+    "max_path_bytes": 1024,
+    "max_git_record_bytes": 4096,
+    "max_github_pages": 20,
+    "max_github_items": 2000,
+    "max_github_response_bytes": 1024 * 1024,
+    "max_coverage_bytes": 1024 * 1024,
+}
+
+
+def manifest(root):
+    result = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            payload = path.read_bytes()
+            result[path.relative_to(root).as_posix()] = {
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "git_blob_sha": "0" * 40,
+            }
+    return result
+
+
+class PythonImportGraphTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        (self.root / "tests").mkdir()
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def write(self, relative, source):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+
+    def graph(self, *, limits=None, evidence=None):
+        return PythonImportGraph(
+            self.root,
+            evidence or manifest(self.root),
+            ResourceBudget(limits or LIMITS),
+        )
+
+    def test_recursive_cycle_is_resolved_once_and_fingerprinted_deterministically(self):
+        self.write("tests/test_service.py", "import support.alpha\ndef test_x():\n    assert True\n")
+        self.write("support/__init__.py", "NAME = 'support'\n")
+        self.write("support/alpha.py", "import support.beta\nVALUE = 1\n")
+        self.write("support/beta.py", "import support.alpha\nVALUE = 2\n")
+        first = self.graph().closure("tests/test_service.py")
+        second = self.graph().closure("tests/test_service.py")
+        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertEqual(
+            first.first_party_paths,
+            (
+                "support/__init__.py",
+                "support/alpha.py",
+                "support/beta.py",
+            ),
+        )
+
+    def test_imported_support_semantic_mutation_changes_closure_fingerprint(self):
+        self.write("tests/test_service.py", "from support import VALUE\ndef test_x():\n    assert VALUE\n")
+        self.write("support.py", "VALUE = 1\n")
+        before = self.graph().closure("tests/test_service.py").fingerprint
+        self.write("support.py", "VALUE = 2\n")
+        after = self.graph().closure("tests/test_service.py").fingerprint
+        self.assertNotEqual(before, after)
+
+    def test_imported_first_party_function_body_mutation_changes_fingerprint(self):
+        self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
+        self.write("support.py", "def value():\n    return 1\n")
+        before = self.graph().closure("tests/test_service.py").fingerprint
+        self.write("support.py", "def value():\n    return 2\n")
+        after = self.graph().closure("tests/test_service.py").fingerprint
+        self.assertNotEqual(before, after)
+
+    def test_dynamic_import_inside_first_party_function_fails_closed(self):
+        self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
+        self.write("support.py", "def value():\n    return __import__('os')\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_namespace_mutation_inside_first_party_function_fails_closed(self):
+        self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
+        self.write(
+            "support.py",
+            "def value():\n    globals()['collection_flag'] = False\n    return True\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_static_import_inside_first_party_function_is_traversed(self):
+        self.write("tests/test_service.py", "from support import value\ndef test_x():\n    assert value()\n")
+        self.write(
+            "support.py",
+            "def value():\n    from helpers.nested import VALUE\n    return VALUE\n",
+        )
+        self.write("helpers/__init__.py", "NAME = 'helpers'\n")
+        self.write("helpers/nested.py", "VALUE = 1\n")
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            ("helpers/__init__.py", "helpers/nested.py", "support.py"),
+        )
+
+    def test_ancestor_conftest_and_package_initializers_are_implicit_support(self):
+        self.write("conftest.py", "ROOT_FIXTURE = 1\n")
+        self.write("tests/__init__.py", "PACKAGE_FIXTURE = 2\n")
+        self.write("tests/unit/__init__.py", "UNIT_FIXTURE = 3\n")
+        self.write("tests/unit/conftest.py", "UNIT_HOOK = 4\n")
+        self.write("tests/unit/test_service.py", "def test_x():\n    assert True\n")
+        closure = self.graph().closure("tests/unit/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "conftest.py",
+                "tests/__init__.py",
+                "tests/unit/__init__.py",
+                "tests/unit/conftest.py",
+            ),
+        )
+
+    def test_implicit_conftest_supports_bounded_pytest_fixtures(self):
+        self.write(
+            "tests/conftest.py",
+            "import pytest\n"
+            "@pytest.fixture(scope='session', params=[1, 2], ids=['one', 'two'])\n"
+            "def client(request):\n    return request.param\n",
+        )
+        self.write(
+            "tests/test_service.py",
+            "def test_client(client):\n    assert client\n",
+        )
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(closure.first_party_paths, ("tests/conftest.py",))
+
+    def test_imported_fixture_alias_has_exact_pytest_provenance(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write(
+            "support.py",
+            "from pytest import fixture as audited_fixture\n"
+            "@audited_fixture(autouse=True)\n"
+            "def setup():\n    return None\n",
+        )
+        self.assertEqual(
+            self.graph().closure("tests/test_service.py").first_party_paths,
+            ("support.py",),
+        )
+
+    def test_shadowed_pytest_fixture_decorator_fails_closed(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write(
+            "support.py",
+            "from pytest import fixture\n"
+            "def fixture(definition):\n    return definition\n"
+            "@fixture\ndef setup():\n    return None\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_pytest_fixture_options_remain_closed_and_bounded(self):
+        sources = (
+            "import pytest\n@pytest.fixture(unknown=True)\ndef setup():\n    return None\n",
+            "import pytest\n@pytest.fixture(ids=lambda value: str(value))\n"
+            "def setup():\n    return None\n",
+            "import pytest\n@pytest.fixture(params=build_values())\n"
+            "def setup():\n    return None\n",
+        )
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        for source in sources:
+            with self.subTest(source=source):
+                self.write("support.py", source)
+                with self.assertRaisesRegex(
+                    PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE",
+                ):
+                    self.graph().closure("tests/test_service.py")
+
+    def test_implicit_conftest_body_mutation_changes_fingerprint(self):
+        self.write("tests/conftest.py", "def fixture_value():\n    return 1\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        before = self.graph().closure("tests/test_service.py").fingerprint
+        self.write("tests/conftest.py", "def fixture_value():\n    return 2\n")
+        after = self.graph().closure("tests/test_service.py").fingerprint
+        self.assertNotEqual(before, after)
+
+    def test_implicit_conftest_dynamic_namespace_fails_closed(self):
+        self.write(
+            "tests/conftest.py",
+            "def pytest_collection_modifyitems(items):\n"
+            "    globals()['items'] = []\n",
+        )
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_literal_pytest_plugins_are_manifest_bound_and_recursive(self):
+        self.write("tests/conftest.py", "pytest_plugins = ('plugins.audit',)\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        self.write("plugins/__init__.py", "PLUGIN_PACKAGE = True\n")
+        self.write("plugins/audit.py", "from support import VALUE\n")
+        self.write("support.py", "VALUE = 1\n")
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "plugins/__init__.py",
+                "plugins/audit.py",
+                "support.py",
+                "tests/conftest.py",
+            ),
+        )
+
+    def test_nested_cyclic_pytest_plugins_terminate_deterministically(self):
+        self.write("tests/conftest.py", "pytest_plugins = 'plugins.alpha'\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        self.write("plugins/__init__.py", "PLUGIN_PACKAGE = True\n")
+        self.write("plugins/alpha.py", "pytest_plugins = 'plugins.beta'\n")
+        self.write("plugins/beta.py", "pytest_plugins = 'plugins.alpha'\n")
+        first = self.graph().closure("tests/test_service.py")
+        second = self.graph().closure("tests/test_service.py")
+        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertEqual(
+            first.first_party_paths,
+            (
+                "plugins/__init__.py",
+                "plugins/alpha.py",
+                "plugins/beta.py",
+                "tests/conftest.py",
+            ),
+        )
+
+    def test_dynamic_pytest_plugins_declaration_fails_closed(self):
+        self.write("tests/conftest.py", "pytest_plugins = plugin_names()\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_indirect_pytest_plugins_binding_fails_closed(self):
+        self.write(
+            "tests/conftest.py",
+            "from plugin_config import PLUGINS as pytest_plugins\n",
+        )
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        self.write("plugin_config.py", "PLUGINS = ('plugins.audit',)\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_implicit_support_consumes_shared_aggregate_budget(self):
+        self.write("tests/conftest.py", "VALUE = '" + ("x" * 80) + "'\n")
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        limits = dict(LIMITS)
+        limits["max_total_bytes"] = 64
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            self.graph(limits=limits).closure("tests/test_service.py")
+
+    def test_closed_stdlib_imports_and_path_setup_are_supported(self):
+        self.write(
+            "tests/test_service.py",
+            "import json\nimport unittest\nfrom pathlib import Path\n"
+            "ROOT = Path(__file__).resolve().parents[1]\n"
+            "FIXTURES = ROOT / 'fixtures'\n"
+            "class ServiceTests(unittest.TestCase):\n"
+            "    def test_x(self):\n        self.assertTrue(json.loads('true'))\n",
+        )
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(closure.first_party_paths, ())
+        self.assertEqual(closure.stdlib_roots, ("json", "pathlib", "unittest"))
+
+    def test_closed_import_time_setup_supports_regex_types_and_path_parent(self):
+        self.write(
+            "tests/test_service.py",
+            "import re\nfrom dataclasses import dataclass, field\n"
+            "from pathlib import Path\nfrom typing import Dict, Tuple\n"
+            "PATTERN = re.compile(r'^[a-z]+$')\n"
+            "FIXTURES = Path(__file__).resolve().parent / 'fixtures'\n"
+            "@dataclass(frozen=True)\nclass Result:\n"
+            "    values: Tuple[Dict[str, int], ...] = ()\n"
+            "    metadata: Dict[str, int] = field(default_factory=dict)\n",
+        )
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(
+            closure.stdlib_roots,
+            ("dataclasses", "pathlib", "re", "typing"),
+        )
+
+    def test_imported_custom_metaclass_fails_closed(self):
+        self.write("tests/test_service.py", "from support import Widget\n")
+        self.write(
+            "support.py",
+            "class Meta(type):\n    pass\n"
+            "class Widget(metaclass=Meta):\n    pass\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_imported_unsafe_init_subclass_fails_closed(self):
+        self.write("tests/test_service.py", "from support import Widget\n")
+        self.write(
+            "support.py",
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "class Widget(Base):\n    pass\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_imported_bounded_init_subclass_remains_parseable(self):
+        self.write("tests/test_service.py", "from support import Widget\n")
+        self.write(
+            "support.py",
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        cls.__test__ = True\n"
+            "class Widget(Base):\n    pass\n",
+        )
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(closure.first_party_paths, ("support.py",))
+
+    def test_imported_arbitrary_definition_decorator_fails_closed(self):
+        self.write("tests/test_service.py", "from support import value\n")
+        self.write(
+            "support.py",
+            "def execute(definition):\n"
+            "    import subprocess\n"
+            "    subprocess.run(['false'])\n"
+            "    return definition\n"
+            "@execute\ndef value():\n    return 1\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DEFINITION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_audited_setup_names_cannot_be_shadowed(self):
+        sources = (
+            "def field():\n    return 1\nVALUE = field()\n",
+            "def Path(value):\n    return value\nROOT = Path(__file__)\n",
+            "def property(definition):\n    return definition\n"
+            "class Value:\n    @property\n    def item(self):\n        return 1\n",
+            "def dataclass(**options):\n"
+            "    return lambda definition: definition\n"
+            "@dataclass(frozen=True)\nclass Value:\n    pass\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                self.write("tests/test_service.py", "from support import Value\n")
+                self.write("support.py", source)
+                with self.assertRaisesRegex(
+                    PythonImportError,
+                    "PYTHON_IMPORT_(?:EXECUTION|DEFINITION)_UNSAFE",
+                ):
+                    self.graph().closure("tests/test_service.py")
+
+    def test_imported_frozen_dataclass_hooks_cannot_execute_during_setup(self):
+        self.write("tests/test_service.py", "from support import VALUE\n")
+        self.write(
+            "support.py",
+            "from dataclasses import dataclass\n"
+            "@dataclass(frozen=True)\n"
+            "class Value:\n"
+            "    def __post_init__(self):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "VALUE = Value()\n",
+        )
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_EXECUTION_UNSAFE"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_import_parse_recursion_fails_closed(self):
+        self.write("tests/test_service.py", "def test_x():\n    assert True\n")
+        with unittest.mock.patch(
+            "engineering_os.python_imports.ast.parse", side_effect=RecursionError,
+        ):
+            with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_UNPARSABLE"):
+                self.graph().closure("tests/test_service.py")
+
+    def test_relative_first_party_import_is_manifest_bound(self):
+        self.write("tests/test_service.py", "import support.package\n")
+        self.write("support/__init__.py", "NAME = 'support'\n")
+        self.write("support/package/__init__.py", "from .value import VALUE\n")
+        self.write("support/package/value.py", "VALUE = 1\n")
+        closure = self.graph().closure("tests/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "support/__init__.py",
+                "support/package/__init__.py",
+                "support/package/value.py",
+            ),
+        )
+
+    def test_relative_import_requires_the_callers_exact_package(self):
+        self.write(
+            "tests/unit/test_service.py",
+            "from .helper import VALUE\ndef test_x():\n    assert VALUE\n",
+        )
+        self.write("unit/__init__.py", "NAME = 'unrelated suffix package'\n")
+        self.write("unit/helper.py", "VALUE = 1\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_UNRESOLVED"):
+            self.graph().closure("tests/unit/test_service.py")
+
+    def test_relative_import_from_exact_package_is_manifest_bound(self):
+        self.write(
+            "tests/unit/test_service.py",
+            "from .helper import VALUE\ndef test_x():\n    assert VALUE\n",
+        )
+        self.write("tests/__init__.py", "NAME = 'tests'\n")
+        self.write("tests/unit/__init__.py", "NAME = 'unit'\n")
+        self.write("tests/unit/helper.py", "VALUE = 1\n")
+        closure = self.graph().closure("tests/unit/test_service.py")
+        self.assertEqual(
+            closure.first_party_paths,
+            (
+                "tests/__init__.py",
+                "tests/unit/__init__.py",
+                "tests/unit/helper.py",
+            ),
+        )
+
+    def test_stdlib_shadow_fails_closed(self):
+        self.write("tests/test_service.py", "import json\ndef test_x():\n    assert True\n")
+        self.write("json.py", "VALUE = 'shadow'\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_SHADOWED"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_unresolved_import_fails_closed(self):
+        self.write("tests/test_service.py", "import requests\ndef test_x():\n    assert True\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_UNRESOLVED"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_contradictory_module_and_package_resolution_fails_closed(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write("support.py", "VALUE = 1\n")
+        self.write("support/__init__.py", "VALUE = 2\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_AMBIGUOUS"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_dynamic_import_at_collection_time_fails_closed(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write("support.py", "module = __import__('os')\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_DYNAMIC"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_stale_manifest_fails_closed(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write("support.py", "VALUE = 1\n")
+        evidence = manifest(self.root)
+        self.write("support.py", "VALUE = 2\n")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_MANIFEST_STALE"):
+            self.graph(evidence=evidence).closure("tests/test_service.py")
+
+    def test_manifest_path_escape_fails_closed(self):
+        evidence = {
+            "../outside.py": {"sha256": "0" * 64, "git_blob_sha": "0" * 40},
+        }
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_MANIFEST_INVALID"):
+            self.graph(evidence=evidence)
+
+    def test_manifest_symlink_fails_closed(self):
+        self.write("support.py", "VALUE = 1\n")
+        (self.root / "tests/test_service.py").symlink_to(self.root / "support.py")
+        with self.assertRaisesRegex(PythonImportError, "PYTHON_IMPORT_MANIFEST_INVALID"):
+            self.graph().closure("tests/test_service.py")
+
+    def test_import_traversal_consumes_the_shared_aggregate_budget(self):
+        self.write("tests/test_service.py", "import support\ndef test_x():\n    assert True\n")
+        self.write("support.py", "VALUE = '" + ("x" * 128) + "'\n")
+        limits = dict(LIMITS)
+        limits["max_total_bytes"] = 64
+        with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
+            self.graph(limits=limits).closure("tests/test_service.py")
+
+    def test_every_control_plane_python_test_has_a_closed_import_graph(self):
+        evidence = {}
+        paths = sorted(
+            list((REPOSITORY_ROOT / "engineering_os").glob("*.py"))
+            + list((REPOSITORY_ROOT / "tests/engineering_os").glob("*.py"))
+            + [REPOSITORY_ROOT / "tests/__init__.py"]
+        )
+        for path in paths:
+            payload = path.read_bytes()
+            evidence[path.relative_to(REPOSITORY_ROOT).as_posix()] = {
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "git_blob_sha": "0" * 40,
+            }
+        graph = PythonImportGraph(
+            REPOSITORY_ROOT,
+            evidence,
+            ResourceBudget({**LIMITS, "max_total_bytes": 64 * 1024 * 1024}),
+        )
+        test_paths = sorted(
+            path for path in evidence
+            if path.startswith("tests/engineering_os/test_")
+        )
+        self.assertGreaterEqual(len(test_paths), 25)
+        for path in test_paths:
+            with self.subTest(path=path):
+                graph.closure(path)
+
+    def test_every_control_plane_python_test_has_deterministic_case_stats(self):
+        evidence = {}
+        paths = sorted(
+            list((REPOSITORY_ROOT / "engineering_os").glob("*.py"))
+            + list((REPOSITORY_ROOT / "tests/engineering_os").glob("*.py"))
+            + [REPOSITORY_ROOT / "tests/__init__.py"]
+        )
+        for path in paths:
+            payload = path.read_bytes()
+            evidence[path.relative_to(REPOSITORY_ROOT).as_posix()] = {
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "git_blob_sha": "0" * 40,
+            }
+        test_paths = sorted(
+            path for path in evidence
+            if path.startswith("tests/engineering_os/test_")
+        )
+        findings = []
+        stats = _test_stats(
+            REPOSITORY_ROOT,
+            test_paths,
+            evidence,
+            findings,
+            {"test_globs": ["tests/**/test_*.py"]},
+            ResourceBudget({**LIMITS, "max_total_bytes": 64 * 1024 * 1024}),
+        )
+        self.assertEqual(findings, [])
+        self.assertEqual(set(stats), set(test_paths))
+
+
+if __name__ == "__main__":
+    unittest.main()

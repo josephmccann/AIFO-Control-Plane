@@ -1,0 +1,23 @@
+{
+  "allowed_paths": [
+    "engineering_os/commands.py", "engineering_os/state.py", "engineering_os/audit.py", "engineering_os/schema.py",
+    "schemas/engineering-os/audit-event.schema.json", "schemas/engineering-os/activation-closure.schema.json",
+    ".github/actions/materialize-kernel/action.yml", ".github/workflows/mission-command.yml",
+    ".github/workflows/reusable-airtable-mirror.yml", ".github/workflows/reusable-evidence-manifest.yml",
+    ".github/workflows/reusable-frozen-path-guard.yml", ".github/workflows/reusable-merge-authorization.yml",
+    ".github/workflows/reusable-mission-validation.yml", ".github/workflows/reusable-orphan-recovery.yml",
+    ".github/workflows/reusable-test-integrity.yml", ".github/workflows/reusable-tier-path-guard.yml",
+    "scripts/engineering-os/validate-activation-closure", "scripts/validate.sh", "tests/engineering_os/test_commands.py",
+    "tests/engineering_os/test_state.py", "tests/engineering_os/test_audit.py", "tests/engineering_os/test_schema.py",
+    "tests/engineering_os/test_activation_ledger.py", "tests/engineering_os/test_activation_closure.py",
+    "tests/engineering_os/test_workflow_boundaries.py", "tests/engineering_os/test_documentation.py",
+    "tests/engineering_os/test_test_integrity.py", "tests/engineering_os/test_test_integrity_adversarial.py", "tests/engineering_os/test_validation_classification.py",
+    "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json", "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
+    "docs/engineering-os/AUTHORITY_MODEL.md", "docs/engineering-os/EVIDENCE_AND_AUDIT.md", "docs/engineering-os/TEST_INTEGRITY.md"
+  ],
+  "tests": [{"command": "validate-all", "result": "pass", "head": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7", "workflow_path": ".github/workflows/terraform-validate.yml", "run_id": 29772912364, "run_attempt": 1, "evidence_path": "outputs/mission-31-validation/ci-29772912364.log", "evidence_sha256": "141909357e141c380f2d3a69f76f055a69248dffc192235af4bff6e686c16384"}],
+  "reviews": [
+    {"reviewer": "successor-reviewer-a-r2", "checkpoint": "2dab1a24db44e6167b6c7f8b584bfced38130bd378d6f387159d40e6bb7ade37", "head": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7", "critical": 0, "important": 0, "report_path": "outputs/mission-31-review/mission-32-review-a-final-r2.md", "report_sha256": "6ddfcfdfc5cbd722008ea7bf3cdc64233a81a3f13f115a487c4bdcc1df7bfcb6"},
+    {"reviewer": "successor-reviewer-b-r2", "checkpoint": "1efd163379f5458a52b98b0b37e033cbf913426b183b196ef9dd359af4d1f009", "head": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7", "critical": 0, "important": 0, "report_path": "outputs/mission-31-review/mission-32-review-b-final-r2.md", "report_sha256": "c25a42750cad2367e3ebfbcbb3fd4ec49f5695673e0d6be224ba4345b8cced99"}
+  ]
+}

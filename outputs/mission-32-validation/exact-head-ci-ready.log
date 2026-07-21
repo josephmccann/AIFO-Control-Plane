@@ -1,0 +1,63 @@
+Mission: #32
+PR: 33
+Ready declaration SHA-256: 72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9
+Ready event hash: f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d
+HEAD: 59bfd273f2697ba9696c2c52fcdccea3e4a300dc
+Tree: 1a53d1a764852b4b323cfc87495668a543b47536
+Base: 77af0e93780134349abb15bd8d8b665c6de939a3
+Branch: codex/eos-activation-integration
+Command: validate-all
+Workflow: .github/workflows/terraform-validate.yml
+Run ID: 29808976878
+Run attempt: 1
+Event: pull_request
+Job ID: 88565581385
+Run URL: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29808976878
+Conclusion: failure
+Ran 505 tests in 23.926s
+OK
+Python: PASS
+Classification: PASS
+Terraform: PASS
+ShellCheck: PASS
+Actionlint: PASS
+Closure: EXPECTED MATERIALIZATION DENIAL
+Expected terminal: closure materialization must be the direct child of the reviewed head
+GitGuardian Security Checks: PASS
+GitGuardian check run ID: 88565582427
+Test Integrity caller authorization: PASS
+Test Integrity caller job ID: 88565578949
+Test Integrity run ID: 29808976187
+Test Integrity run attempt: 1
+Test Integrity analysis job ID: 88565600147
+Test Integrity allowed: false
+Test Integrity expected bootstrap denial: true
+Test Integrity suppressed: false
+Test Integrity overridden: false
+TEST_FILE_UNPARSABLE: 55
+VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10
+Test Integrity report SHA-256: e12710ef636d7abc8e946cdfc181e909a436f33c8b19225ae1271733db6274b8
+Test Integrity embedded report SHA-256: 93c95704dd74d42a12a9e306eb57e6938dbdee044ad74c4a56cf861f06c2a2a0
+Test Integrity artifact ID: 8486625179
+Test Integrity artifact digest: 2c254711d3598dffb532fa02e33ed2a72f53c5de586580037432f830dd12e200
+Required contexts: Validate Terraform; GitGuardian Security Checks
+Deployment 5528959623: inactive
+Deployment status 15719997167: inactive
+Activation events: none
+Runtime deployment: none
+PR 24: open, unmerged
+Pinned actionlint: 1.7.12
+Pinned ShellCheck: 0.11.0
+
+Authenticated GitHub run, job, check, artifact, deployment, deployment-status,
+and pull-request metadata were retrieved after completion with read-only GitHub
+API requests. The implementation-parent job checked out the exact revision
+above. All 505 deterministic tests passed, Python and script classification
+passed, three Terraform validations passed, and ShellCheck and Actionlint ran
+successfully. The preflight result was then emitted at the sole expected
+materialization terminal.
+
+The separate caller-authorized Test Integrity job retained its complete machine
+report and correctly denied enforcement. The denial is not represented as
+passing, waived, suppressed, or overridden. No Mission #26 activation command
+or runtime deployment occurred.

@@ -32,6 +32,7 @@ class SchemaTests(unittest.TestCase):
                 "evidence",
                 "approval",
                 "audit-event",
+                "activation-closure",
                 "repository-policy",
                 "frozen-path",
                 "incident",
@@ -107,6 +108,37 @@ class SchemaTests(unittest.TestCase):
     def test_unknown_document_kind_fails_closed(self):
         violations = validate_document("not-a-contract", {})
         self.assertEqual([item.code for item in violations], ["SCHEMA_KIND_UNKNOWN"])
+
+    def test_activation_schema_conditionals_are_enforced(self):
+        event = {
+            "schema_version": "1.0.0", "mission_id": "mission-26", "sequence": 1,
+            "type": "test_integrity.baseline.authorized", "actor": "founder",
+            "actor_role": "system", "occurred_at": "2026-07-17T20:00:00Z",
+            "source_url": "https://github.com/example", "previous_event_hash": None,
+            "event_hash": "a" * 64, "details": {},
+        }
+        codes = {item.code for item in validate_document("audit-event", event)}
+        self.assertIn("SCHEMA_CONST", codes)
+        self.assertIn("SCHEMA_FIELD_REQUIRED", codes)
+
+    def test_activation_schema_accepts_closed_identity_and_rejects_nested_extras(self):
+        from tests.engineering_os.test_activation_ledger import ActivationLedgerTests
+        fixture = ActivationLedgerTests()
+        fixture.setUp()
+        event = fixture.chain([fixture.auth()])[0]
+        self.assertEqual(validate_document("audit-event", event), [])
+        event["details"]["mission_issue_identity"]["copied_from"] = 27
+        codes = {item.code for item in validate_document("audit-event", event)}
+        self.assertIn("SCHEMA_ADDITIONAL_PROPERTY", codes)
+
+    def test_activation_schema_rejects_malformed_consumption_timestamp(self):
+        from tests.engineering_os.test_activation_ledger import ActivationLedgerTests
+        fixture = ActivationLedgerTests(); fixture.setUp()
+        event = fixture.chain([fixture.auth()])[0]
+        event["type"] = "test_integrity.baseline.consumed"
+        event["details"]["consumed_at"] = "not-a-timestamp"
+        codes = {item.code for item in validate_document("audit-event", event)}
+        self.assertIn("SCHEMA_FORMAT", codes)
 
 
 if __name__ == "__main__":

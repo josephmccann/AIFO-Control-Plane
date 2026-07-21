@@ -1,0 +1,163 @@
+{
+  "allowed_paths": [
+    "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json",
+    "outputs/mission-31-review/closure-records-d68c5da.json",
+    "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+    "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+    "outputs/mission-31-validation/ci-29772912364.log",
+    "outputs/mission-32-closure-records-ready.json",
+    "outputs/mission-32-reconciliation-ready.md",
+    "outputs/mission-32-reconciliation.md",
+    "outputs/mission-32-review-a-ready.md",
+    "outputs/mission-32-review-b-ready.md",
+    "outputs/mission-32-validation/exact-head-ci-ready.log",
+    "schemas/engineering-os/activation-closure.schema.json",
+    "scripts/engineering-os/validate-activation-closure",
+    "scripts/validate.sh",
+    "tests/engineering_os/test_activation_closure.py",
+    "tests/engineering_os/test_validation_classification.py"
+  ],
+  "bootstrap_disposition": {
+    "pull_request": 33,
+    "base": {
+      "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+      "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b"
+    },
+    "candidate": {
+      "sha": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+      "tree": "1a53d1a764852b4b323cfc87495668a543b47536"
+    },
+    "prior_interim_closure_sha256": "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8",
+    "materialization_required": true,
+    "required_contexts": [
+      "Validate Terraform",
+      "GitGuardian Security Checks"
+    ],
+    "checks": [
+      {
+        "name": "Validate Terraform",
+        "conclusion": "failure",
+        "required": true,
+        "check_run_id": 88565581385
+      },
+      {
+        "name": "GitGuardian Security Checks",
+        "conclusion": "success",
+        "required": true,
+        "check_run_id": 88565582427
+      },
+      {
+        "name": "Test Integrity / Authorize exact caller and workflow provenance",
+        "conclusion": "success",
+        "required": false,
+        "check_run_id": 88565578949
+      },
+      {
+        "name": "Test Integrity / Test Integrity",
+        "conclusion": "failure",
+        "required": false,
+        "check_run_id": 88565600147
+      }
+    ],
+    "test_integrity": {
+      "head": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+      "run_id": 29808976187,
+      "run_attempt": 1,
+      "caller_authorized": true,
+      "allowed": false,
+      "expected_bootstrap_denial": true,
+      "suppressed": false,
+      "overridden": false,
+      "finding_counts": {
+        "TEST_FILE_UNPARSABLE": 55,
+        "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10
+      },
+      "report_sha256": "e12710ef636d7abc8e946cdfc181e909a436f33c8b19225ae1271733db6274b8",
+      "artifact_id": 8486625179,
+      "artifact_digest": "2c254711d3598dffb532fa02e33ed2a72f53c5de586580037432f830dd12e200"
+    },
+    "deployment_audit": {
+      "deployment_id": 5528959623,
+      "status_id": 15719997167,
+      "state": "inactive",
+      "environment": "production",
+      "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "description": "Accidental API audit record; no deployment executed",
+      "runtime_executed": false
+    },
+    "activation_events": [],
+    "runtime_deployment": false,
+    "preserved_pull_request": {
+      "number": 24,
+      "state": "open",
+      "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+      "merged": false
+    }
+  },
+  "historical": {
+    "mission_31": {
+      "issue": 31,
+      "ready_declaration_sha256": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
+      "ready_event_hash": "7c796c64513b21732975999db7bbca695d3209207c5f26bcbdd7b313c489bb47",
+      "candidate": {
+        "sha": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7",
+        "tree": "aae7823d40235779f914a5486aa90ea91b106c1d"
+      },
+      "superseded_closure_sha256": "7c51214965441ef93008fdff629c0637e3e208de626c1e933920cb5308e70ebb",
+      "evidence": [
+        {
+          "path": "outputs/mission-31-validation/ci-29772912364.log",
+          "sha256": "0241997220430121bba353f29680cc4efc1e5e2a895f1cb2a2157399f63d6686"
+        },
+        {
+          "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+          "sha256": "6ddfcfdfc5cbd722008ea7bf3cdc64233a81a3f13f115a487c4bdcc1df7bfcb6"
+        },
+        {
+          "path": "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+          "sha256": "c25a42750cad2367e3ebfbcbb3fd4ec49f5695673e0d6be224ba4345b8cced99"
+        }
+      ]
+    }
+  },
+  "tests": [
+    {
+      "command": "validate-all",
+      "result": "expected_materialization_denial",
+      "head": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+      "workflow_path": ".github/workflows/terraform-validate.yml",
+      "run_id": 29808976878,
+      "run_attempt": 1,
+      "evidence_path": "outputs/mission-32-validation/exact-head-ci-ready.log",
+      "evidence_sha256": "61a649b6d4d8c1f1bac1f7bd6ab18e386394724cb73182d4ba1b16f98e2d2a16"
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "mission-32-reviewer-a-ready",
+      "checkpoint": "b879ce6676ab34bf004f1cddda42c2093bc60adf3b0b0dfe1455d44cc4d76388",
+      "head": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+      "critical": 0,
+      "important": 0,
+      "report_path": "outputs/mission-32-review-a-ready.md",
+      "report_sha256": "d92d180ad7daf884a799ee2f8361ab71dc95788de3f189bd4000990af24454fe"
+    },
+    {
+      "reviewer": "mission-32-reviewer-b-ready",
+      "checkpoint": "9aeeb41b3b6247033d8915aa775a19d261f16f4e8bfb02abc019ebc755767fa0",
+      "head": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+      "critical": 0,
+      "important": 0,
+      "report_path": "outputs/mission-32-review-b-ready.md",
+      "report_sha256": "7e9e643521aced4d860d6e618e28e07fcacac8ffe3282a7b09efacb50069f4d4"
+    }
+  ],
+  "reconciliation": {
+    "head": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+    "critical": 0,
+    "important": 0,
+    "result": "pass",
+    "path": "outputs/mission-32-reconciliation-ready.md",
+    "sha256": "e91524bc9855c12409a00fe6c6160deb25bb9c43212355d21f85b90633bf25c5"
+  }
+}

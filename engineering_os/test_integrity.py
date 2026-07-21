@@ -24,6 +24,7 @@ from .consumption import ConsumptionBinding, consume_once
 from .records import verify_record_evidence
 from .commands import authenticate_event_history
 from .mission import validate_ready
+from .python_imports import PythonImportGraph, has_dynamic_namespace_mutation
 from .risk import compute_tier
 from .scope import PathInputError, path_matches
 
@@ -588,11 +589,12 @@ def _descendant_binding_names(node: ast.AST) -> Tuple[str, ...]:
             names.add(child.name)
         elif isinstance(child, (ast.Global, ast.Nonlocal)):
             names.update(child.names)
-        elif type(child).__name__.startswith("Match"):
-            for field in ("name", "rest"):
-                value = getattr(child, field, None)
-                if isinstance(value, str) and value:
-                    names.add(value)
+        elif type(child).__name__ in ("MatchAs", "MatchStar"):
+            if isinstance(child.name, str) and child.name:
+                names.add(child.name)
+        elif type(child).__name__ == "MatchMapping":
+            if isinstance(child.rest, str) and child.rest:
+                names.add(child.rest)
     return tuple(sorted(names))
 
 
@@ -667,123 +669,9 @@ def _bounded_definition_literal(value: Optional[ast.AST]) -> bool:
 
 
 def _has_dynamic_namespace_mutation(tree: ast.AST) -> bool:
-    """Reject dynamic module/class namespace behavior without resolving aliases."""
+    """Reject dynamic namespace behavior through the shared import guard."""
 
-    primitives = {
-        "globals", "locals", "vars", "exec", "eval", "getattr", "setattr",
-        "delattr", "__import__",
-    }
-    reflection_attributes = primitives | {
-        "__builtins__", "__dict__", "__globals__", "__getattribute__",
-        "f_globals", "f_locals", "modules",
-    }
-
-    def references_dynamic_primitive(statement: ast.stmt) -> bool:
-        if isinstance(statement, (ast.Import, ast.ImportFrom)):
-            for item in statement.names:
-                components = item.name.split(".")
-                if any(part in reflection_attributes for part in components):
-                    return True
-                if item.asname in reflection_attributes:
-                    return True
-        for node in ast.walk(statement):
-            if isinstance(node, ast.Name) and node.id in reflection_attributes:
-                return True
-            if isinstance(node, ast.Attribute) and node.attr in reflection_attributes:
-                return True
-        return False
-
-    def static_value(value: Optional[ast.AST]) -> bool:
-        return _bounded_definition_literal(value)
-
-    def simple_target(target: ast.AST) -> bool:
-        return (
-            isinstance(target, ast.Name)
-            and target.id not in reflection_attributes
-        )
-
-    def explicit_test_flag(statement: ast.Assign) -> bool:
-        return (
-            len(statement.targets) == 1
-            and isinstance(statement.targets[0], ast.Attribute)
-            and statement.targets[0].attr == "__test__"
-            and isinstance(statement.targets[0].value, ast.Name)
-            and statement.targets[0].value.id.startswith("test")
-            and isinstance(statement.value, ast.Constant)
-            and statement.value.value is False
-        )
-
-    def direct_binding_names(statement: ast.stmt) -> set:
-        if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            return {statement.name}
-        if isinstance(statement, (ast.Import, ast.ImportFrom)):
-            return {
-                item.asname or item.name.split(".")[0] for item in statement.names
-            }
-        targets = []
-        if isinstance(statement, ast.Assign):
-            targets = statement.targets
-        elif isinstance(statement, (ast.AnnAssign, ast.AugAssign)):
-            targets = [statement.target]
-        names = set()
-        for target in targets:
-            names.update(_descendant_binding_names(target))
-        return names
-
-    def safe_runtime_body(
-        body: Sequence[ast.stmt], *, class_scope: bool = False,
-        module_scope: bool = False,
-    ) -> bool:
-        framework_imports = set()
-        for statement in body:
-            if class_scope and direct_binding_names(statement) & {"pytest", "unittest"}:
-                return False
-            if isinstance(statement, (ast.Import, ast.ImportFrom)):
-                if (
-                    not module_scope
-                    or not isinstance(statement, ast.Import)
-                    or len(statement.names) != 1
-                    or statement.names[0].name not in {"pytest", "unittest"}
-                    or statement.names[0].asname is not None
-                    or statement.names[0].name in framework_imports
-                ):
-                    return False
-                framework_imports.add(statement.names[0].name)
-            if references_dynamic_primitive(statement):
-                return False
-            if isinstance(statement, ast.ClassDef):
-                if not safe_runtime_body(statement.body, class_scope=True):
-                    return False
-                continue
-            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if isinstance(statement, (ast.Import, ast.ImportFrom, ast.Pass)):
-                continue
-            if isinstance(statement, ast.Assign):
-                if explicit_test_flag(statement):
-                    continue
-                if len(statement.targets) != 1 or not simple_target(statement.targets[0]):
-                    return False
-                simple_alias = (
-                    not class_scope and len(statement.targets) == 1
-                    and isinstance(statement.targets[0], ast.Name)
-                    and isinstance(statement.value, ast.Name)
-                )
-                if not simple_alias and not static_value(statement.value):
-                    return False
-                continue
-            if isinstance(statement, ast.AnnAssign):
-                if not simple_target(statement.target) or not static_value(statement.value):
-                    return False
-                continue
-            if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
-                continue
-            return False
-        return True
-
-    return not isinstance(tree, ast.Module) or not safe_runtime_body(
-        tree.body, module_scope=True,
-    )
+    return has_dynamic_namespace_mutation(tree)
 
 
 class _SafeConstantFolder(ast.NodeTransformer):
@@ -827,11 +715,13 @@ class _SafeConstantFolder(ast.NodeTransformer):
 
 def _python_stats(
     text: str, module: str, *, allow_unittest_testcase: bool,
-    allow_pytest_parametrize: bool,
+    allow_pytest_parametrize: bool, import_fingerprint: str,
 ) -> _FileStats:
     tree = ast.parse(text)
     if _has_dynamic_namespace_mutation(tree):
         raise SyntaxError("dynamic Python namespace mutation")
+    if not import_fingerprint or _SHA256.fullmatch(import_fingerprint) is None:
+        raise SyntaxError("Python import closure is unavailable")
     for statement in tree.body:
         if not isinstance(statement, ast.Import):
             continue
@@ -924,6 +814,41 @@ def _python_stats(
                 bindings.append(False)
         return bindings == [True]
 
+    def exact_pytest_fixture_before(target: ast.AST, position: int) -> bool:
+        dotted = dotted_name(target)
+        if len(dotted) == 1:
+            local, form = dotted[0], "direct"
+        elif len(dotted) == 2 and dotted[1] == "fixture":
+            local, form = dotted[0], "module"
+        else:
+            return False
+        bindings = []
+        for statement in tree.body[:position]:
+            if isinstance(statement, ast.Import):
+                for item in statement.names:
+                    bound = item.asname or item.name.split(".")[0]
+                    if bound == local:
+                        bindings.append(form == "module" and item.name == "pytest")
+                continue
+            if isinstance(statement, ast.ImportFrom):
+                for item in statement.names:
+                    bound = item.asname or item.name
+                    if bound == local:
+                        bindings.append(
+                            form == "direct"
+                            and statement.level == 0
+                            and statement.module == "pytest"
+                            and item.name == "fixture"
+                        )
+                continue
+            if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                if statement.name == local:
+                    bindings.append(False)
+                continue
+            if local in _descendant_binding_names(statement):
+                bindings.append(False)
+        return bindings == [True]
+
     def exact_unittest_testcase(base: ast.AST, owner: ast.ClassDef) -> bool:
         return (
             allow_unittest_testcase
@@ -934,15 +859,61 @@ def _python_stats(
             and exact_module_import_before("unittest", statement_positions[id(owner)])
         )
 
-    def static_definition_value(value: Optional[ast.AST]) -> bool:
-        return _bounded_definition_literal(value)
+    def exact_static_binding_before(name: str, position: int) -> bool:
+        bindings = []
+        for statement in tree.body[:position]:
+            if (
+                isinstance(statement, ast.Assign)
+                and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+                and statement.targets[0].id == name
+            ):
+                bindings.append(_bounded_definition_literal(statement.value))
+            elif (
+                isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+                and statement.target.id == name
+            ):
+                bindings.append(_bounded_definition_literal(statement.value))
+            elif name in _descendant_binding_names(statement):
+                bindings.append(False)
+        return bindings == [True]
+
+    def static_definition_value(
+        value: Optional[ast.AST], position: Optional[int] = None,
+    ) -> bool:
+        return _bounded_definition_literal(value) or (
+            position is not None
+            and isinstance(value, ast.Name)
+            and exact_static_binding_before(value.id, position)
+        )
 
     def safe_annotation(value: Optional[ast.AST]) -> bool:
-        return value is None or (
-            isinstance(value, ast.Constant)
-            and (value.value is None or isinstance(value.value, str))
-            and _bounded_definition_literal(value)
-        )
+        if value is None:
+            return True
+        if sum(1 for _ in ast.walk(value)) > 128:
+            return False
+
+        def visit(node: ast.AST) -> bool:
+            if isinstance(node, ast.Name):
+                return node.id.isidentifier()
+            if isinstance(node, ast.Constant):
+                if node.value is Ellipsis:
+                    return True
+                return (
+                    node.value is None or isinstance(node.value, str)
+                ) and _bounded_definition_literal(node)
+            if isinstance(node, ast.Attribute):
+                return visit(node.value)
+            if isinstance(node, ast.Subscript):
+                return visit(node.value) and visit(node.slice)
+            if isinstance(node, (ast.Tuple, ast.List)):
+                return all(visit(item) for item in node.elts)
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+                return visit(node.left) and visit(node.right)
+            return False
+
+        return visit(value)
 
     def dotted_name(value: ast.AST) -> Tuple[str, ...]:
         if isinstance(value, ast.Name):
@@ -1071,6 +1042,8 @@ def _python_stats(
         decorator: ast.AST, position: int, function: Optional[Any] = None,
         bound_receiver: Optional[str] = None,
     ) -> bool:
+        if safe_pytest_fixture(decorator, position):
+            return True
         if not isinstance(decorator, ast.Call):
             return False
         name = dotted_name(decorator.func)
@@ -1105,6 +1078,62 @@ def _python_stats(
                 decorator, position, function, bound_receiver,
             )
         return False
+
+    def safe_pytest_fixture(decorator: ast.AST, position: int) -> bool:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if (
+            not allow_pytest_parametrize
+            or not exact_pytest_fixture_before(target, position)
+        ):
+            return False
+        if not isinstance(decorator, ast.Call):
+            return True
+        if decorator.args:
+            return False
+        options = {
+            item.arg: item.value for item in decorator.keywords if item.arg is not None
+        }
+        if (
+            len(options) != len(decorator.keywords)
+            or set(options) - {"autouse", "ids", "name", "params", "scope"}
+        ):
+            return False
+        if "autouse" in options and not (
+            isinstance(options["autouse"], ast.Constant)
+            and isinstance(options["autouse"].value, bool)
+        ):
+            return False
+        if "scope" in options and not (
+            isinstance(options["scope"], ast.Constant)
+            and options["scope"].value
+            in {"class", "function", "module", "package", "session"}
+        ):
+            return False
+        if "name" in options and not (
+            isinstance(options["name"], ast.Constant)
+            and isinstance(options["name"].value, str)
+            and _bounded_definition_literal(options["name"])
+        ):
+            return False
+        params = options.get("params")
+        if params is not None and not (
+            isinstance(params, (ast.List, ast.Tuple))
+            and static_definition_value(params, position)
+        ):
+            return False
+        ids = options.get("ids")
+        if ids is not None and not (
+            isinstance(ids, (ast.List, ast.Tuple))
+            and all(
+                isinstance(item, ast.Constant)
+                and (item.value is None or isinstance(item.value, str))
+                for item in ids.elts
+            )
+            and _bounded_definition_literal(ids)
+            and (params is None or len(ids.elts) == len(params.elts))
+        ):
+            return False
+        return True
 
     def safe_init_subclass_body(node: Any) -> bool:
         positional = list(node.args.posonlyargs) + list(node.args.args)
@@ -1184,7 +1213,7 @@ def _python_stats(
                     return False
                 parametrized.update(names)
         return (
-            not getattr(node, "type_params", [])
+            not ("type_params" in node._fields and node.type_params)
             and (
                 node.name != "__init_subclass__"
                 or safe_init_subclass_body(node)
@@ -1195,9 +1224,12 @@ def _python_stats(
                 )
                 for item in node.decorator_list
             )
-            and all(static_definition_value(item) for item in arguments.defaults)
             and all(
-                item is None or static_definition_value(item)
+                static_definition_value(item, position)
+                for item in arguments.defaults
+            )
+            and all(
+                item is None or static_definition_value(item, position)
                 for item in arguments.kw_defaults
             )
             and all(safe_annotation(item.annotation) for item in annotated)
@@ -1251,7 +1283,7 @@ def _python_stats(
                 if (
                     position is None
                     or statement.keywords
-                    or getattr(statement, "type_params", [])
+                    or ("type_params" in statement._fields and statement.type_params)
                     or not all(
                         safe_collection_decorator(item, position)
                         for item in statement.decorator_list
@@ -1274,9 +1306,16 @@ def _python_stats(
     top_level_classes = {
         id(statement) for statement in tree.body if isinstance(statement, ast.ClassDef)
     }
-    for candidate in ast.walk(tree):
-        if not isinstance(candidate, ast.ClassDef):
-            continue
+    collection_classes = []
+
+    def collect_class_scope(body: Sequence[ast.stmt]) -> None:
+        for statement in body:
+            if isinstance(statement, ast.ClassDef):
+                collection_classes.append(statement)
+                collect_class_scope(statement.body)
+
+    collect_class_scope(tree.body)
+    for candidate in collection_classes:
         if id(candidate) not in top_level_classes:
             raise SyntaxError("nested Python test collection class")
         if any(not isinstance(base, (ast.Name, ast.Attribute)) for base in candidate.bases):
@@ -1342,7 +1381,7 @@ def _python_stats(
             isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
             and statement.name.startswith("test")
         ) and not isinstance(statement, ast.ClassDef)
-    )
+    ) + (("python_import_closure", import_fingerprint),)
     module_disabled = any(false_assignment(statement, "__test__") for statement in tree.body)
     class_statements = [
         (index, statement) for index, statement in enumerate(tree.body)
@@ -1550,7 +1589,8 @@ def _python_stats(
             keywords=copy.deepcopy(node.keywords),
             body=copy.deepcopy(node.body),
             decorator_list=copy.deepcopy(node.decorator_list),
-            type_params=copy.deepcopy(getattr(node, "type_params", [])),
+            type_params=copy.deepcopy(node.type_params)
+            if "type_params" in node._fields else [],
         ))
 
     def direct_class_flags(node: ast.ClassDef) -> Dict[str, bool]:
@@ -2247,9 +2287,10 @@ def _javascript_stats(text: str, module: str) -> _FileStats:
 
 
 def _test_stats(
-    root: Path, paths: Iterable[str], repository_paths: Iterable[str], findings: list,
-    config: Mapping[str, Any], budget: Optional[ResourceBudget] = None,
+    root: Path, paths: Iterable[str], repository_manifest: Mapping[str, Mapping[str, str]],
+    findings: list, config: Mapping[str, Any], budget: Optional[ResourceBudget] = None,
 ) -> Dict[str, _FileStats]:
+    repository_paths = tuple(repository_manifest)
     unittest_shadowed = any(
         path == "unittest.py" or path.endswith("/unittest.py")
         or path == "unittest/__init__.py" or path.endswith("/unittest/__init__.py")
@@ -2261,6 +2302,7 @@ def _test_stats(
         for path in repository_paths
     )
     result = {}
+    graph = PythonImportGraph(root, repository_manifest, budget)
     for relative in sorted(paths):
         try:
             text = _source(root / relative, budget, phase="test-parsing")
@@ -2268,6 +2310,7 @@ def _test_stats(
                 _python_stats(
                     text, relative, allow_unittest_testcase=not unittest_shadowed,
                     allow_pytest_parametrize=not pytest_shadowed,
+                    import_fingerprint=graph.closure(relative).fingerprint,
                 ) if relative.endswith(".py")
                 else _javascript_stats(text, relative)
             )
@@ -2279,7 +2322,11 @@ def _test_stats(
             findings.append(IntegrityFinding(
                 "TEST_FILE_UNREADABLE", "Test file is not valid UTF-8.", relative,
             ))
-        except SyntaxError:
+        except OSError:
+            findings.append(IntegrityFinding(
+                "TEST_FILE_UNREADABLE", "Test file or imported support cannot be read.", relative,
+            ))
+        except (SyntaxError, RecursionError):
             findings.append(IntegrityFinding(
                 "TEST_FILE_UNPARSABLE", "Test file cannot be parsed deterministically.", relative,
             ))
@@ -2445,7 +2492,7 @@ def _analyze_test_integrity(
         )
     try:
         checked = _validate_policy(policy, resource_budget)
-    except (OverflowError, MemoryError):
+    except (OverflowError, MemoryError, RecursionError):
         return _invalid_report(policy, "TEST_RESOURCE_LIMIT", "Policy evidence exceeds deterministic resource limits.")
     except (PathInputError, TypeError, ValueError, re.error):
         return _invalid_report(policy, "TEST_INTEGRITY_POLICY_INVALID", "Test-integrity policy is invalid.")
@@ -2457,7 +2504,7 @@ def _analyze_test_integrity(
         budget = checked["_resource_budget"]
         actual_base = _scan(base, checked["configuration"], budget)
         actual_head = _scan(head, checked["configuration"], budget)
-    except (OverflowError, MemoryError):
+    except (OverflowError, MemoryError, RecursionError):
         return _invalid_report(checked, "TEST_RESOURCE_LIMIT", "Checkout exceeds deterministic resource limits.")
     except (OSError, TypeError, ValueError, UnicodeError):
         return _invalid_report(checked, "TEST_CHECKOUT_UNAVAILABLE", "A checkout cannot be read safely.")
@@ -2564,19 +2611,22 @@ def _analyze_test_integrity(
                     path, {"case": identity},
                 ))
 
-    totals = lambda values, field: sum(getattr(item, field) for item in values.values())
-    base_assertions = totals(base_stats, "assertions")
-    head_assertions = totals(head_stats, "assertions")
-    base_skips = totals(base_stats, "skips")
-    head_skips = totals(head_stats, "skips")
-    base_focuses = totals(base_stats, "focuses")
-    head_focuses = totals(head_stats, "focuses")
-    base_focus_declarations = totals(base_stats, "focus_declarations")
-    head_focus_declarations = totals(head_stats, "focus_declarations")
-    base_sourcing = totals(base_stats, "sourcing_assertions")
-    head_sourcing = totals(head_stats, "sourcing_assertions")
-    base_properties = totals(base_stats, "property_assertions")
-    head_properties = totals(head_stats, "property_assertions")
+    base_assertions = sum(item.assertions for item in base_stats.values())
+    head_assertions = sum(item.assertions for item in head_stats.values())
+    base_skips = sum(item.skips for item in base_stats.values())
+    head_skips = sum(item.skips for item in head_stats.values())
+    base_focuses = sum(item.focuses for item in base_stats.values())
+    head_focuses = sum(item.focuses for item in head_stats.values())
+    base_focus_declarations = sum(
+        item.focus_declarations for item in base_stats.values()
+    )
+    head_focus_declarations = sum(
+        item.focus_declarations for item in head_stats.values()
+    )
+    base_sourcing = sum(item.sourcing_assertions for item in base_stats.values())
+    head_sourcing = sum(item.sourcing_assertions for item in head_stats.values())
+    base_properties = sum(item.property_assertions for item in base_stats.values())
+    head_properties = sum(item.property_assertions for item in head_stats.values())
     if head_skips > base_skips:
         findings.append(IntegrityFinding("TEST_SKIP_ADDED", "New skipped or disabled tests were detected."))
     if (
@@ -2819,7 +2869,7 @@ def analyze_test_integrity(
         return _analyze_test_integrity(
             base_root, head_root, policy, resource_budget=resource_budget,
         )
-    except (OverflowError, MemoryError):
+    except (OverflowError, MemoryError, RecursionError):
         return _invalid_report(
             policy, "TEST_RESOURCE_LIMIT",
             "Integrity processing exceeded its shared deterministic resource budget.",

@@ -14,13 +14,9 @@ KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.ym
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
-KERNEL_ACTION_SHA = "337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21"
+KERNEL_ACTION_SHA = "29eaa5811c6d161b17299ed177690343106cb31f"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
-    "docs/engineering-os/ENGINEERING_CONSTITUTION.md",
-    "engineering_os",
-    "scripts/engineering-os",
-    "schemas/engineering-os",
 )
 DEMO_CALLER_PATHS = {
     "reusable-airtable-mirror.yml": ".github/workflows/eos-airtable-mirror.yml",
@@ -155,6 +151,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn('[[ "$ACTION_REF" == "$EXPECTED_KERNEL_SHA" ]]', step["run"])
         self.assertIn('"$GITHUB_WORKSPACE/kernel"', step["run"])
         self.assertIn("engineering_os", step["run"])
+        self.assertIn("engineering_os/python_imports.py", step["run"])
         self.assertIn("scripts/engineering-os", step["run"])
         self.assertIn("docs/engineering-os/ENGINEERING_CONSTITUTION.md", step["run"])
         with tempfile.TemporaryDirectory() as directory:
@@ -181,6 +178,10 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(0, accepted.returncode, accepted.stderr)
             self.assertTrue((Path(directory) / "kernel" / "engineering_os").is_dir())
+            self.assertEqual(
+                (ROOT / "engineering_os/python_imports.py").read_bytes(),
+                (Path(directory) / "kernel/engineering_os/python_imports.py").read_bytes(),
+            )
             materialized_constitution = (
                 Path(directory)
                 / "kernel"
@@ -820,8 +821,8 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
 
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
-          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21
-          expected_kernel_sha: 337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21
+          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f
+          expected_kernel_sha: 29eaa5811c6d161b17299ed177690343106cb31f
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           path: target
@@ -832,7 +833,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(cross_repository_boundary_errors(valid), [])
 
         no_kernel_identity = valid.replace(
-            "materialize-kernel@337fe236ec0a91d2a3eb4ab400f46bdcce5e1f21",
+            "materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f",
             "materialize-kernel@main",
             1,
         )
@@ -960,6 +961,27 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("eos-orphan-recovery.yml", architecture)
         self.assertIn("eos-airtable-mirror.yml", architecture)
         self.assertIn("Control Plane test-integrity caller", architecture)
+
+    def test_activation_append_boundary_rejects_every_invalid_lifecycle_event(self):
+        workflow = self.read("mission-command.yml")
+        guard = 'if not ok:\n                      raise SystemExit(code)'
+        self.assertIn(guard, workflow)
+        self.assertNotIn("activation lifecycle requires a separately authorized activation mission", workflow)
+        self.assertNotIn(
+            'if event["type"] == "test_integrity.baseline.authorized" and not ok:',
+            workflow,
+        )
+
+    def test_activation_boundary_binds_issue_checkout_run_attempt_and_consumer(self):
+        workflow = self.read("mission-command.yml")
+        for required in (
+            '"node_id": issue["node_id"]', '"ready_event_hash": ready["event_hash"]',
+            '"run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"])',
+            '"head_tree": tree', '"trigger_actor": os.environ["GITHUB_ACTOR"]',
+            'details["consumer_provenance"] = provenance',
+            'raise SystemExit("activation checkout/run provenance changed before append")',
+        ):
+            self.assertIn(required, workflow)
 
 
 if __name__ == "__main__":

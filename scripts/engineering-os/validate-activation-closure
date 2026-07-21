@@ -1,0 +1,597 @@
+#!/usr/bin/env python3
+"""Generate or validate the deterministic Mission #32 dependency closure."""
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from engineering_os.schema import validate_document
+
+ROOT = Path(__file__).resolve().parents[2]
+BASE_SHA = "283f37b97a9df24ca056c5115197464043312185"
+PRE_READY_HEAD = "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7"
+PRE_READY_TREE = "aae7823d40235779f914a5486aa90ea91b106c1d"
+PRE_READY_CLOSURE_SHA = "7c51214965441ef93008fdff629c0637e3e208de626c1e933920cb5308e70ebb"
+READY_SHA = "72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9"
+READY_EVENT_HASH = "f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d"
+CLOSURE_PATH = "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+RECORDS_PATH = "outputs/mission-32-closure-records-ready.json"
+RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
+VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
+REVIEW_PATHS = {
+    "outputs/mission-32-review-a-ready.md",
+    "outputs/mission-32-review-b-ready.md",
+}
+MATERIALIZATION_PATHS = {
+    CLOSURE_PATH,
+    RECORDS_PATH,
+    RECONCILIATION_PATH,
+    VALIDATION_PATH,
+    *REVIEW_PATHS,
+}
+HISTORICAL_EVIDENCE_PATHS = {
+    "outputs/mission-31-validation/ci-29772912364.log",
+    "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+    "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+}
+AUTHORIZED_PATHS = sorted([
+    "scripts/validate.sh",
+    "tests/engineering_os/test_validation_classification.py",
+    "scripts/engineering-os/validate-activation-closure",
+    "tests/engineering_os/test_activation_closure.py",
+    "schemas/engineering-os/activation-closure.schema.json",
+    CLOSURE_PATH,
+    "outputs/mission-31-review/closure-records-d68c5da.json",
+    *HISTORICAL_EVIDENCE_PATHS,
+    "outputs/mission-32-reconciliation.md",
+    RECORDS_PATH,
+    VALIDATION_PATH,
+    *REVIEW_PATHS,
+    RECONCILIATION_PATH,
+])
+MISSION = {
+    "repository": "josephmccann/AIFO-Control-Plane",
+    "issue": 32,
+    "mission_id": "aifo-control-plane-validation-classification-successor-ready-exception-2026-07-20",
+    "declaration_path": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32",
+    "declaration_sha256": READY_SHA,
+    "ready_declaration_sha256": READY_SHA,
+    "ready_event": {
+        "event_hash": READY_EVENT_HASH,
+        "sequence": 1,
+        "actor": "josephmccann",
+        "occurred_at": "2026-07-20T20:25:03Z",
+        "source_url": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32#issuecomment-5026935272",
+    },
+    "allowed_paths": AUTHORIZED_PATHS,
+}
+CLASSIFICATION = {
+    "discovery_roots": ["scripts", "tests"],
+    "extensionless_python": ["scripts/engineering-os/validate-activation-closure"],
+    "python_extensions": [".py"],
+    "shell_extensions": [".sh"],
+    "python_interpreters": ["python", "python3", "python3.x"],
+    "shell_interpreters": ["bash", "dash", "ksh", "sh"],
+    "conflicting_signals": "fail",
+    "discovery_error": "fail",
+    "symlink_path": "fail",
+    "unknown_executable": "fail",
+}
+HISTORICAL_IDENTITY = {
+    "issue": 31,
+    "ready_declaration_sha256": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
+    "ready_event_hash": "7c796c64513b21732975999db7bbca695d3209207c5f26bcbdd7b313c489bb47",
+    "candidate": {"sha": PRE_READY_HEAD, "tree": PRE_READY_TREE},
+    "superseded_closure_sha256": PRE_READY_CLOSURE_SHA,
+}
+TOP_LEVEL = {
+    "schema_version", "mission", "historical", "base", "final", "files", "edges",
+    "pins", "classification", "records", "tests", "evidence", "reviews", "reconciliation",
+    "bootstrap_disposition",
+}
+LEGACY_TOP_LEVEL = TOP_LEVEL - {"bootstrap_disposition"}
+LEGACY_CLOSURE_HEAD = "dc8ef949c8da6fd343628e92cc377003071530c6"
+PR_BASE = {
+    "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+    "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b",
+}
+EXPECTED_CHECK_RESULTS = {
+    "Validate Terraform": ("failure", True),
+    "GitGuardian Security Checks": ("success", True),
+    "Test Integrity / Authorize exact caller and workflow provenance": ("success", False),
+    "Test Integrity / Test Integrity": ("failure", False),
+}
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+
+
+def digest_at(revision, path):
+    return hashlib.sha256(
+        subprocess.check_output(["git", "show", "%s:%s" % (revision, path)], cwd=ROOT)
+    ).hexdigest()
+
+
+def governed_file(path, expected_path=None):
+    if not isinstance(path, str) or ".." in Path(path).parts or Path(path).is_absolute():
+        raise SystemExit("evidence path is not governed")
+    if expected_path is not None and path != expected_path:
+        raise SystemExit("evidence path is not canonical")
+    target = ROOT / path
+    if not target.is_file():
+        raise SystemExit("evidence is missing: %s" % path)
+    try:
+        target.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        raise SystemExit("evidence escapes the repository: %s" % path)
+    return target
+
+
+def tracked_evidence(path, expected_path=None):
+    if not isinstance(path, str) or ".." in Path(path).parts or Path(path).is_absolute():
+        raise SystemExit("evidence path is not governed")
+    if expected_path is not None and path != expected_path:
+        raise SystemExit("evidence path is not canonical")
+    try:
+        entry = git("ls-tree", "HEAD", "--", path)
+    except subprocess.CalledProcessError:
+        raise SystemExit("evidence is missing from the attestation revision: %s" % path)
+    fields = entry.split(None, 3)
+    if len(fields) != 4 or fields[0] not in {"100644", "100755"} or fields[1] != "blob" or fields[3] != path:
+        raise SystemExit("evidence is not one regular tracked file: %s" % path)
+    try:
+        return subprocess.check_output(["git", "show", "HEAD:%s" % path], cwd=ROOT)
+    except subprocess.CalledProcessError:
+        raise SystemExit("evidence blob cannot be read: %s" % path)
+
+
+def file_record(path):
+    relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
+    return {"path": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+def verify_file_record(record, expected_path=None):
+    if not isinstance(record, dict) or set(record) != {"path", "sha256"}:
+        raise SystemExit("evidence record is malformed")
+    data = tracked_evidence(record.get("path"), expected_path)
+    if hashlib.sha256(data).hexdigest() != record.get("sha256"):
+        raise SystemExit("evidence digest is stale: %s" % record.get("path"))
+    return data
+
+
+def expected_edges(changed):
+    return [
+        {"from": test, "to": source, "kind": "tests"}
+        for test in sorted(path for path in changed if path.startswith("tests/"))
+        for source in sorted(path for path in changed if not path.startswith("tests/"))
+    ]
+
+
+def validate_bootstrap_disposition(disposition, final, head):
+    """Validate the closed PR-33 disposition before trusting its evidence references."""
+    if head == LEGACY_CLOSURE_HEAD:
+        raise SystemExit("legacy closure cannot carry PR 33 bootstrap evidence")
+    integrity = disposition.get("test_integrity", {})
+    checks = disposition.get("checks", [])
+    deployment = disposition.get("deployment_audit", {})
+    pull_request_24 = disposition.get("preserved_pull_request", {})
+    actual_check_results = {
+        item.get("name"): (item.get("conclusion"), item.get("required"))
+        for item in checks if isinstance(item, dict)
+    }
+    check_ids = [item.get("check_run_id") for item in checks if isinstance(item, dict)]
+    if (
+        disposition.get("pull_request") != 33
+        or disposition.get("base") != PR_BASE
+        or disposition.get("candidate") != final
+        or disposition.get("prior_interim_closure_sha256")
+        != "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"
+        or disposition.get("materialization_required") is not True
+        or disposition.get("required_contexts")
+        != ["Validate Terraform", "GitGuardian Security Checks"]
+        or disposition.get("activation_events") != []
+        or disposition.get("runtime_deployment") is not False
+        or actual_check_results != EXPECTED_CHECK_RESULTS
+        or len(check_ids) != len(EXPECTED_CHECK_RESULTS)
+        or len(set(check_ids)) != len(check_ids)
+        or any(not isinstance(item, int) or item < 1 for item in check_ids)
+        or integrity.get("head") != head
+        or not isinstance(integrity.get("run_id"), int)
+        or integrity.get("run_id", 0) < 1
+        or not isinstance(integrity.get("run_attempt"), int)
+        or integrity.get("run_attempt", 0) < 1
+        or integrity.get("caller_authorized") is not True
+        or integrity.get("allowed") is not False
+        or integrity.get("expected_bootstrap_denial") is not True
+        or integrity.get("suppressed") is not False
+        or integrity.get("overridden") is not False
+        or integrity.get("finding_counts") != {
+            "TEST_FILE_UNPARSABLE": 55,
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10,
+        }
+        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("report_sha256", "")) is None
+        or not isinstance(integrity.get("artifact_id"), int)
+        or integrity.get("artifact_id", 0) < 1
+        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("artifact_digest", "")) is None
+        or deployment != {
+            "deployment_id": 5528959623,
+            "status_id": 15719997167,
+            "state": "inactive",
+            "environment": "production",
+            "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+            "description": "Accidental API audit record; no deployment executed",
+            "runtime_executed": False,
+        }
+        or pull_request_24 != {
+            "number": 24,
+            "state": "open",
+            "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+            "merged": False,
+        }
+    ):
+        raise SystemExit("bootstrap disposition is incomplete, stale, or contradictory")
+    return integrity
+
+
+def verify_bootstrap_transport(disposition, validation_text):
+    """Bind every disposition identifier to the governed authenticated transport record."""
+    integrity = disposition["test_integrity"]
+    checks = {item["name"]: item for item in disposition["checks"]}
+    required = {
+        "Job ID:": "Job ID: %s" % checks["Validate Terraform"]["check_run_id"],
+        "GitGuardian check run ID:": "GitGuardian check run ID: %s"
+        % checks["GitGuardian Security Checks"]["check_run_id"],
+        "Test Integrity caller job ID:": "Test Integrity caller job ID: %s"
+        % checks["Test Integrity / Authorize exact caller and workflow provenance"]["check_run_id"],
+        "Test Integrity run ID:": "Test Integrity run ID: %s" % integrity["run_id"],
+        "Test Integrity run attempt:":
+            "Test Integrity run attempt: %s" % integrity["run_attempt"],
+        "Test Integrity analysis job ID:": "Test Integrity analysis job ID: %s"
+        % checks["Test Integrity / Test Integrity"]["check_run_id"],
+        "Test Integrity report SHA-256:":
+            "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+        "Test Integrity artifact ID:":
+            "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+        "Test Integrity artifact digest:":
+            "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+    }
+    evidence_lines = validation_text.splitlines()
+    for prefix, expected in required.items():
+        if [line for line in evidence_lines if line.startswith(prefix)] != [expected]:
+            raise SystemExit("bootstrap evidence is not bound to authenticated transport")
+
+
+def verify_ci_validation(test, head, validation_text, integrity=None):
+    """Require exact evidence lines for the claimed CI validation record."""
+    if test.get("result") == "pass":
+        conclusion = "Conclusion: success"
+        closure_result = "Closure: PASS"
+        expected_terminal = None
+    elif test.get("result") == "expected_materialization_denial":
+        conclusion = "Conclusion: failure"
+        closure_result = "Closure: EXPECTED MATERIALIZATION DENIAL"
+        expected_terminal = (
+            "Expected terminal: closure materialization must be the direct child of the reviewed head"
+        )
+    else:
+        raise SystemExit("CI validation result is unknown")
+    expected_fields = {
+        "HEAD:": "HEAD: %s" % head,
+        "Command:": "Command: validate-all",
+        "Workflow:": "Workflow: .github/workflows/terraform-validate.yml",
+        "Run ID:": "Run ID: %s" % test["run_id"],
+        "Run attempt:": "Run attempt: %s" % test["run_attempt"],
+        "Terraform:": "Terraform: PASS",
+        "Actionlint:": "Actionlint: PASS",
+        "ShellCheck:": "ShellCheck: PASS",
+        "Python:": "Python: PASS",
+        "Classification:": "Classification: PASS",
+        "Closure:": closure_result,
+        "Conclusion:": conclusion,
+    }
+    if integrity is not None:
+        expected_fields.update({
+            "PR:": "PR: 33",
+            "Test Integrity caller authorization:": "Test Integrity caller authorization: PASS",
+            "Test Integrity allowed:": "Test Integrity allowed: false",
+            "Test Integrity expected bootstrap denial:": "Test Integrity expected bootstrap denial: true",
+            "Test Integrity suppressed:": "Test Integrity suppressed: false",
+            "Test Integrity overridden:": "Test Integrity overridden: false",
+            "TEST_FILE_UNPARSABLE:": "TEST_FILE_UNPARSABLE: 55",
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS:": "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10",
+            "Test Integrity report SHA-256:":
+                "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+            "Test Integrity artifact ID:": "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+            "Test Integrity artifact digest:":
+                "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+            "GitGuardian Security Checks:": "GitGuardian Security Checks: PASS",
+            "Deployment 5528959623:": "Deployment 5528959623: inactive",
+            "Activation events:": "Activation events: none",
+            "Runtime deployment:": "Runtime deployment: none",
+            "PR 24:": "PR 24: open, unmerged",
+        })
+    evidence_lines = validation_text.splitlines()
+    for prefix, expected in expected_fields.items():
+        if [line for line in evidence_lines if line.startswith(prefix)] != [expected]:
+            raise SystemExit("CI evidence contains a missing, duplicate, or contradictory status")
+    terminal_lines = [line for line in evidence_lines if line.startswith("Expected terminal:")]
+    if terminal_lines != ([] if expected_terminal is None else [expected_terminal]):
+        raise SystemExit("CI evidence terminal status is missing, duplicated, or contradictory")
+    complete_lines = [line for line in evidence_lines if line == "Validation complete"]
+    if complete_lines != (["Validation complete"] if expected_terminal is None else []):
+        raise SystemExit("CI evidence completion status contradicts its terminal result")
+    outcomes = [line for line in evidence_lines if line == "OK" or line == "FAILED" or line.startswith("FAILED (")]
+    if outcomes != ["OK"]:
+        raise SystemExit("CI evidence deterministic test outcome is contradictory")
+    if len([line for line in evidence_lines if re.fullmatch(r"Ran [1-9][0-9]* tests in .+", line)]) != 1:
+        raise SystemExit("CI evidence does not contain an exact deterministic test result")
+
+
+def verify_materialization_range(final_head, materialization_head):
+    """Require one evidence-only child after the reviewed implementation parent."""
+    if (git("rev-parse", final_head) != final_head
+            or git("rev-parse", materialization_head) != materialization_head):
+        raise SystemExit("closure materialization revisions must be full commit SHAs")
+    topology = git("rev-list", "--parents", "-n", "1", materialization_head).split()
+    if len(topology) == 2:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            raise SystemExit("CI closure materialization requires the exact protected-base merge candidate")
+        evidence_child = materialization_head
+    elif len(topology) == 3:
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get(
+                "GITHUB_EVENT_NAME") not in {"pull_request", "push"}:
+            raise SystemExit("CI closure materialization has an unauthorized workflow event")
+        if topology[1] != PR_BASE["sha"]:
+            raise SystemExit("closure merge candidate has the wrong protected-base parent")
+        evidence_child = topology[2]
+        if git("rev-parse", "%s^{tree}" % materialization_head) != git(
+                "rev-parse", "%s^{tree}" % evidence_child):
+            raise SystemExit("closure merge candidate tree differs from the evidence child")
+    else:
+        raise SystemExit("closure materialization has an unsupported parent topology")
+    evidence_topology = git("rev-list", "--parents", "-n", "1", evidence_child).split()
+    if len(evidence_topology) != 2 or evidence_topology[1] != final_head:
+        raise SystemExit("closure materialization must be the direct child of the reviewed head")
+    changed = set(git(
+        "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_child,
+    ).splitlines())
+    if not changed or not changed <= MATERIALIZATION_PATHS:
+        raise SystemExit("closure materialization child contains non-evidence changes")
+
+
+def exact_status_lines(text, expected, reconciliation=False):
+    """Accept one closed status footer and reject prefixes, duplicates, or contradictions."""
+    lines = text.splitlines()
+    for prefix, value in expected.items():
+        matching = [line for line in lines if line.startswith(prefix)]
+        if matching != [value]:
+            raise SystemExit("review status evidence is missing, duplicated, or contradictory")
+    if reconciliation:
+        matching = [line for line in lines if line.startswith("Reconciliation:")]
+        if matching != ["Reconciliation: PASS"]:
+            raise SystemExit("reconciliation verdict is missing, duplicated, or contradictory")
+    else:
+        verdicts = [line for line in lines if line in {"PASS", "FAIL"} or line.startswith("Verdict:")]
+        if verdicts != ["PASS"]:
+            raise SystemExit("review verdict is missing, duplicated, or contradictory")
+
+
+def generate(base, head, records_path):
+    """Emit canonical closure JSON; claims come only from explicit governed records."""
+    if base != BASE_SHA:
+        raise SystemExit("generation base is not the Mission 32 rollback/base")
+    if git("rev-parse", head) != head:
+        raise SystemExit("generation head must be a full commit SHA")
+    if records_path.resolve() != (ROOT / RECORDS_PATH).resolve():
+        raise SystemExit("generation records path is not governed")
+    records = json.loads(governed_file(RECORDS_PATH).read_text(encoding="utf-8"))
+    if set(records) != {
+        "allowed_paths", "historical", "tests", "reviews", "reconciliation",
+        "bootstrap_disposition",
+    }:
+        raise SystemExit("generation records structure is not closed")
+    if sorted(records.get("allowed_paths", [])) != AUTHORIZED_PATHS:
+        raise SystemExit("generation scope does not match Mission 32 Ready authority")
+    changed = sorted(filter(None, git("diff", "--name-only", base, head).splitlines()))
+    if not set(changed) <= set(AUTHORIZED_PATHS):
+        raise SystemExit("implementation contains a path outside Mission 32 authority")
+    closure = {
+        "schema_version": "1.0.0",
+        "mission": MISSION,
+        "historical": records["historical"],
+        "base": {"sha": base, "tree": git("rev-parse", "%s^{tree}" % base)},
+        "final": {"sha": head, "tree": git("rev-parse", "%s^{tree}" % head)},
+        "files": [
+            {"path": path, "sha256": digest_at(head, path), "reason": "Mission 32 implementation"}
+            for path in changed
+        ],
+        "edges": expected_edges(changed),
+        "pins": [],
+        "classification": CLASSIFICATION,
+        "bootstrap_disposition": records["bootstrap_disposition"],
+        "records": file_record(records_path),
+        "tests": records["tests"],
+        "evidence": records["historical"]["mission_31"]["evidence"],
+        "reviews": records["reviews"],
+        "reconciliation": records["reconciliation"],
+    }
+    print(json.dumps(closure, sort_keys=True, indent=2))
+    return 0
+
+
+def validate(path, head):
+    closure = json.loads(path.read_text(encoding="utf-8"))
+    violations = validate_document("activation-closure", closure)
+    if violations:
+        raise SystemExit("activation closure schema rejected: " + "; ".join(item.code for item in violations))
+    if set(closure) not in {frozenset(TOP_LEVEL), frozenset(LEGACY_TOP_LEVEL)}:
+        raise SystemExit("closure top-level structure is not closed")
+    if closure.get("mission") != MISSION:
+        raise SystemExit("Mission 32 Ready identity or scope is not canonical")
+    final = closure.get("final", {})
+    if final.get("sha") != head or git("rev-parse", head) != head or final.get("tree") != git("rev-parse", "%s^{tree}" % head):
+        raise SystemExit("closure final revision mismatch")
+    base = closure.get("base", {})
+    if base.get("sha") != BASE_SHA or git("rev-parse", "%s^{tree}" % BASE_SHA) != base.get("tree"):
+        raise SystemExit("closure base is not the Mission 32 rollback/base")
+    changed = set(git("diff", "--name-only", BASE_SHA, head).splitlines())
+    records = closure.get("files")
+    if not isinstance(records, list) or {item.get("path") for item in records} != changed:
+        raise SystemExit("closure file set is missing, extra, or stale")
+    if not (changed | {CLOSURE_PATH}) <= set(AUTHORIZED_PATHS):
+        raise SystemExit("closure contains a path outside Mission 32 authority")
+    for item in records:
+        if (set(item) != {"path", "sha256", "reason"}
+                or item.get("reason") != "Mission 32 implementation"
+                or item.get("sha256") != digest_at(head, item.get("path"))):
+            raise SystemExit("closure file digest mismatch: %s" % item.get("path"))
+    edges = expected_edges(changed)
+    if not edges or closure.get("edges") != edges:
+        raise SystemExit("closure dependency edges are incomplete or contradictory")
+    if closure.get("pins") != []:
+        raise SystemExit("Mission 32 must not claim transport pins")
+    if closure.get("classification") != CLASSIFICATION:
+        raise SystemExit("classification rules are not canonical and fail-closed")
+
+    disposition = closure.get("bootstrap_disposition")
+    if disposition is None:
+        if head != LEGACY_CLOSURE_HEAD:
+            raise SystemExit("bootstrap disposition is required after the legacy closure")
+        integrity = {}
+    else:
+        integrity = validate_bootstrap_disposition(disposition, final, head)
+
+    historical = closure.get("historical", {}).get("mission_31", {})
+    historical_identity = {key: value for key, value in historical.items() if key != "evidence"}
+    if historical_identity != HISTORICAL_IDENTITY:
+        raise SystemExit("Mission 31 historical identity is not canonical")
+    historical_evidence = historical.get("evidence", [])
+    if {item.get("path") for item in historical_evidence} != HISTORICAL_EVIDENCE_PATHS:
+        raise SystemExit("Mission 31 historical evidence set is incomplete")
+    for item in historical_evidence:
+        verify_file_record(item)
+    if closure.get("evidence") != historical_evidence:
+        raise SystemExit("historical evidence binding is contradictory")
+
+    verify_file_record(closure.get("records"), RECORDS_PATH)
+    tests = closure.get("tests", [])
+    if len(tests) != 1:
+        raise SystemExit("closure requires one exact-head CI validation record")
+    test = tests[0]
+    expected_result = "pass" if disposition is None else "expected_materialization_denial"
+    if (test.get("head") != head or test.get("command") != "validate-all"
+            or test.get("result") != expected_result
+            or test.get("workflow_path") != ".github/workflows/terraform-validate.yml"
+            or not isinstance(test.get("run_id"), int) or test["run_id"] < 1
+            or not isinstance(test.get("run_attempt"), int) or test["run_attempt"] < 1):
+        raise SystemExit("CI validation record is not clean and head-bound")
+    validation_data = verify_file_record(
+        {"path": test.get("evidence_path"), "sha256": test.get("evidence_sha256")},
+        VALIDATION_PATH,
+    )
+    validation_text = validation_data.decode("utf-8")
+    verify_ci_validation(test, head, validation_text, integrity if disposition is not None else None)
+    if disposition is not None:
+        verify_bootstrap_transport(disposition, validation_text)
+
+    reviews = closure.get("reviews", [])
+    if len(reviews) != 2 or {item.get("report_path") for item in reviews} != REVIEW_PATHS:
+        raise SystemExit("two governed independent reviews are required")
+    reviewers = set()
+    checkpoints = set()
+    for item in reviews:
+        if (item.get("head") != head or item.get("critical") != 0 or item.get("important") != 0
+                or item.get("reviewer") in reviewers or item.get("checkpoint") in checkpoints):
+            raise SystemExit("closure review is not independent, clean, and head-bound")
+        report_data = verify_file_record(
+            {"path": item.get("report_path"), "sha256": item.get("report_sha256")},
+            item.get("report_path"),
+        )
+        report = report_data.decode("utf-8")
+        canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
+        expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
+        expected_status = {
+            "Reviewer:": "Reviewer: %s" % item["reviewer"],
+            "HEAD:": "HEAD: `%s`" % head,
+            "Critical:": "Critical: 0",
+            "Important:": "Important: 0",
+            "Checkpoint:": "Checkpoint: %s" % expected_checkpoint,
+        }
+        if item.get("checkpoint") != expected_checkpoint:
+            raise SystemExit("closure review report is not checkpointed and head-bound")
+        exact_status_lines(report, expected_status)
+        reviewers.add(item["reviewer"])
+        checkpoints.add(item["checkpoint"])
+
+    reconciliation = closure.get("reconciliation", {})
+    if (reconciliation.get("head") != head or reconciliation.get("critical") != 0
+            or reconciliation.get("important") != 0 or reconciliation.get("result") != "pass"):
+        raise SystemExit("reconciliation is not clean and head-bound")
+    reconciliation_data = verify_file_record(
+        {"path": reconciliation.get("path"), "sha256": reconciliation.get("sha256")},
+        RECONCILIATION_PATH,
+    )
+    reconciliation_text = reconciliation_data.decode("utf-8")
+    exact_status_lines(reconciliation_text, {
+        "HEAD:": "HEAD: `%s`" % head,
+        "Critical:": "Critical: 0",
+        "Important:": "Important: 0",
+    }, reconciliation=True)
+    return 0
+
+
+def main(argv):
+    if len(argv) == 4 and argv[1] == "--validate-materialization-range":
+        verify_materialization_range(argv[2], argv[3])
+        return 0
+    if len(argv) == 3 and argv[1] == "--validate-review-status":
+        exact_status_lines(Path(argv[2]).read_text(encoding="utf-8"), {
+            "Reviewer:": "Reviewer: reviewer-a",
+            "HEAD:": "HEAD: `%s`" % ("a" * 40),
+            "Critical:": "Critical: 0",
+            "Important:": "Important: 0",
+            "Checkpoint:": "Checkpoint: %s" % ("b" * 64),
+        })
+        return 0
+    if len(argv) == 3 and argv[1] == "--validate-reconciliation-status":
+        exact_status_lines(Path(argv[2]).read_text(encoding="utf-8"), {
+            "HEAD:": "HEAD: `%s`" % ("a" * 40),
+            "Critical:": "Critical: 0",
+            "Important:": "Important: 0",
+        }, reconciliation=True)
+        return 0
+    if len(argv) == 5 and argv[1] == "--validate-ci-record":
+        test = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
+        validation_text = Path(argv[3]).read_text(encoding="utf-8")
+        verify_ci_validation(test, argv[4], validation_text)
+        return 0
+    if len(argv) == 6 and argv[1] == "--validate-bootstrap-transport":
+        disposition = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
+        validation_text = Path(argv[3]).read_text(encoding="utf-8")
+        final = {"sha": argv[4], "tree": argv[5]}
+        validate_bootstrap_disposition(disposition, final, argv[4])
+        verify_bootstrap_transport(disposition, validation_text)
+        return 0
+    if len(argv) == 5 and argv[1] == "--generate":
+        return generate(argv[2], argv[3], Path(argv[4]))
+    if len(argv) == 4:
+        materialization_head = argv[3]
+        if git("rev-parse", "HEAD") != materialization_head:
+            raise SystemExit("closure materialization must match the checked-out HEAD")
+        result = validate(Path(argv[1]), argv[2])
+        verify_materialization_range(argv[2], materialization_head)
+        return result
+    if len(argv) != 3:
+        raise SystemExit("usage: validate-activation-closure CLOSURE.json ATTESTED_HEAD\n"
+                         "   or: validate-activation-closure CLOSURE.json ATTESTED_HEAD MATERIALIZATION_HEAD\n"
+                         "   or: validate-activation-closure --generate BASE HEAD RECORDS.json")
+    return validate(Path(argv[1]), argv[2])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

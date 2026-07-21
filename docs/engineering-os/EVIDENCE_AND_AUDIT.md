@@ -31,3 +31,31 @@ validity interval, and issuer. It is atomically single-use. Merge approval keeps
 deployment and cutover false; those actions require separate approvals.
 Airtable-write approval also keeps deployment and cutover false and binds the
 exact target plus canonical projected-record-set hash in its environment.
+# Mission 26 activation ledger boundary
+
+Activation commands are accepted only through the authenticated mission-command
+adapter. Founder-authored command comments express intent; the workflow emits
+attempted-consumption and consumed events only from the authenticated current
+mission-command run, with the run URL bound into the event and revalidated
+against freshly fetched Actions metadata. The append job re-fetches the full
+issue history, re-authenticates it, validates the proposed event and activation
+tuple again, and appends only after that validation succeeds. Activation
+validation rejects malformed or unknown activation records, broken chains,
+duplicate sequences, invalid ordering, replay, stale tuple components, and
+post-consumption reuse; no partial projection is usable after a failure.
+
+The initial Test Integrity baseline is activated only by an authenticated EOS
+event pair. The authorization event binds the repository, Mission 26, exact
+remediation commit and tree, baseline and canonical-inventory digests, all
+workflow/kernel/manifest identities, rollback SHA, activation type, and a
+high-entropy single-use nonce. A consumption event repeats that tuple and
+references the authorization event hash and sequence.
+
+Validation operates only on a complete authenticated event history. Duplicate
+nonces, replayed authorization, orphan consumption, altered tuple members,
+wrong repository or mission, cancellation/supersession, missing or truncated
+history, and ambiguous partial consumption fail closed. The validator has no
+append or persistence capability; event creation remains the existing EOS
+authenticated append path. After a valid consumption event, the initial path
+is permanently unavailable to ordinary activation requests. Recovery from an
+ambiguous append requires a separately authorized EOS recovery mission.

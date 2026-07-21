@@ -3,6 +3,7 @@
 import json
 import math
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -14,6 +15,7 @@ DOCUMENT_KINDS = (
     "evidence",
     "approval",
     "audit-event",
+    "activation-closure",
     "repository-policy",
     "frozen-path",
     "incident",
@@ -49,10 +51,45 @@ def _type_matches(expected: str, value: Any) -> bool:
     return False
 
 
+def _schema_matches(schema: Dict[str, Any], value: Any) -> bool:
+    """Evaluate the bounded condition subset used by closed repository schemas."""
+    if "const" in schema and value != schema["const"]:
+        return False
+    if "enum" in schema and value not in schema["enum"]:
+        return False
+    expected = schema.get("type")
+    if expected is not None:
+        expected_types = [expected] if isinstance(expected, str) else expected
+        if not any(_type_matches(item, value) for item in expected_types):
+            return False
+    if isinstance(value, dict):
+        if any(field not in value for field in schema.get("required", [])):
+            return False
+        for field, child in schema.get("properties", {}).items():
+            if field in value and not _schema_matches(child, value[field]):
+                return False
+    return True
+
+
 def _walk(schema: Dict[str, Any], value: Any, path: str, kind: str) -> Iterable[Violation]:
     if isinstance(value, float) and not math.isfinite(value):
         yield _violation("SCHEMA_NUMBER_NOT_FINITE", "JSON numbers must be finite", path)
         return
+
+    if schema.get("format") == "date-time":
+        if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", value) is None:
+            yield _violation("SCHEMA_FORMAT", "value must be an RFC3339 UTC date-time", path)
+        else:
+            try:
+                datetime.fromisoformat(value[:-1] + "+00:00")
+            except ValueError:
+                yield _violation("SCHEMA_FORMAT", "value must be an RFC3339 UTC date-time", path)
+
+    for clause in schema.get("allOf", []):
+        condition = clause.get("if") if isinstance(clause, dict) else None
+        consequent = clause.get("then") if isinstance(clause, dict) else None
+        if isinstance(condition, dict) and isinstance(consequent, dict) and _schema_matches(condition, value):
+            yield from _walk(consequent, value, path, kind)
 
     expected = schema.get("type")
     if expected is not None:

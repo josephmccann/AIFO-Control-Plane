@@ -1,5 +1,7 @@
 name: Materialize immutable Engineering OS kernel
 description: Copy the exact private-action revision into the caller workspace.
+# Transport identity changes whenever governed schemas change; callers must repin.
+# Activation event schemas are part of the immutable governed transport.
 
 inputs:
   expected_kernel_sha:
@@ -54,6 +56,8 @@ runs:
 
         source_root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd -P)"
         [[ -d "$source_root/engineering_os" ]] || deny "Python kernel"
+        import_graph="$source_root/engineering_os/python_imports.py"
+        [[ -f "$import_graph" && ! -L "$import_graph" ]] || deny "Python import graph kernel"
         [[ -d "$source_root/scripts/engineering-os" ]] || deny "command kernel"
         [[ -d "$source_root/schemas/engineering-os" ]] || deny "schema kernel"
         constitution="$source_root/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
@@ -71,6 +75,11 @@ runs:
         cp "$constitution" "$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"
 
         [[ -d "$destination/engineering_os" ]] || deny "materialized Python kernel"
+        materialized_import_graph="$destination/engineering_os/python_imports.py"
+        [[ -f "$materialized_import_graph" && ! -L "$materialized_import_graph" ]] || \
+          deny "materialized Python import graph kernel"
+        cmp -s "$import_graph" "$materialized_import_graph" || \
+          deny "Python import graph kernel integrity"
         [[ -d "$destination/scripts/engineering-os" ]] || deny "materialized command kernel"
         [[ -d "$destination/schemas/engineering-os" ]] || deny "materialized schema kernel"
         materialized_constitution="$destination/docs/engineering-os/ENGINEERING_CONSTITUTION.md"

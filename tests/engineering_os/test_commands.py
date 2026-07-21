@@ -214,6 +214,25 @@ def terminal_candidate(event_type):
 
 
 class CommandTests(unittest.TestCase):
+    def test_activation_run_rejects_copied_stale_or_contradictory_provenance(self):
+        sha = "3" * 40
+        url = "https://github.com/%s/actions/runs/31" % REPOSITORY
+        run = {"id": 31, "html_url": url, "path": ".github/workflows/mission-command.yml",
+               "event": "issue_comment", "run_attempt": 2, "head_sha": sha,
+               "actor": {"login": "josephmccann"}, "repository": {"full_name": REPOSITORY}}
+        provenance = {"repository": REPOSITORY, "workflow_path": run["path"],
+                      "workflow_ref": "%s/%s@%s" % (REPOSITORY, run["path"], sha),
+                      "workflow_sha": sha, "run_id": 31, "run_attempt": 2, "job": "append",
+                      "actor": BOT, "trigger_actor": "josephmccann", "event": "issue_comment",
+                      "head_sha": sha, "head_tree": "4" * 40}
+        self.assertFalse(command_kernel.validate_activation_run(run, REPOSITORY, url))
+        self.assertTrue(command_kernel.validate_activation_run(run, REPOSITORY, url, provenance=provenance))
+        for field, value in (("run_id", 32), ("run_attempt", 1), ("trigger_actor", "attacker"),
+                             ("workflow_sha", "5" * 40), ("head_sha", "6" * 40),
+                             ("repository", "attacker/repo")):
+            candidate = {**provenance, field: value}
+            self.assertFalse(command_kernel.validate_activation_run(run, REPOSITORY, url, provenance=candidate), field)
+
     def test_only_exact_supported_eos_commands_parse(self):
         self.assertEqual(parse_command("/eos claim"), ("claim", ()))
         self.assertEqual(parse_command("/eos heartbeat nonce-1"), ("heartbeat", ("nonce-1",)))
@@ -276,6 +295,106 @@ class CommandTests(unittest.TestCase):
             proposal.events[0]["details"]["lease_start"],
             "2026-07-15T10:01:00.125Z",
         )
+
+    def test_activation_consumption_command_requires_authenticated_workflow_run(self):
+        mission, policy = valid_context()
+        ready_source = source_comment(23, "agent-a", "/eos ready")
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-23"),
+        )
+        command = source_comment(24, "josephmccann", "/eos attempt-baseline nonce-012345678901234567890123456789")
+        activation = {
+            "repository": REPOSITORY, "mission_issue": 26,
+            "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
+            "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
+            "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
+            "analyzer_identity": "engineering_os.test_integrity_cli:b3c0a2c7",
+            "workflow_identity": "reusable-test-integrity@b3142f5bbed547a97a70f29bda33682294948aed",
+            "caller_identity": "test-integrity-caller@80256915bdca989edc7580898971dbad1b199170",
+            "immutable_kernel_identity": "5a273627a1a4d4addfcf81129dcdbda4dc58c383",
+            "manifest_identity": "db1f444bad41ecf1db5057c8cbbae6390ffb7f5f7477e0c7a3bd8ae35a7a6dab",
+            "rollback_sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+            "activation_nonce": "nonce-012345678901234567890123456789",
+            "activation_type": "initial_test_integrity_baseline", "single_use": True,
+            "founder_authorization_identity": "josephmccann", "founder_authorization_sequence": 1,
+        }
+        proposal = authorize_command_proposal(
+            [ready_source, event_comment(25, [ready]), command], mission, policy,
+            repository=REPOSITORY, command_comment_url=command["html_url"], activation=activation,
+        )
+        self.assertFalse(proposal.allowed)
+        self.assertEqual(proposal.code, "ACTIVATION_WORKFLOW_PROVENANCE_INVALID")
+
+    def test_activation_consumption_proposal_uses_validator_terminal_result(self):
+        """The production consume proposal must satisfy the append validator."""
+        mission, policy = valid_context()
+        ready_source = source_comment(26, "agent-a", "/eos ready", issue=26)
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-26"),
+        )
+        activation = {
+            "repository": REPOSITORY, "mission_issue": 26,
+            "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
+            "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
+            "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
+            "analyzer_identity": "engineering_os.test_integrity_cli:b3c0a2c7",
+            "workflow_identity": "reusable-test-integrity@b3142f5bbed547a97a70f29bda33682294948aed",
+            "caller_identity": "test-integrity-caller@80256915bdca989edc7580898971dbad1b199170",
+            "immutable_kernel_identity": "5a273627a1a4d4addfcf81129dcdbda4dc58c383",
+            "manifest_identity": "db1f444bad41ecf1db5057c8cbbae6390ffb7f5f7477e0c7a3bd8ae35a7a6dab",
+            "rollback_sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+            "activation_nonce": "nonce-012345678901234567890123456789",
+            "activation_type": "initial_test_integrity_baseline", "single_use": True,
+            "founder_authorization_identity": "josephmccann", "founder_authorization_sequence": 1,
+        }
+        workflow_sha = "3" * 40
+        provenance = {
+            "repository": REPOSITORY, "workflow_path": ".github/workflows/mission-command.yml",
+            "workflow_ref": "%s/.github/workflows/mission-command.yml@%s" % (REPOSITORY, workflow_sha),
+            "workflow_sha": workflow_sha, "run_id": 27, "run_attempt": 1, "job": "prepare",
+            "actor": BOT, "trigger_actor": "josephmccann", "event": "issue_comment",
+            "head_sha": workflow_sha, "head_tree": "4" * 40,
+        }
+        activation.update({
+            "mission_issue_identity": {
+                "repository": REPOSITORY, "number": 26, "node_id": "I_kwDOmission26",
+                "url": "https://github.com/%s/issues/26" % REPOSITORY, "state": "open",
+                "ready_event_hash": ready["event_hash"], "ready_sequence": ready["sequence"],
+                "ready_declaration_sha256": ready["details"]["mission_sha256"],
+            },
+            "authorization_provenance": provenance,
+        })
+        auth_source = source_comment(27, "josephmccann", "/eos authorize-baseline nonce-012345678901234567890123456789", issue=26)
+        run_url = "https://github.com/%s/actions/runs/27" % REPOSITORY
+        run = {"id": 27, "html_url": run_url, "name": "Mission command", "path": ".github/workflows/mission-command.yml",
+               "event": "issue_comment", "run_attempt": 1, "head_sha": workflow_sha,
+               "actor": {"login": "josephmccann"}, "repository": {"full_name": REPOSITORY}}
+        auth = audit_event("test_integrity.baseline.authorized", "josephmccann", "founder", auth_source["html_url"],
+                           auth_source["created_at"], 2, ready["event_hash"], copy.deepcopy(activation))
+        self.assertEqual(command_kernel.validate_document("audit-event", auth), [])
+        attempt_source = source_comment(28, "josephmccann", "/eos attempt-baseline nonce-012345678901234567890123456789", issue=26)
+        activation["consumer_provenance"] = {**provenance, "job": "append"}
+        attempt = authorize_command_proposal(
+            [ready_source, event_comment(29, [ready], issue=26), auth_source, event_comment(30, [auth], issue=26), attempt_source],
+            mission, policy, repository=REPOSITORY, command_comment_url=attempt_source["html_url"],
+            actions_runs=[run], activation=activation, activation_source_url=run_url,
+        )
+        self.assertTrue(attempt.allowed, attempt.code)
+        consume_source = source_comment(31, "josephmccann", "/eos consume-baseline nonce-012345678901234567890123456789", issue=26)
+        consume = authorize_command_proposal(
+            [ready_source, event_comment(29, [ready], issue=26), auth_source, event_comment(30, [auth], issue=26), attempt_source,
+             event_comment(32, [attempt.events[0]], issue=26) , consume_source],
+            mission, policy, repository=REPOSITORY, command_comment_url=consume_source["html_url"],
+            actions_runs=[run], activation=activation, activation_source_url=run_url,
+        )
+        self.assertTrue(consume.allowed)
+        self.assertEqual(consume.events[0]["details"]["consumption_result"], "activated")
 
     def test_forged_founder_event_and_wrong_source_command_are_rejected(self):
         mission, policy = valid_context()

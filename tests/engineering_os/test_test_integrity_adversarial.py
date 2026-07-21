@@ -33,6 +33,238 @@ class DetectorEvasionTests(unittest.TestCase):
             self.base, self.head, configured or policy(self.base, self.head),
         )
 
+    def test_manifest_bound_stdlib_first_party_and_path_setup_are_parseable(self):
+        source = (
+            "import json\nfrom pathlib import Path\nfrom product import value\n"
+            "ROOT = Path(__file__).resolve().parents[1]\n"
+            "def test_value():\n    assert json.loads('1') == value()\n"
+        )
+        for root in (self.base, self.head):
+            (root / "product.py").write_text(
+                "def value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_imported_test_support_function_mutation_changes_case_fingerprint(self):
+        source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
+        for root in (self.base, self.head):
+            (root / "tests/__init__.py").write_text("", encoding="utf-8")
+            (root / "tests/helpers.py").write_text(
+                "def value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.head / "tests/helpers.py").write_text(
+            "def value():\n    return 2\n", encoding="utf-8",
+        )
+        self.assertIn(
+            "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+        )
+
+    def test_imported_product_function_mutation_changes_case_fingerprint(self):
+        source = "from product import value\ndef test_value():\n    assert value() == 1\n"
+        for root in (self.base, self.head):
+            (root / "product.py").write_text(
+                "def value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.head / "product.py").write_text(
+            "def value():\n    return 2\n", encoding="utf-8",
+        )
+        self.assertIn(
+            "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+        )
+
+    def test_namespace_mutation_inside_imported_product_fails_closed(self):
+        source = "from product import value\ndef test_value():\n    assert value()\n"
+        for root in (self.base, self.head):
+            (root / "product.py").write_text(
+                "def value():\n    globals()['collection_flag'] = False\n    return True\n",
+                encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_implicit_conftest_mutation_changes_case_fingerprint(self):
+        source = "def test_value():\n    assert True\n"
+        for root in (self.base, self.head):
+            (root / "tests/conftest.py").write_text(
+                "def fixture_value():\n    return 1\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        (self.head / "tests/conftest.py").write_text(
+            "def fixture_value():\n    return 2\n", encoding="utf-8",
+        )
+        self.assertIn(
+            "TEST_CASE_BEHAVIOR_CHANGE_AMBIGUOUS", codes(self.analyze()),
+        )
+
+    def test_dynamic_namespace_inside_implicit_conftest_fails_closed(self):
+        source = "def test_value():\n    assert True\n"
+        for root in (self.base, self.head):
+            (root / "tests/conftest.py").write_text(
+                "def pytest_collection_modifyitems(items):\n"
+                "    globals()['items'] = []\n",
+                encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_imported_definition_time_execution_hooks_fail_closed(self):
+        support_sources = (
+            "class Meta(type):\n"
+            "    def __new__(meta, name, bases, namespace):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "        return super().__new__(meta, name, bases, namespace)\n"
+            "class Value(metaclass=Meta):\n    pass\n",
+            "class Base:\n"
+            "    def __init_subclass__(cls):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "class Value(Base):\n    pass\n",
+            "def execute(definition):\n"
+            "    import subprocess\n"
+            "    subprocess.run(['false'])\n"
+            "    return definition\n"
+            "@execute\nclass Value:\n    pass\n",
+            "from dataclasses import dataclass\n"
+            "@dataclass(frozen=True)\n"
+            "class Descriptor:\n"
+            "    def __set_name__(self, owner, name):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "DESCRIPTOR = Descriptor()\n"
+            "class Value:\n    item = DESCRIPTOR\n",
+            "class Base:\n"
+            "    def __class_getitem__(cls, item):\n"
+            "        import subprocess\n"
+            "        subprocess.run(['false'])\n"
+            "        return cls\n"
+            "class Value(Base[int]):\n    pass\n",
+        )
+        for support_source in support_sources:
+            with self.subTest(support_source=support_source):
+                for root in (self.base, self.head):
+                    (root / "support.py").write_text(
+                        support_source, encoding="utf-8",
+                    )
+                    (root / "tests/test_service.py").write_text(
+                        "from support import Value\ndef test_value():\n    assert Value\n",
+                        encoding="utf-8",
+                    )
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_bounded_test_local_pytest_fixture_is_parseable(self):
+        source = (
+            "import pytest\n"
+            "@pytest.fixture(scope='module', params=[1, 2])\n"
+            "def value(request):\n    return request.param\n"
+            "def test_value(value):\n    assert value\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_test_local_pytest_fixture_aliases_retain_exact_provenance(self):
+        imports_and_decorators = (
+            ("import pytest as framework", "@framework.fixture"),
+            ("from pytest import fixture", "@fixture"),
+            ("from pytest import fixture as bounded_fixture", "@bounded_fixture"),
+        )
+        for imported, decorator in imports_and_decorators:
+            source = (
+                f"{imported}\n{decorator}\n"
+                "def value():\n    return 1\n"
+                "def test_value(value):\n    assert value\n"
+            )
+            with self.subTest(imported=imported):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_test_local_pytest_fixture_alias_shadowing_fails_closed(self):
+        source = (
+            "from pytest import fixture as bounded_fixture\n"
+            "def bounded_fixture(definition):\n    return definition\n"
+            "@bounded_fixture\ndef value():\n    return 1\n"
+            "def test_value(value):\n    assert value\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_import_graph_recursion_error_is_a_structured_denial(self):
+        with mock.patch(
+            "engineering_os.test_integrity.PythonImportGraph.closure",
+            side_effect=RecursionError,
+        ):
+            self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_dynamic_import_inside_imported_test_support_fails_closed(self):
+        source = "from tests.helpers import value\ndef test_value():\n    assert value() == 1\n"
+        for root in (self.base, self.head):
+            (root / "tests/__init__.py").write_text("", encoding="utf-8")
+            (root / "tests/helpers.py").write_text(
+                "def value():\n    return __import__('os').getcwd\n", encoding="utf-8",
+            )
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_runtime_namespace_mutation_inside_test_body_fails_closed(self):
+        sources = (
+            "def test_value():\n    globals()['value'] = 1\n    assert True\n",
+            "def test_value():\n    setattr(test_value, '__test__', False)\n    assert True\n",
+            "def test_value():\n    reflect = getattr\n    assert reflect(test_value, '__name__')\n",
+            "def test_value():\n    assert getattr(__builtins__, '__import__')\n",
+            "def test_value():\n    assert __builtins__['__import__']('os')\n",
+            "def test_value():\n    assert __builtins__['setattr'](test_value, '__test__', False)\n",
+            "from sys import modules as module_cache\n"
+            "def test_value():\n    module_cache.pop('engineering_os.test_integrity', None)\n    assert True\n",
+            "def test_value(subject):\n    name = '__dict__'\n    assert getattr(subject, name)\n",
+            "def test_value(subject):\n    name = '__glo' + 'bals__'\n    assert getattr(subject, name)\n",
+            "def test_value(proxy):\n    name = '__dict__'\n    assert proxy.__getattr__(name)\n",
+            "def test_value(subject):\n    subject.__setattr__('enabled', False)\n",
+            "def test_value(subject):\n    subject.__delattr__('enabled')\n",
+            "class Subject:\n    pass\n"
+            "def test_value():\n    type.__setattr__(Subject, 'test_hidden', None)\n",
+            "class Subject:\n    test_hidden = None\n"
+            "def test_value():\n    type.__delattr__(Subject, 'test_hidden')\n",
+            "class Base:\n    pass\nclass Subject:\n    pass\n"
+            "def test_value():\n    Subject.__bases__ = (Base,)\n",
+            "def replacement():\n    pass\n"
+            "def test_value():\n    test_value.__code__ = replacement.__code__\n",
+            "def test_value(subject):\n    subject.__class__ = object\n",
+            "class Subject:\n    pass\n"
+            "def test_value():\n    assert Subject.__subclasses__() == []\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_direct_runtime_getattr_is_fingerprinted_without_collection_execution(self):
+        source = (
+            "def test_value(subject):\n"
+            "    assert getattr(subject, 'provenance', None) is not None\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
+    def test_transparent_getattr_proxy_is_bounded_and_fingerprinted(self):
+        source = (
+            "def test_value(subject):\n"
+            "    class Proxy:\n"
+            "        def __init__(self, target):\n            self.target = target\n"
+            "        def __getattr__(self, name):\n            return getattr(self.target, name)\n"
+            "    assert Proxy(subject).provenance is not None\n"
+        )
+        for root in (self.base, self.head):
+            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+
     def test_preimported_skip_alias_cannot_hide_new_decorator(self):
         base = "from unittest import skip as defer\ndef test_value():\n    assert 1 == 1\n"
         head = "from unittest import skip as defer\n@defer('later')\ndef test_value():\n    assert 1 == 1\n"
@@ -1299,9 +1531,9 @@ class DetectorEvasionTests(unittest.TestCase):
         )
         self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
-    def test_python_module_import_forms_are_exactly_allowlisted(self):
-        denied = (
-            "import support\n",
+    def test_python_module_import_forms_are_manifest_bound(self):
+        denied = ("import support\n",)
+        allowed = (
             "import typing\n",
             "import unittest as unit\n",
             "from unittest import TestCase\n",
@@ -1315,10 +1547,12 @@ class DetectorEvasionTests(unittest.TestCase):
                 for root in (self.base, self.head):
                     (root / "tests/test_service.py").write_text(source, encoding="utf-8")
                 self.assertIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
-        source = "import unittest\nimport pytest\ndef test_x():\n    assert True\n"
-        for root in (self.base, self.head):
-            (root / "tests/test_service.py").write_text(source, encoding="utf-8")
-        self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
+        for imported in allowed:
+            source = imported + "def test_x():\n    assert True\n"
+            with self.subTest(imported=imported):
+                for root in (self.base, self.head):
+                    (root / "tests/test_service.py").write_text(source, encoding="utf-8")
+                self.assertNotIn("TEST_FILE_UNPARSABLE", codes(self.analyze()))
 
     def test_python_direct_class_collection_flags_affect_skip_state(self):
         existing_base = (
@@ -2185,20 +2419,24 @@ class CliFailureArtifactTests(unittest.TestCase):
             repository_policy.write_text(
                 json.dumps(load_fixture("policy-control-plane.json")), encoding="utf-8",
             )
-            with mock.patch(
-                "engineering_os.test_integrity_cli.derive_git_manifests",
-                side_effect=OverflowError("TEST_RESOURCE_LIMIT"),
+            for error in (
+                OverflowError("TEST_RESOURCE_LIMIT"),
+                RecursionError("maximum recursion depth exceeded"),
             ):
-                status = main([
-                    "--base-root", str(root), "--head-root", str(root),
-                    "--base-sha", "1" * 40, "--head-sha", "2" * 40,
-                    "--repository", "josephmccann/AIFO-Control-Plane",
-                    "--base-policy", str(repository_policy), "--pull-request", "42",
-                    "--output", str(output),
-                ])
-            self.assertEqual(status, 1)
-            value = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(value["findings"][0]["code"], "TEST_RESOURCE_LIMIT")
+                with self.subTest(error=type(error).__name__), mock.patch(
+                    "engineering_os.test_integrity_cli.derive_git_manifests",
+                    side_effect=error,
+                ):
+                    status = main([
+                        "--base-root", str(root), "--head-root", str(root),
+                        "--base-sha", "1" * 40, "--head-sha", "2" * 40,
+                        "--repository", "josephmccann/AIFO-Control-Plane",
+                        "--base-policy", str(repository_policy), "--pull-request", "42",
+                        "--output", str(output),
+                    ])
+                self.assertEqual(status, 1)
+                value = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(value["findings"][0]["code"], "TEST_RESOURCE_LIMIT")
 
 
 class RevisionEvidenceTests(unittest.TestCase):

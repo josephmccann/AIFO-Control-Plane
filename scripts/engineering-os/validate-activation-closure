@@ -425,6 +425,50 @@ def verify_materialization_range(final_head, materialization_head):
         raise SystemExit("closure materialization child contains non-evidence changes")
 
 
+SUCCESSOR_RECORDS_PATH = "outputs/mission-35-closure-records.json"
+
+
+def successor_record_paths(changed):
+    """Paths whose exact reviewed content the successor records must pin."""
+    return sorted(
+        path for path in changed
+        if path not in MATERIALIZATION_PATHS and path != SUCCESSOR_RECORDS_PATH
+    )
+
+
+def verify_successor_records(changed, successor_head):
+    """Pin the successor range to exact reviewed content, not just path names.
+
+    A path-name allow-list alone lets any later commit edit an already-allowed
+    path -- ``engineering_os/commands.py`` or the mission-command workflow --
+    and still validate under stale mission authority, with no fresh records,
+    evidence, or review.  Recording the exact blob of every changed path forces
+    that edit to fail closed until the records are refreshed, which is a
+    visible, reviewable act.
+
+    The records live outside the paths they pin, so committing them cannot
+    invalidate their own contents.
+    """
+    tracked = successor_record_paths(changed)
+    if not tracked:
+        return
+    try:
+        recorded = json.loads(git("show", "%s:%s" % (successor_head, SUCCESSOR_RECORDS_PATH)))
+    except Exception:
+        raise SystemExit("successor records are missing at the successor head")
+    if not isinstance(recorded, dict):
+        raise SystemExit("successor records are malformed")
+    if sorted(recorded) != tracked:
+        raise SystemExit("successor records do not pin exactly the changed paths")
+    for path in tracked:
+        try:
+            blob = git("rev-parse", "%s:%s" % (successor_head, path))
+        except Exception:
+            raise SystemExit("successor records reference a missing path")
+        if recorded[path] != blob:
+            raise SystemExit("successor content does not match the reviewed records")
+
+
 def verify_successor_head(final_head, successor_head):
     """Preserve a reviewed closure while validating a descendant successor."""
     if git("merge-base", final_head, successor_head) != final_head:
@@ -442,6 +486,7 @@ def verify_successor_head(final_head, successor_head):
     # Those are part of the reviewed closure, not undeclared successor drift.
     if not changed or not changed <= (SUCCESSOR_ALLOWED_PATHS | MATERIALIZATION_PATHS):
         raise SystemExit("successor changed an undeclared path")
+    verify_successor_records(changed, successor_head)
     # Re-validate the closure's own content and hashes at the reviewed head;
     # successor implementation commits may carry refreshed historical evidence.
     validate(Path(CLOSURE_PATH), final_head)

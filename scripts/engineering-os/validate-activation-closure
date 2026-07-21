@@ -20,6 +20,12 @@ READY_SHA = "72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9"
 READY_EVENT_HASH = "f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d"
 CLOSURE_PATH = "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
 RECORDS_PATH = "outputs/mission-32-closure-records-ready.json"
+SUCCESSOR_ALLOWED_PATHS = {
+    ".github/workflows/mission-command.yml",
+    "scripts/engineering-os/validate-activation-closure",
+    "scripts/validate.sh",
+    "tests/engineering_os/test_workflow_boundaries.py",
+}
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
 REVIEW_PATHS = {
@@ -377,6 +383,12 @@ def verify_successor_head(final_head, successor_head):
     """Preserve a reviewed closure while validating a descendant successor."""
     if git("merge-base", final_head, successor_head) != final_head:
         raise SystemExit("closure successor is not descended from the reviewed head")
+    try:
+        changed = set(git("diff", "--name-only", "origin/main", successor_head).splitlines())
+    except Exception:
+        changed = set(git("diff", "--name-only", final_head, successor_head).splitlines())
+    if not changed or not changed <= SUCCESSOR_ALLOWED_PATHS:
+        raise SystemExit("successor changed an undeclared path")
     # Re-validate the closure's own content and hashes at the reviewed head;
     # successor implementation commits may carry refreshed historical evidence.
     validate(Path(CLOSURE_PATH), final_head)

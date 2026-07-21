@@ -990,6 +990,11 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertNotIn("b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", workflow)
         self.assertNotIn("9fd7af9c8f231759ebbee851836dd83a097418d6", workflow)
 
+    def test_activation_lifecycle_revalidates_current_commit_and_tree(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn("current_commit=provenance[\"head_sha\"]", workflow)
+        self.assertIn("current_tree=provenance[\"head_tree\"]", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

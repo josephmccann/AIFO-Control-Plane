@@ -346,7 +346,16 @@ def verify_materialization_range(final_head, materialization_head):
         if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get(
                 "GITHUB_EVENT_NAME") not in {"pull_request", "push"}:
             raise SystemExit("CI closure materialization has an unauthorized workflow event")
-        if topology[1] != PR_BASE["sha"]:
+        # Successor PRs are based on the already-merged Control Plane default
+        # branch, while the historical closure remains anchored to Mission 32's
+        # original rollback base. Accept either authenticated protected parent;
+        # reject every other topology.
+        protected_parents = {PR_BASE["sha"]}
+        try:
+            protected_parents.add(git("rev-parse", "origin/main"))
+        except SystemExit:
+            pass
+        if topology[1] not in protected_parents:
             raise SystemExit("closure merge candidate has the wrong protected-base parent")
         evidence_child = topology[2]
         if git("rev-parse", "%s^{tree}" % materialization_head) != git(

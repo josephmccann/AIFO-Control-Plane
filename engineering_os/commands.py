@@ -349,6 +349,24 @@ def validate_compatibility_chain(
     # No enumerated commit may sit outside the active commit's history.
     if reachable != set(records):
         return False, "COMPATIBILITY_CHAIN_RANGE_BROKEN"
+    # Commit history is acyclic.  Reachability alone cannot tell a real range
+    # from a cycle -- two records naming each other are mutually reachable and
+    # would otherwise satisfy every later check -- so require a topological
+    # order to exist.  Anything left over is part of a cycle.
+    remaining = dict(records)
+    settled = set()
+    while True:
+        ready = [
+            commit for commit, record in remaining.items()
+            if all(parent not in remaining for parent in record["parents"])
+        ]
+        if not ready:
+            break
+        for commit in ready:
+            settled.add(commit)
+            del remaining[commit]
+    if remaining:
+        return False, "COMPATIBILITY_CHAIN_CYCLIC"
     # The range must actually attach to the reviewed baseline.
     if not any(baseline_commit in record["parents"] for record in records.values()):
         return False, "COMPATIBILITY_CHAIN_RANGE_BROKEN"

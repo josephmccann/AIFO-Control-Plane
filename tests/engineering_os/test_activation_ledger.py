@@ -354,6 +354,32 @@ class CompatibilityChainTests(ActivationLedgerTests):
         self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
                          "COMPATIBILITY_CHAIN_RANGE_BROKEN")
 
+    def test_cyclic_chain_is_rejected(self):
+        """Commit history is acyclic; a cycle is malformed authority.
+
+        Two records naming each other are mutually reachable, so reachability
+        alone accepts a history no Git repository could produce.
+        """
+        blobs = self.invariant_blobs()
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40, "parents": ["d" * 40],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+            {"commit": "d" * 40, "tree": "e" * 40,
+             "parents": ["a" * 40, "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
+                         "COMPATIBILITY_CHAIN_CYCLIC")
+
+    def test_self_referencing_commit_is_rejected(self):
+        blobs = self.invariant_blobs()
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40,
+             "parents": ["a" * 40, "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_CYCLIC")
+
     def test_range_detached_from_the_baseline_is_rejected(self):
         """The enumerated range must actually attach to the reviewed baseline."""
         blobs = self.invariant_blobs()

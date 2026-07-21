@@ -83,10 +83,31 @@ classify_script() {
 }
 
 verify_tracked_validation_state() {
+  local untracked
+  local generated
   if ! git -C "$ROOT_DIR" diff --quiet HEAD -- "${VALIDATION_RUNTIME_PATHS[@]}" \
       || ! git -C "$ROOT_DIR" diff --cached --quiet HEAD -- "${VALIDATION_RUNTIME_PATHS[@]}"; then
     echo "Validation changed the tracked closure runtime surface." >&2
     return 1
+  fi
+  while IFS= read -r -d '' untracked; do
+    case "$untracked" in
+      scripts/engineering-os/* | engineering_os/* | *.py | *.sh)
+        echo "Validation created an untracked runtime shadow: $untracked" >&2
+        return 1
+        ;;
+    esac
+  done < <(git -C "$ROOT_DIR" ls-files --others --exclude-standard -z)
+  if [[ -d "$ROOT_DIR/build/bin" ]]; then
+    while IFS= read -r -d '' generated; do
+      case "${generated#"$ROOT_DIR"/}" in
+        build/bin/actionlint | build/bin/shellcheck | build/bin/terraform | build/bin/LICENSE.txt) ;;
+        *)
+          echo "Validation found an unauthorized generated command: ${generated#"$ROOT_DIR"/}" >&2
+          return 1
+          ;;
+      esac
+    done < <(find "$ROOT_DIR/build/bin" -mindepth 1 -maxdepth 1 \( -type f -o -type l \) -print0)
   fi
 }
 
@@ -137,9 +158,22 @@ classify_discovered_paths() {
 
 main() {
   local -a missing_linters=()
+  local closure_head
+  local closure_output=""
+  local closure_status=0
+  local materialization_head
 
   SHELL_FILES=()
   PYTHON_FILES=()
+
+  verify_tracked_validation_state
+  echo "Preflighting the governed activation closure."
+  closure_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["final"]["sha"])' \
+    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json")"
+  materialization_head="$(git rev-parse HEAD)"
+  closure_output="$("$ROOT_DIR/scripts/engineering-os/validate-activation-closure" \
+    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json" \
+    "$closure_head" "$materialization_head" 2>&1)" || closure_status=$?
 
   echo "Running Engineering OS tests."
   python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v
@@ -203,13 +237,10 @@ main() {
   actionlint "$ROOT_DIR"/.github/workflows/*.yml
 
   verify_tracked_validation_state
-  echo "Replaying the governed activation closure."
-  closure_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["final"]["sha"])' \
-    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json")"
-  materialization_head="$(git rev-parse HEAD)"
-  "$ROOT_DIR/scripts/engineering-os/validate-activation-closure" \
-    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json" \
-    "$closure_head" "$materialization_head"
+  if (( closure_status != 0 )); then
+    printf '%s\n' "$closure_output" >&2
+    return "$closure_status"
+  fi
 
   echo "Validation complete."
 }

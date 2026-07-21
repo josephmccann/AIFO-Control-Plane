@@ -116,6 +116,49 @@ class ValidationClassificationTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("changed the tracked closure runtime surface", result.stderr)
 
+    def test_untracked_runtime_and_command_shadows_fail_closed(self):
+        for relative_path in (
+            "scripts/engineering-os/json.py",
+            "engineering_os/math.py",
+            "build/bin/git",
+        ):
+            with self.subTest(relative_path=relative_path):
+                with tempfile.TemporaryDirectory() as directory:
+                    clone = Path(directory) / "clone"
+                    subprocess.run(
+                        ["git", "clone", "--quiet", "--no-local", str(ROOT), str(clone)],
+                        check=True,
+                    )
+                    shutil.copy2(ENTRYPOINT, clone / "scripts/validate.sh")
+                    subprocess.run(
+                        [
+                            "git", "-c", "user.name=test", "-c", "user.email=test@example.com",
+                            "commit", "-am", "install current validation entrypoint",
+                        ],
+                        cwd=clone,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    shadow = clone / relative_path
+                    shadow.parent.mkdir(parents=True, exist_ok=True)
+                    shadow.write_text("# runtime shadow\n", encoding="utf-8")
+                    result = subprocess.run(
+                        [
+                            "bash", "-c",
+                            'source "$1"; verify_tracked_validation_state',
+                            "bash", str(clone / "scripts/validate.sh"),
+                        ],
+                        cwd=clone,
+                        capture_output=True,
+                        text=True,
+                    )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "runtime shadow" if relative_path != "build/bin/git" else "unauthorized generated command",
+                    result.stderr,
+                )
+
     def test_symlinked_script_fails_closed_and_discovery_includes_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "target.sh"
@@ -166,6 +209,10 @@ exercise
         self.assertIn('materialization_head="$(git rev-parse HEAD)"', source)
         self.assertIn('"$closure_head" "$materialization_head"', source)
         self.assertGreaterEqual(source.count("verify_tracked_validation_state"), 3)
+        self.assertLess(
+            source.index("Preflighting the governed activation closure."),
+            source.index("Running Engineering OS tests."),
+        )
 
 
 if __name__ == "__main__":

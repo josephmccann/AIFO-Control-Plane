@@ -353,7 +353,7 @@ def verify_materialization_range(final_head, materialization_head):
         protected_parents = {PR_BASE["sha"]}
         try:
             protected_parents.add(git("rev-parse", "origin/main"))
-        except SystemExit:
+        except Exception:
             pass
         if topology[1] not in protected_parents:
             raise SystemExit("closure merge candidate has the wrong protected-base parent")

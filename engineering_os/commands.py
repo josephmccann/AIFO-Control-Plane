@@ -74,11 +74,22 @@ _ACTIVATION_EVENTS = frozenset((_ACTIVATION_AUTHORIZED, _ACTIVATION_ATTEMPTED, _
 _ACTIVATION_REQUIRED = frozenset({
     "repository", "mission_issue", "mission_issue_identity", "authorization_provenance",
     "remediation_head", "remediation_tree",
+    "baseline_generation_commit", "baseline_generation_tree",
+    "active_execution_commit", "active_execution_tree", "compatibility_proof",
     "baseline_artifact_sha256", "canonical_inventory_sha256",
     "baseline_generator_identity", "analyzer_identity", "workflow_identity",
     "caller_identity", "immutable_kernel_identity", "manifest_identity",
     "rollback_sha", "activation_nonce", "activation_type", "single_use",
     "founder_authorization_identity", "founder_authorization_sequence",
+})
+# The field set authorized before Mission #35 separated historical baseline
+# identity from active execution identity.  An authorization of this shape can
+# never be attempted or consumed again: it pairs an opaque historical artifact
+# digest with whatever the default branch happens to be.  It is preserved and
+# reported as terminally superseded rather than silently rejected as malformed.
+_LEGACY_ACTIVATION_REQUIRED = _ACTIVATION_REQUIRED - frozenset({
+    "baseline_generation_commit", "baseline_generation_tree",
+    "active_execution_commit", "active_execution_tree", "compatibility_proof",
 })
 _CONSUMPTION_REQUIRED = _ACTIVATION_REQUIRED | frozenset({
     "authorization_event_hash", "authorization_sequence", "consumer_identity",
@@ -95,6 +106,31 @@ _RUN_PROVENANCE_REQUIRED = frozenset({
     "run_attempt", "job", "actor", "trigger_actor", "event", "head_sha", "head_tree",
 })
 _CONSUMER_IDENTITY_REQUIRED = frozenset({"repository", "workflow_path", "job", "actor"})
+
+# Model B: the reviewed historical baseline artifact remains authoritative only
+# while the surface that produced and interprets it is unchanged.  These paths
+# are the baseline generator and analyzer semantics.  If any one of them differs
+# at any commit in the governed range the historical artifact no longer means
+# what it meant when it was reviewed, and activation must fail closed.
+_INVARIANT_BASELINE_PATHS = (
+    "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json",
+    "engineering_os/canonical.py",
+    "engineering_os/python_imports.py",
+    "engineering_os/test_integrity.py",
+    "engineering_os/test_integrity_cli.py",
+    "scripts/engineering-os/validate-test-integrity",
+)
+_COMPATIBILITY_MODEL = "reviewed_compatibility_chain"
+_COMPATIBILITY_PROOF_REQUIRED = frozenset({
+    "model", "chain_sha256", "chain_path", "baseline_commit", "baseline_tree",
+    "active_commit", "active_tree", "commit_count", "invariant_paths", "invariant_digest",
+})
+_CHAIN_REQUIRED = frozenset({
+    "schema_version", "model", "repository", "baseline", "active",
+    "invariant_paths", "invariant_blobs", "commits",
+})
+_CHAIN_ENDPOINT_REQUIRED = frozenset({"commit", "tree"})
+_CHAIN_COMMIT_REQUIRED = frozenset({"commit", "tree", "parents", "invariant_blobs", "governed_changes"})
 
 
 def _sha(value: Any, length: int) -> bool:
@@ -143,13 +179,154 @@ def _consumer_identity(value: Any, provenance: Any, repository: str) -> bool:
     )
 
 
+def _is_superseded_authorization(event: Any) -> bool:
+    """True for a preserved pre-identity-separation authorization.
+
+    Such an event pairs an opaque historical baseline artifact digest with
+    whatever the default branch has since become.  It is never usable, but it
+    is authentic history and must neither be rewritten nor allowed to block a
+    replacement authorization.
+    """
+    if not isinstance(event, Mapping) or event.get("type") != _ACTIVATION_AUTHORIZED:
+        return False
+    details = event.get("details")
+    return isinstance(details, Mapping) and set(details) == _LEGACY_ACTIVATION_REQUIRED
+
+
+def _invariant_blobs(value: Any) -> Optional[Dict[str, str]]:
+    """Return an exact invariant path/blob map, rejecting partial coverage."""
+    if not isinstance(value, Mapping) or set(value) != set(_INVARIANT_BASELINE_PATHS):
+        return None
+    if any(not _sha(value[path], 40) for path in _INVARIANT_BASELINE_PATHS):
+        return None
+    return {path: value[path] for path in _INVARIANT_BASELINE_PATHS}
+
+
+def _compatibility_proof(value: Any) -> Optional[Dict[str, Any]]:
+    """Return a strict Model B compatibility proof, or None."""
+    if not isinstance(value, Mapping) or set(value) != _COMPATIBILITY_PROOF_REQUIRED:
+        return None
+    if value.get("model") != _COMPATIBILITY_MODEL:
+        return None
+    if not _sha(value.get("chain_sha256"), 64) or not _sha(value.get("invariant_digest"), 64):
+        return None
+    if not isinstance(value.get("chain_path"), str) or not value["chain_path"].strip():
+        return None
+    for key in ("baseline_commit", "baseline_tree", "active_commit", "active_tree"):
+        if not _sha(value.get(key), 40):
+            return None
+    count = value.get("commit_count")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        return None
+    if list(value.get("invariant_paths") or ()) != list(_INVARIANT_BASELINE_PATHS):
+        return None
+    return dict(value)
+
+
+def validate_compatibility_chain(
+    chain: Mapping[str, Any], proof: Mapping[str, Any], *, repository: str,
+) -> Tuple[bool, str]:
+    """Validate a Model B compatibility chain against its declared proof.
+
+    Ancestry alone is never sufficient: the chain must enumerate every commit
+    between the reviewed baseline identity and the active execution identity,
+    and every one of those commits must carry the identical baseline generator
+    and analyzer surface.  A change that is introduced and later reverted is
+    therefore rejected even though the final tree compares equal.
+    """
+    checked = _compatibility_proof(proof)
+    if checked is None:
+        return False, "COMPATIBILITY_PROOF_INVALID"
+    if not isinstance(chain, Mapping) or set(chain) != _CHAIN_REQUIRED:
+        return False, "COMPATIBILITY_CHAIN_INVALID"
+    if chain.get("schema_version") != "1.0.0" or chain.get("model") != _COMPATIBILITY_MODEL:
+        return False, "COMPATIBILITY_CHAIN_INVALID"
+    if chain.get("repository") != repository:
+        return False, "COMPATIBILITY_CHAIN_REPOSITORY_INVALID"
+    if list(chain.get("invariant_paths") or ()) != list(_INVARIANT_BASELINE_PATHS):
+        return False, "COMPATIBILITY_INVARIANT_PATHS_INVALID"
+    expected_blobs = _invariant_blobs(chain.get("invariant_blobs"))
+    if expected_blobs is None:
+        return False, "COMPATIBILITY_INVARIANT_PATHS_INVALID"
+    if content_sha256(expected_blobs) != checked["invariant_digest"]:
+        return False, "COMPATIBILITY_INVARIANT_DIGEST_MISMATCH"
+    endpoints = {}
+    for name in ("baseline", "active"):
+        value = chain.get(name)
+        if (not isinstance(value, Mapping) or set(value) != _CHAIN_ENDPOINT_REQUIRED
+                or not _sha(value.get("commit"), 40) or not _sha(value.get("tree"), 40)):
+            return False, "COMPATIBILITY_CHAIN_ENDPOINT_INVALID"
+        endpoints[name] = value
+    if (endpoints["baseline"]["commit"] != checked["baseline_commit"]
+            or endpoints["baseline"]["tree"] != checked["baseline_tree"]
+            or endpoints["active"]["commit"] != checked["active_commit"]
+            or endpoints["active"]["tree"] != checked["active_tree"]):
+        return False, "COMPATIBILITY_CHAIN_ENDPOINT_MISMATCH"
+    commits = chain.get("commits")
+    if not isinstance(commits, (list, tuple)):
+        return False, "COMPATIBILITY_CHAIN_INVALID"
+    if len(commits) != checked["commit_count"]:
+        return False, "COMPATIBILITY_CHAIN_COUNT_MISMATCH"
+    if endpoints["baseline"]["commit"] == endpoints["active"]["commit"]:
+        # Activating at the reviewed baseline itself needs no successor range,
+        # but it may not smuggle in unexplained commits either.
+        return (True, "COMPATIBILITY_CHAIN_VALID") if not commits else (
+            False, "COMPATIBILITY_CHAIN_RANGE_INVALID")
+    if not commits:
+        # An advanced execution identity with no enumerated range is exactly the
+        # ancestry-only proof this validator exists to reject.
+        return False, "COMPATIBILITY_CHAIN_RANGE_MISSING"
+    seen = set()
+    previous = endpoints["baseline"]["commit"]
+    for record in commits:
+        if not isinstance(record, Mapping) or set(record) != _CHAIN_COMMIT_REQUIRED:
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if not _sha(record.get("commit"), 40) or not _sha(record.get("tree"), 40):
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if record["commit"] in seen:
+            return False, "COMPATIBILITY_CHAIN_COMMIT_DUPLICATE"
+        seen.add(record["commit"])
+        parents = record.get("parents")
+        if not isinstance(parents, (list, tuple)) or not parents:
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if any(not _sha(parent, 40) for parent in parents):
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if previous not in parents:
+            # A gap, a reordering, or a merge importing undeclared history.
+            return False, "COMPATIBILITY_CHAIN_RANGE_BROKEN"
+        if len(parents) > 1 and any(parent not in seen and parent != endpoints["baseline"]["commit"]
+                                    for parent in parents):
+            return False, "COMPATIBILITY_CHAIN_MERGE_UNDECLARED"
+        blobs = _invariant_blobs(record.get("invariant_blobs"))
+        if blobs is None:
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if blobs != expected_blobs:
+            # The generator or analyzer surface moved at this commit.  Later
+            # reversion cannot repair it: the reviewed baseline stopped meaning
+            # what it meant here.
+            return False, "COMPATIBILITY_INVARIANT_VIOLATED"
+        changes = record.get("governed_changes")
+        if not isinstance(changes, (list, tuple)):
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if any(not isinstance(path, str) or not path.strip() for path in changes):
+            return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
+        if any(path in _INVARIANT_BASELINE_PATHS for path in changes):
+            return False, "COMPATIBILITY_INVARIANT_VIOLATED"
+        previous = record["commit"]
+    if previous != endpoints["active"]["commit"]:
+        return False, "COMPATIBILITY_CHAIN_RANGE_INCOMPLETE"
+    if commits[-1]["tree"] != endpoints["active"]["tree"]:
+        return False, "COMPATIBILITY_CHAIN_ENDPOINT_MISMATCH"
+    return True, "COMPATIBILITY_CHAIN_VALID"
+
+
 def _activation_tuple(details: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     """Return a strict activation tuple, rejecting extra or malformed fields."""
     if not isinstance(details, Mapping) or set(details) != _ACTIVATION_REQUIRED:
         return None
     text_fields = _ACTIVATION_REQUIRED - {
         "mission_issue", "single_use", "founder_authorization_sequence",
-        "mission_issue_identity", "authorization_provenance",
+        "mission_issue_identity", "authorization_provenance", "compatibility_proof",
     }
     if any(not isinstance(details[key], str) or not details[key].strip() for key in text_fields):
         return None
@@ -175,6 +352,22 @@ def _activation_tuple(details: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     if re.fullmatch(r"[0-9a-f]{40}", details["rollback_sha"]) is None:
         return None
     if re.fullmatch(r"[0-9a-f]{40}", details["remediation_tree"]) is None:
+        return None
+    for key in ("baseline_generation_commit", "baseline_generation_tree",
+                "active_execution_commit", "active_execution_tree"):
+        if re.fullmatch(r"[0-9a-f]{40}", details[key]) is None:
+            return None
+    proof = _compatibility_proof(details["compatibility_proof"])
+    if proof is None:
+        return None
+    # Identity roles may not be substituted for one another.  The proof must
+    # describe the exact historical baseline it was reviewed against and the
+    # exact active execution identity being authorized, never a relabelling of
+    # one as the other.
+    if (proof["baseline_commit"] != details["baseline_generation_commit"]
+            or proof["baseline_tree"] != details["baseline_generation_tree"]
+            or proof["active_commit"] != details["active_execution_commit"]
+            or proof["active_tree"] != details["active_execution_tree"]):
         return None
     if len(details["activation_nonce"]) < 32:
         return None
@@ -230,6 +423,7 @@ def validate_activation_ledger(
     mission_issue: int = 26,
     current_commit: Optional[str] = None,
     current_tree: Optional[str] = None,
+    compatibility_chain: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     """Validate the Mission #26 activation protocol without mutating state.
 
@@ -244,12 +438,33 @@ def validate_activation_ledger(
     } for event in events):
         return False, "ACTIVATION_AUTHORIZATION_INVALIDATED", {}
     expected = _activation_tuple(activation)
-    if expected is None or expected["repository"] != repository or expected["mission_issue"] != mission_issue:
+    if expected is None:
+        # A pre-identity-separation authorization is terminally unusable, not
+        # merely malformed.  Report it as superseded so callers can distinguish
+        # "no usable authorization" from a corrupt ledger, without ever treating
+        # it as consumable.
+        if isinstance(activation, Mapping) and set(activation) == _LEGACY_ACTIVATION_REQUIRED:
+            return False, "ACTIVATION_AUTHORIZATION_SUPERSEDED", {
+                "consumed": False, "superseded": True, "reason": "identity_separation_required",
+            }
         return False, "ACTIVATION_TUPLE_INVALID", {}
-    if current_commit is not None and expected["remediation_head"] != current_commit:
+    if expected["repository"] != repository or expected["mission_issue"] != mission_issue:
+        return False, "ACTIVATION_TUPLE_INVALID", {}
+    # The live checkout is the active execution identity.  It is deliberately
+    # not compared against ``remediation_head``/``remediation_tree``: those name
+    # the reviewed historical remediation, which does not advance with the
+    # default branch and must never be relabelled to make this check pass.
+    if current_commit is not None and expected["active_execution_commit"] != current_commit:
         return False, "ACTIVATION_COMMIT_MISMATCH", {}
-    if current_tree is not None and expected["remediation_tree"] != current_tree:
+    if current_tree is not None and expected["active_execution_tree"] != current_tree:
         return False, "ACTIVATION_TREE_MISMATCH", {}
+    if compatibility_chain is not None:
+        if content_sha256(compatibility_chain) != expected["compatibility_proof"]["chain_sha256"]:
+            return False, "ACTIVATION_COMPATIBILITY_CHAIN_DIGEST_MISMATCH", {}
+        chain_ok, chain_code = validate_compatibility_chain(
+            compatibility_chain, expected["compatibility_proof"], repository=repository)
+        if not chain_ok:
+            return False, chain_code, {}
     authorizations = []
     attempts = []
     consumptions = []
@@ -266,12 +481,20 @@ def validate_activation_ledger(
     if not strict_chain:
         return False, "ACTIVATION_HISTORY_INVALID", {}
     activation_events = []
+    superseded = []
     for event in events:
         if event.get("type") not in _ACTIVATION_EVENTS:
             if isinstance(event.get("type"), str) and event["type"].startswith("test_integrity.baseline."):
                 return False, "ACTIVATION_HISTORY_INVALID", {}
             continue
         activation_events.append(event)
+        if _is_superseded_authorization(event):
+            # Preserved pre-separation authorization.  It is authentic history
+            # and stays visible, but it can never be attempted or consumed, so
+            # it must not be compared against the current tuple nor block the
+            # replacement authorization that identity separation requires.
+            superseded.append(event)
+            continue
         if (not isinstance(event.get("sequence"), int)
                 or isinstance(event.get("sequence"), bool)
                 or event["sequence"] < 1
@@ -1163,7 +1386,12 @@ def authorize_command_proposal(
             if not isinstance(activation, Mapping):
                 return ProposalDecision(False, "ACTIVATION_BINDING_REQUIRED")
             event_details = dict(activation)
-            existing_authorization = next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None)
+            # A superseded pre-separation authorization is unusable, so it must
+            # not count as the existing authorization; otherwise no replacement
+            # can ever be appended and activation is permanently stuck.
+            existing_authorization = next((item for item in history.events
+                                           if item.get("type") == _ACTIVATION_AUTHORIZED
+                                           and not _is_superseded_authorization(item)), None)
             existing_attempt = next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None)
             existing_consumption = next((item for item in history.events if item.get("type") == _ACTIVATION_CONSUMED), None)
             if event_type == _ACTIVATION_AUTHORIZED and existing_authorization:
@@ -1196,7 +1424,9 @@ def authorize_command_proposal(
                 build_activation_event(event_type, event_details,
                                        actor="system" if activation_system_event else actor, actor_role=role,
                                        occurred_at=occurred_at, source_url=activation_source_url,
-                                       authorization_event=next((item for item in history.events if item.get("type") == _ACTIVATION_AUTHORIZED), None),
+                                       authorization_event=next((item for item in history.events
+                                                                 if item.get("type") == _ACTIVATION_AUTHORIZED
+                                                                 and not _is_superseded_authorization(item)), None),
                                        attempt_event=next((item for item in history.events if item.get("type") == _ACTIVATION_ATTEMPTED), None))
             except ValueError as error:
                 return ProposalDecision(False, str(error))

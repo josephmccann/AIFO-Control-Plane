@@ -21,6 +21,27 @@ from tests.engineering_os.helpers import load_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "josephmccann/AIFO-Control-Plane"
+ACTIVE_COMMIT = "a" * 40
+ACTIVE_TREE = "b" * 40
+
+
+def activation_proof(**overrides):
+    """A Model B proof bound to the historical baseline and active execution."""
+    blobs = {path: "%040x" % (index + 1)
+             for index, path in enumerate(command_kernel._INVARIANT_BASELINE_PATHS)}
+    value = {
+        "model": "reviewed_compatibility_chain",
+        "chain_sha256": "c" * 64,
+        "chain_path": "outputs/mission-35-compatibility-chain.json",
+        "baseline_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+        "baseline_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+        "active_commit": ACTIVE_COMMIT, "active_tree": ACTIVE_TREE,
+        "commit_count": 1,
+        "invariant_paths": list(command_kernel._INVARIANT_BASELINE_PATHS),
+        "invariant_digest": content_sha256(blobs),
+    }
+    value.update(overrides)
+    return value
 BOT = "github-actions[bot]"
 RECOVERY_WORKFLOW = ".github/workflows/reusable-orphan-recovery.yml"
 
@@ -308,6 +329,11 @@ class CommandTests(unittest.TestCase):
             "repository": REPOSITORY, "mission_issue": 26,
             "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
             "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "active_execution_commit": ACTIVE_COMMIT,
+            "active_execution_tree": ACTIVE_TREE,
+            "compatibility_proof": activation_proof(),
             "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
             "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
             "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
@@ -340,6 +366,11 @@ class CommandTests(unittest.TestCase):
             "repository": REPOSITORY, "mission_issue": 26,
             "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
             "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "active_execution_commit": ACTIVE_COMMIT,
+            "active_execution_tree": ACTIVE_TREE,
+            "compatibility_proof": activation_proof(),
             "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
             "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
             "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",

@@ -171,9 +171,14 @@ main() {
   closure_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["final"]["sha"])' \
     "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json")"
   materialization_head="$(git rev-parse HEAD)"
-  closure_output="$("$ROOT_DIR/scripts/engineering-os/validate-activation-closure" \
-    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json" \
-    "$closure_head" "$materialization_head" 2>&1)" || closure_status=$?
+  if [[ "$materialization_head" == "$closure_head" ]]; then
+    closure_output="$("$ROOT_DIR/scripts/engineering-os/validate-activation-closure" \
+      "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json" \
+      "$closure_head" 2>&1)" || closure_status=$?
+  else
+    closure_output="$("$ROOT_DIR/scripts/engineering-os/validate-activation-closure" \
+      --validate-successor-head "$closure_head" "$materialization_head" 2>&1)" || closure_status=$?
+  fi
 
   echo "Running Engineering OS tests."
   python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v

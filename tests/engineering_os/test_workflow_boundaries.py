@@ -983,6 +983,67 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         ):
             self.assertIn(required, workflow)
 
+    def test_activation_tuple_separates_historical_identity_from_active_execution(self):
+        """The live checkout is the active execution identity, never a relabelled
+        historical remediation.  Binding ``remediation_head`` to the checkout
+        while keeping a historical ``baseline_artifact_sha256`` asserts a
+        correspondence that was never reviewed and is not proven."""
+        workflow = self.read("mission-command.yml")
+        self.assertIn('"active_execution_commit": head', workflow)
+        self.assertIn('"active_execution_tree": tree', workflow)
+        self.assertNotIn('"remediation_head": head', workflow)
+        self.assertNotIn('"remediation_tree": tree', workflow)
+        self.assertIn('"remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"', workflow)
+        self.assertIn('"baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"', workflow)
+        self.assertIn('"baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"', workflow)
+        self.assertIn('"compatibility_proof": proof', workflow)
+
+    def test_activation_requires_validated_compatibility_chain(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn("validate_compatibility_chain(", workflow)
+        self.assertIn("raise SystemExit(chain_code)", workflow)
+        # The range must be derived from git, not read from a committable file
+        # that would go stale the moment the default branch advanced.
+        self.assertIn('git("rev-list", "--reverse", "--topo-order"', workflow)
+
+    def test_superseded_authorization_is_terminal_but_not_fatal(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn("ACTIVATION_AUTHORIZATION_SUPERSEDED", workflow)
+
+    def test_superseded_authorizations_are_filtered_on_both_sides(self):
+        """Prepare and append must select the same authorization.
+
+        If append still picked the first authorized event it would select the
+        legacy one, fail closed as superseded, and never post the replacement
+        that prepare had already allowed.
+        """
+        workflow = self.read("mission-command.yml")
+        self.assertEqual(workflow.count("_is_superseded_authorization(item)"), 1)
+        self.assertEqual(workflow.count("_is_superseded_authorization(event)"), 2)
+
+    def test_preflight_validates_the_replacement_not_the_legacy_authorization(self):
+        """A superseded entry must not downgrade validation of a replacement.
+
+        Validating activations[0] when the legacy event sorts first would turn
+        a malformed or replayed replacement into a warning instead of a
+        fail-closed rejection.
+        """
+        workflow = self.read("mission-command.yml")
+        self.assertIn("usable = [event for event in activations", workflow)
+        self.assertIn("validate_activation_ledger(events, usable[0][\"details\"]", workflow)
+        self.assertNotIn("validate_activation_ledger(events, activations[0][\"details\"]", workflow)
+
+    def test_activation_checkout_fetches_full_history(self):
+        """The compatibility-chain range walk needs more than a shallow clone."""
+        workflow = self.read("mission-command.yml")
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertEqual(workflow.count("fetch-depth: 0"), 2)
+
+    def test_activation_lifecycle_revalidates_current_commit_and_tree(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn("current_commit=provenance[\"head_sha\"]", workflow)
+        self.assertIn("current_tree=provenance[\"head_tree\"]", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

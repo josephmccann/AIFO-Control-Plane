@@ -184,8 +184,27 @@ jobs:
           records = []
           listed = git("rev-list", "--reverse", "--topo-order",
                        "%s..%s" % (baseline_commit, head))
+          enumerated = {line for line in listed.splitlines() if line.strip()}
+          pre_baseline = set()
+
+          def is_ancestor(candidate, descendant):
+              return subprocess.run(
+                  ["git", "merge-base", "--is-ancestor", candidate, descendant],
+                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+              ).returncode == 0
+
           for commit in [line for line in listed.splitlines() if line.strip()]:
               parents = git("rev-list", "--parents", "-n", "1", commit).split()[1:]
+              for parent in parents:
+                  if parent in enumerated or parent == baseline_commit:
+                      continue
+                  # A parent outside the range is only acceptable when it
+                  # predates the reviewed baseline, in which case everything
+                  # reachable from it is already subsumed by the reviewed
+                  # baseline artifact.  Anything else is undeclared history.
+                  if not is_ancestor(parent, baseline_commit):
+                      raise SystemExit("ACTIVATION_COMPATIBILITY_PARENT_UNDECLARED")
+                  pre_baseline.add(parent)
               changed = git("diff-tree", "--no-commit-id", "--name-only", "-r", commit)
               governed = sorted({
                   path for path in changed.splitlines()
@@ -205,6 +224,7 @@ jobs:
               "active": {"commit": head, "tree": tree},
               "invariant_paths": list(_INVARIANT_BASELINE_PATHS),
               "invariant_blobs": invariant_blobs, "commits": records,
+              "pre_baseline_parents": sorted(pre_baseline),
           }
           proof = {
               "model": "reviewed_compatibility_chain",

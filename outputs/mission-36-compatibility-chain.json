@@ -1,0 +1,1778 @@
+{
+  "active": {
+    "commit": "2f0fb2811ff62eaa117f96922720f429db968e35",
+    "tree": "de3b1af078562d3fbfafa0ed2d64e5229a608c07"
+  },
+  "baseline": {
+    "commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+    "tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"
+  },
+  "commits": [
+    {
+      "commit": "c4cd413d0f77a9213bccb8f8f908dec0b292e41d",
+      "governed_changes": [
+        "docs/engineering-os/EVIDENCE_AND_AUDIT.md",
+        "engineering_os/commands.py",
+        "engineering_os/state.py",
+        "tests/engineering_os/test_activation_ledger.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"
+      ],
+      "tree": "6f1fd2286f9185e2fc820b1c800c52b218028c45"
+    },
+    {
+      "commit": "278dec57ce782e03c03841bdba346d4146305070",
+      "governed_changes": [
+        ".github/actions/materialize-kernel/action.yml",
+        "engineering_os/commands.py",
+        "engineering_os/state.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "c4cd413d0f77a9213bccb8f8f908dec0b292e41d"
+      ],
+      "tree": "2007aed799fc30d490637a0049f7f28991d459b4"
+    },
+    {
+      "commit": "4e9f8b27e274db0f53a35f1864dadea9317036dd",
+      "governed_changes": [
+        ".github/actions/materialize-kernel/action.yml"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "278dec57ce782e03c03841bdba346d4146305070"
+      ],
+      "tree": "4d672eedcef0bd5fc27d2134eb8fc619c81a8ed0"
+    },
+    {
+      "commit": "f6171b8fa20dfe7db611768b064e1a24457a0231",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        ".github/workflows/reusable-airtable-mirror.yml",
+        ".github/workflows/reusable-evidence-manifest.yml",
+        ".github/workflows/reusable-frozen-path-guard.yml",
+        ".github/workflows/reusable-merge-authorization.yml",
+        ".github/workflows/reusable-mission-validation.yml",
+        ".github/workflows/reusable-orphan-recovery.yml",
+        ".github/workflows/reusable-test-integrity.yml",
+        ".github/workflows/reusable-tier-path-guard.yml",
+        "tests/engineering_os/test_activation_ledger.py",
+        "tests/engineering_os/test_test_integrity.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "4e9f8b27e274db0f53a35f1864dadea9317036dd"
+      ],
+      "tree": "f413a96ca48db1a0412b2486c683e7ba3171e071"
+    },
+    {
+      "commit": "44b92784b5927551fd6d32817d1d3b0894ae8837",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py",
+        "tests/engineering_os/test_activation_ledger.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "f6171b8fa20dfe7db611768b064e1a24457a0231"
+      ],
+      "tree": "1a2666841a206e42fbba2124b69cc029ee52852e"
+    },
+    {
+      "commit": "be1f17ccdb2e8f32e82fc7e781d7272450115522",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "tests/engineering_os/test_activation_ledger.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "44b92784b5927551fd6d32817d1d3b0894ae8837"
+      ],
+      "tree": "12e1a4ea4d16dafda6692e1295be345d4abf5b6d"
+    },
+    {
+      "commit": "507d6ea5758661aab25013fc317fd93dfcf5445d",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "be1f17ccdb2e8f32e82fc7e781d7272450115522"
+      ],
+      "tree": "5f22c4d026212b4f33cdf62d5eaa5f6bebbffb24"
+    },
+    {
+      "commit": "8fa69b2a17194ebcd543d6c9989e270d6a5e3dec",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        ".github/workflows/reusable-airtable-mirror.yml",
+        ".github/workflows/reusable-evidence-manifest.yml",
+        ".github/workflows/reusable-frozen-path-guard.yml",
+        ".github/workflows/reusable-merge-authorization.yml",
+        ".github/workflows/reusable-mission-validation.yml",
+        ".github/workflows/reusable-orphan-recovery.yml",
+        ".github/workflows/reusable-test-integrity.yml",
+        ".github/workflows/reusable-tier-path-guard.yml",
+        "docs/engineering-os/EVIDENCE_AND_AUDIT.md",
+        "engineering_os/commands.py",
+        "tests/engineering_os/test_activation_ledger.py",
+        "tests/engineering_os/test_commands.py",
+        "tests/engineering_os/test_test_integrity.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "507d6ea5758661aab25013fc317fd93dfcf5445d"
+      ],
+      "tree": "3c88ed7e200615b6ac9cbdd8d89df5a932532c4d"
+    },
+    {
+      "commit": "0d2a36f3a4ebe8fa1ca5a56c9bf454508a208f2f",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "8fa69b2a17194ebcd543d6c9989e270d6a5e3dec"
+      ],
+      "tree": "e468546af0c6ac03296a3b56a8a4fdaeaf597ebe"
+    },
+    {
+      "commit": "9ea484c13bfc8c0d0c44dd150c257398b96c9abf",
+      "governed_changes": [
+        ".github/workflows/reusable-airtable-mirror.yml",
+        ".github/workflows/reusable-evidence-manifest.yml",
+        ".github/workflows/reusable-frozen-path-guard.yml",
+        ".github/workflows/reusable-merge-authorization.yml",
+        ".github/workflows/reusable-mission-validation.yml",
+        ".github/workflows/reusable-orphan-recovery.yml",
+        ".github/workflows/reusable-test-integrity.yml",
+        ".github/workflows/reusable-tier-path-guard.yml",
+        "tests/engineering_os/test_test_integrity.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "0d2a36f3a4ebe8fa1ca5a56c9bf454508a208f2f"
+      ],
+      "tree": "c21d15bc090ee2e489e0458ab7477bb3ac686ab3"
+    },
+    {
+      "commit": "d43487f271f2fec27baf78f24f021ac013fdba27",
+      "governed_changes": [
+        "engineering_os/commands.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "9ea484c13bfc8c0d0c44dd150c257398b96c9abf"
+      ],
+      "tree": "1ac0fbc353b06b7013649f50aa73fb6e52c6db20"
+    },
+    {
+      "commit": "e8164562af54e24c8dad629061067138c779bd57",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d43487f271f2fec27baf78f24f021ac013fdba27"
+      ],
+      "tree": "394769ee66fad2a6fede020a12124f3148817821"
+    },
+    {
+      "commit": "29eaa5811c6d161b17299ed177690343106cb31f",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py",
+        "engineering_os/schema.py",
+        "tests/engineering_os/test_schema.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "e8164562af54e24c8dad629061067138c779bd57"
+      ],
+      "tree": "2c5df22a51dc63a62cff7ee40fbaaf0ce1deeb2a"
+    },
+    {
+      "commit": "5d38b53a8719faa6eed8f461cf5e655b391b1928",
+      "governed_changes": [
+        ".github/workflows/reusable-airtable-mirror.yml",
+        ".github/workflows/reusable-evidence-manifest.yml",
+        ".github/workflows/reusable-frozen-path-guard.yml",
+        ".github/workflows/reusable-merge-authorization.yml",
+        ".github/workflows/reusable-mission-validation.yml",
+        ".github/workflows/reusable-orphan-recovery.yml",
+        ".github/workflows/reusable-test-integrity.yml",
+        ".github/workflows/reusable-tier-path-guard.yml",
+        "tests/engineering_os/test_test_integrity.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "29eaa5811c6d161b17299ed177690343106cb31f"
+      ],
+      "tree": "1e73c7aa87ec6a7b5422a3f7e3e3c844cd691ba4"
+    },
+    {
+      "commit": "68443b3d8400edeaa09b0bd5e171e21420dcd1a0",
+      "governed_changes": [
+        "engineering_os/commands.py",
+        "tests/engineering_os/test_commands.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "5d38b53a8719faa6eed8f461cf5e655b391b1928"
+      ],
+      "tree": "e8fa52ad4f7da82cbb8a2d55e5016c37806ca1b2"
+    },
+    {
+      "commit": "4341152e64d82ec7b1b73156b1bf40cdf88b4e68",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "68443b3d8400edeaa09b0bd5e171e21420dcd1a0"
+      ],
+      "tree": "ba85cfe8e8c1340b63fa34d9e9a8820a4379db78"
+    },
+    {
+      "commit": "d3a5e29f47ab53a5190e32f3bb0edfd2cbdc1533",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "4341152e64d82ec7b1b73156b1bf40cdf88b4e68"
+      ],
+      "tree": "b7553c1462b8c45e848d866b2ee7c3fbf2c54d41"
+    },
+    {
+      "commit": "da301963cc430883bdd3623e734aed0e06d52d18",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d3a5e29f47ab53a5190e32f3bb0edfd2cbdc1533"
+      ],
+      "tree": "321058d42fb7bdcefd52143a88c5db7770a8aa0c"
+    },
+    {
+      "commit": "9571dabf16113cacaee84b291f96348ab45e31b0",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
+        "engineering_os/commands.py",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_activation_ledger.py",
+        "tests/engineering_os/test_commands.py",
+        "tests/engineering_os/test_schema.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "da301963cc430883bdd3623e734aed0e06d52d18"
+      ],
+      "tree": "93dc1006902a9d1af015f8247fc505af63c20bf9"
+    },
+    {
+      "commit": "443e5153b0fe968355f9409a82678ad580df32cb",
+      "governed_changes": [
+        "engineering_os/commands.py",
+        "tests/engineering_os/test_commands.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "9571dabf16113cacaee84b291f96348ab45e31b0"
+      ],
+      "tree": "4373bf6c1450df8afa94e03a0360bcdd465d2b1e"
+    },
+    {
+      "commit": "7da290c01a9e1405eab196fd59692c4182eb250b",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "443e5153b0fe968355f9409a82678ad580df32cb"
+      ],
+      "tree": "6825bc46e7967d6f2f9b094d1617b9a56963d53f"
+    },
+    {
+      "commit": "944b6eaff86f2cc79d95d219efb1b5bc91587aa1",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "7da290c01a9e1405eab196fd59692c4182eb250b"
+      ],
+      "tree": "13e4e7b083dad1a31677ff5a64c9cb6c2953a271"
+    },
+    {
+      "commit": "8187b91787f4202d039e012169429f04568ad451",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "944b6eaff86f2cc79d95d219efb1b5bc91587aa1"
+      ],
+      "tree": "7d5bdac6feacbba9b47182d4d305dc2c356a93d2"
+    },
+    {
+      "commit": "ebeffabc7f3e5256bdd8e176ddc20416277d9a39",
+      "governed_changes": [
+        "engineering_os/schema.py",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_schema.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "8187b91787f4202d039e012169429f04568ad451"
+      ],
+      "tree": "5c5a64b4996f37e9c802bced8377927ca7454ca6"
+    },
+    {
+      "commit": "4445c1f6bf3933e1b33a9cff42e3083d19885251",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "ebeffabc7f3e5256bdd8e176ddc20416277d9a39"
+      ],
+      "tree": "5eb01a9242e5c7a1db8f2eeb1b5eb48bffe7486c"
+    },
+    {
+      "commit": "99c7000ae21d0fec17fe3945bc4e72472310caa2",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "4445c1f6bf3933e1b33a9cff42e3083d19885251"
+      ],
+      "tree": "6c0f1d244bbfb9481a96d2701f1cc87bb029ab66"
+    },
+    {
+      "commit": "4941bd5ba732a9faf8abea87ff868f329a6830c3",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "99c7000ae21d0fec17fe3945bc4e72472310caa2"
+      ],
+      "tree": "1f3cb908f0e2b4b94abf64af373282412088b270"
+    },
+    {
+      "commit": "bf038dc1dcd1cc2cc6f5252e0d1b2d873a3dff7e",
+      "governed_changes": [
+        "engineering_os/schema.py",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_schema.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "4941bd5ba732a9faf8abea87ff868f329a6830c3"
+      ],
+      "tree": "2cb3fbf85efb14deb2a35ca47b9bbb3bae5a9f67"
+    },
+    {
+      "commit": "c0b358d6659b9866f324187bf5c0b40f525eebe4",
+      "governed_changes": [
+        "engineering_os/schema.py",
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "bf038dc1dcd1cc2cc6f5252e0d1b2d873a3dff7e"
+      ],
+      "tree": "3963aa3dcaaa37ea3892c1aaaa8c68d8897ac42a"
+    },
+    {
+      "commit": "5ceee5dd243851c3364562f02033363c68797f25",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "c0b358d6659b9866f324187bf5c0b40f525eebe4"
+      ],
+      "tree": "4eed076e5df7e2a107b761b6f1e0ffbb6411270b"
+    },
+    {
+      "commit": "ebcbcf6ae296aa7c48801ca53b756e1bb4dba7b9",
+      "governed_changes": [
+        "engineering_os/commands.py",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_activation_ledger.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "5ceee5dd243851c3364562f02033363c68797f25"
+      ],
+      "tree": "d0339450bb54ef5f6697259012c854ec0a25ab88"
+    },
+    {
+      "commit": "eb3ef70d2b4073b32e52443f4c629d191f782588",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "ebcbcf6ae296aa7c48801ca53b756e1bb4dba7b9"
+      ],
+      "tree": "9b29376bd06b6952b87c1a57c8afc433133acdb1"
+    },
+    {
+      "commit": "f5ba5809d5082aee0e9f48dbd33db75256618f99",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "eb3ef70d2b4073b32e52443f4c629d191f782588"
+      ],
+      "tree": "e6129c0b8126a22fbcd82a8a780d331e93375fc5"
+    },
+    {
+      "commit": "62721be72f953f9ac5c4a3faaa672c6bbbcff801",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "f5ba5809d5082aee0e9f48dbd33db75256618f99"
+      ],
+      "tree": "b2715c65d786bff98c4af7da08d0c4321b6551ef"
+    },
+    {
+      "commit": "af64bb085013c740aa6f7c07310176854e1db507",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "62721be72f953f9ac5c4a3faaa672c6bbbcff801"
+      ],
+      "tree": "f5a0a9f43325aadfc6dc12e7f99c8bbb498a3823"
+    },
+    {
+      "commit": "9d0e7740bd4bbccc43467c04c89bdf596b1bc59c",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "af64bb085013c740aa6f7c07310176854e1db507"
+      ],
+      "tree": "ca816ce3db3645ad4135b47cf94f8bc07cd1a7df"
+    },
+    {
+      "commit": "3eac996f5bd164d59bd27f433186b95a01bcec8d",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "9d0e7740bd4bbccc43467c04c89bdf596b1bc59c"
+      ],
+      "tree": "12def5a5e8f3f53717e1ad62b99a64fd6dd5de1d"
+    },
+    {
+      "commit": "54d101a80e1c509849a8ca18833135e9f49a3947",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "3eac996f5bd164d59bd27f433186b95a01bcec8d"
+      ],
+      "tree": "80fb5b1cb95bf523b967bd1c516f595e3264ce06"
+    },
+    {
+      "commit": "c9c80c6d2dfa1f612e91bfcee06d403272e57bf0",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "54d101a80e1c509849a8ca18833135e9f49a3947"
+      ],
+      "tree": "42fdd434c5944ddedb235a6c6c34d600dbc00cad"
+    },
+    {
+      "commit": "c8b92c914589353789367e86d0d5e37d7f829d0c",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "c9c80c6d2dfa1f612e91bfcee06d403272e57bf0"
+      ],
+      "tree": "cc6c40e0e962859a95be445d8dea79fb653fe5ee"
+    },
+    {
+      "commit": "d68c5dac07911de0c4a341c2153a0d2c2778562a",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "c8b92c914589353789367e86d0d5e37d7f829d0c"
+      ],
+      "tree": "fa189d7815c210be090f61c09321eb543097798a"
+    },
+    {
+      "commit": "040d39ac41c9447990847356a0e6a91ceeeba33d",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d68c5dac07911de0c4a341c2153a0d2c2778562a"
+      ],
+      "tree": "78cde482929f816d58333d95efd77a3bd168b9bb"
+    },
+    {
+      "commit": "283f37b97a9df24ca056c5115197464043312185",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "040d39ac41c9447990847356a0e6a91ceeeba33d"
+      ],
+      "tree": "a5eeb371beb8b83d693339721e5bbc15ceca272d"
+    },
+    {
+      "commit": "3b8dcc5e05ab4ade6577cd9b48a3a1fbcca0bed7",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "283f37b97a9df24ca056c5115197464043312185"
+      ],
+      "tree": "4472da7ec40a55a4ce6b8596a529d5ee85d73c4e"
+    },
+    {
+      "commit": "bb76d8cbf6dd5eabc90fbde4980c2afbbd46688e",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "3b8dcc5e05ab4ade6577cd9b48a3a1fbcca0bed7"
+      ],
+      "tree": "222dcf83e7ddc6f0a312903449bad866db8019e4"
+    },
+    {
+      "commit": "f0f2cd3df5b99c2ab29bb371a20a506810aea0f4",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "bb76d8cbf6dd5eabc90fbde4980c2afbbd46688e"
+      ],
+      "tree": "1312df43da745968c8925b854c6948bf95eaa197"
+    },
+    {
+      "commit": "40cf8644ba18364721cc5a45ea115da5506a3952",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "f0f2cd3df5b99c2ab29bb371a20a506810aea0f4"
+      ],
+      "tree": "03300b8f6c593a2fcd1cfed3c87dae3eca94df8b"
+    },
+    {
+      "commit": "439b0c4bc857000dd41b71df0421d809bc1833c3",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "40cf8644ba18364721cc5a45ea115da5506a3952"
+      ],
+      "tree": "ef1c70fc5ac8ae45357a24dccb29b5b296f3d9f5"
+    },
+    {
+      "commit": "bfbe3d7f9da85de39b303a1d2fb72a1bf1d1351d",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "439b0c4bc857000dd41b71df0421d809bc1833c3"
+      ],
+      "tree": "c8f4d4b7141d0c140baed6d57e41169885af8df1"
+    },
+    {
+      "commit": "3082c850d12239021722f65f5a7b08c92868f3db",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "bfbe3d7f9da85de39b303a1d2fb72a1bf1d1351d"
+      ],
+      "tree": "1820ab2563f8922acaf8376e7d8dcdf6e1cbe6db"
+    },
+    {
+      "commit": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "3082c850d12239021722f65f5a7b08c92868f3db"
+      ],
+      "tree": "aae7823d40235779f914a5486aa90ea91b106c1d"
+    },
+    {
+      "commit": "6918fa8ac476b2443768826b1780ac155474c471",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7"
+      ],
+      "tree": "a8695d1d8fb442545bd7794ab2e6d91f45908651"
+    },
+    {
+      "commit": "87535e0fd5880969422d4266d7f3a6bd18c4dd58",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "6918fa8ac476b2443768826b1780ac155474c471"
+      ],
+      "tree": "6d5464268565a51f13a08d5cc6b80a8634743238"
+    },
+    {
+      "commit": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "87535e0fd5880969422d4266d7f3a6bd18c4dd58"
+      ],
+      "tree": "e5e99a3cfeeb0dbeaf67f97f5edc6131e01f1a0e"
+    },
+    {
+      "commit": "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a",
+      "governed_changes": [
+        "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "dc8ef949c8da6fd343628e92cc377003071530c6"
+      ],
+      "tree": "684944fa43b3674f05839ef1f9959339f34e7ac3"
+    },
+    {
+      "commit": "8df857b80852ff448ebac68935a54f4a9c5cc7a5",
+      "governed_changes": [
+        "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a"
+      ],
+      "tree": "cc8aecb4a02849859aa9d6292ef30749b1619001"
+    },
+    {
+      "commit": "155bc1208fca3c12c77f2c10da8edb068d13e71b",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "8df857b80852ff448ebac68935a54f4a9c5cc7a5"
+      ],
+      "tree": "693cdf19878b33ac8f86d034f590f7c1bce664a4"
+    },
+    {
+      "commit": "9159bcc95a148e630228648760cfc5cf1a9debdb",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "155bc1208fca3c12c77f2c10da8edb068d13e71b"
+      ],
+      "tree": "901c8585d9f18b57afbf5c72f6731f73c711a22a"
+    },
+    {
+      "commit": "0a07d5fd62c4844dd12449376ffdd0761db5b371",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "9159bcc95a148e630228648760cfc5cf1a9debdb"
+      ],
+      "tree": "005b1f10632d92ad6465f14756af32e6749f878c"
+    },
+    {
+      "commit": "a60088c1114bcf96cf400ffbbe14c81fcf93a19b",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "0a07d5fd62c4844dd12449376ffdd0761db5b371"
+      ],
+      "tree": "85473ecf0eec39216e0350e36a5f083291086628"
+    },
+    {
+      "commit": "b4a1996eb28fe7a8129b6b27fae2968aa5e2fdf1",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "a60088c1114bcf96cf400ffbbe14c81fcf93a19b"
+      ],
+      "tree": "12b8c25ebc6369d162efb4e64582c5333915d80e"
+    },
+    {
+      "commit": "85e4bfcaf88eceea35fdba613fd96e910a82f9b6",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "b4a1996eb28fe7a8129b6b27fae2968aa5e2fdf1"
+      ],
+      "tree": "505e4d35acfd4f8a49bf1526d9f27360b3dc0fde"
+    },
+    {
+      "commit": "8d0f62dfb83dd6f053aacb14b4b0fa58ef23acdf",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "85e4bfcaf88eceea35fdba613fd96e910a82f9b6"
+      ],
+      "tree": "c74d7f6fe81517091ac546400aa8f699d4b3880a"
+    },
+    {
+      "commit": "003cd6085bdec2fdd389a3cc53bd44ce28c18415",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "8d0f62dfb83dd6f053aacb14b4b0fa58ef23acdf"
+      ],
+      "tree": "57f00268956be9556e67c2551684df2b0630e083"
+    },
+    {
+      "commit": "85de28e84b9d5ba20549811f8dff6a0ab38f0212",
+      "governed_changes": [
+        "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "003cd6085bdec2fdd389a3cc53bd44ce28c18415"
+      ],
+      "tree": "cf1a4040e1569896eab08216c52402f06623e001"
+    },
+    {
+      "commit": "432fef1b3f28a3d153994da9525434988dec54df",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "85de28e84b9d5ba20549811f8dff6a0ab38f0212"
+      ],
+      "tree": "71184579bf881e353fcb817b00c1b415b42c546c"
+    },
+    {
+      "commit": "04f772a938b43cbb1e591684d88b10fd23437a78",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_closure.py",
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "432fef1b3f28a3d153994da9525434988dec54df"
+      ],
+      "tree": "d193f937810f2aaa4aee31448303b922bba12aef"
+    },
+    {
+      "commit": "d582993add54ae4fee487549d54fcb5e5c2f4ab2",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_closure.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "04f772a938b43cbb1e591684d88b10fd23437a78"
+      ],
+      "tree": "055fcac9f0c12e22b1c0db62e6ee04136a40d407"
+    },
+    {
+      "commit": "2ceacf2121f8cad0bb5cc69d0bb707f9b20439c2",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d582993add54ae4fee487549d54fcb5e5c2f4ab2"
+      ],
+      "tree": "0e661d859080a10abe9799c3a2731a381e4e61e8"
+    },
+    {
+      "commit": "09cbc2c37167155f0bcf80bf165b97772f10ddf2",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "2ceacf2121f8cad0bb5cc69d0bb707f9b20439c2"
+      ],
+      "tree": "96fe844c9d5f53be9ea5eff74ef000f43c092f1e"
+    },
+    {
+      "commit": "37de5a513f744779f3fb4da0a40b7d8d05b5e1af",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "09cbc2c37167155f0bcf80bf165b97772f10ddf2"
+      ],
+      "tree": "e7bcfe6e5826568b3a07b0a31f4856757b81bca8"
+    },
+    {
+      "commit": "7769bbfcfeaf875d54132ecdeb30dceb2436819d",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "37de5a513f744779f3fb4da0a40b7d8d05b5e1af"
+      ],
+      "tree": "a2106fba047a295412a03903ee81e7d8362ea9d8"
+    },
+    {
+      "commit": "59bfd273f2697ba9696c2c52fcdccea3e4a300dc",
+      "governed_changes": [
+        "tests/engineering_os/test_validation_classification.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "7769bbfcfeaf875d54132ecdeb30dceb2436819d"
+      ],
+      "tree": "1a53d1a764852b4b323cfc87495668a543b47536"
+    },
+    {
+      "commit": "fc1e8c0d8cf36f48348ead116ee6c81968f8d722",
+      "governed_changes": [
+        "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "59bfd273f2697ba9696c2c52fcdccea3e4a300dc"
+      ],
+      "tree": "5a335429059c1199293168196b3dbffc080a0d4e"
+    },
+    {
+      "commit": "6bd7050d1d6c3b8ad2dfd68a14789956c5c49a47",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "77af0e93780134349abb15bd8d8b665c6de939a3",
+        "fc1e8c0d8cf36f48348ead116ee6c81968f8d722"
+      ],
+      "tree": "5a335429059c1199293168196b3dbffc080a0d4e"
+    },
+    {
+      "commit": "42a59e5a3d03e5a534034df0c44385927746b831",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "fc1e8c0d8cf36f48348ead116ee6c81968f8d722"
+      ],
+      "tree": "ead50741f498947272681110cda417d80c8b779b"
+    },
+    {
+      "commit": "d7f8bf8241be773f8763128d65b9d2554cb39581",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "42a59e5a3d03e5a534034df0c44385927746b831"
+      ],
+      "tree": "2cb77656fec2cc75f0af3fdeed47502c15acff4b"
+    },
+    {
+      "commit": "c6318b8eeb5a74d8690d130b849c2d4753b83309",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d7f8bf8241be773f8763128d65b9d2554cb39581"
+      ],
+      "tree": "9b63ba81370ac2ed63acc4dc3bfd150d5f2acc7d"
+    },
+    {
+      "commit": "01bfc33c765a81e85a9f9b275a5f4f5254555cd8",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "c6318b8eeb5a74d8690d130b849c2d4753b83309"
+      ],
+      "tree": "666c75a3e79a9d1dc805aef2eaa3957176e4ecb0"
+    },
+    {
+      "commit": "32f30b34fbab40bbfba65b63b65fe7e0be07d148",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "01bfc33c765a81e85a9f9b275a5f4f5254555cd8"
+      ],
+      "tree": "9c7e52da14372365fe32a7d75700be7e84f62534"
+    },
+    {
+      "commit": "d2a7dee717f476f179f108106a9c1731cfe27d6c",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "32f30b34fbab40bbfba65b63b65fe7e0be07d148"
+      ],
+      "tree": "6d1917b5d71ab2d7eae78d7dc78adeff5507ef46"
+    },
+    {
+      "commit": "01b50bbf04a0b8eb78ad0df4ad504e62ee48aa27",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py",
+        "tests/engineering_os/test_activation_ledger.py",
+        "tests/engineering_os/test_commands.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d2a7dee717f476f179f108106a9c1731cfe27d6c"
+      ],
+      "tree": "8c92c1951f8a17f4ca22c4d0d8abf98048b93249"
+    },
+    {
+      "commit": "30127203e24ba613587f287f3527562f10dc003b",
+      "governed_changes": [
+        "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "01b50bbf04a0b8eb78ad0df4ad504e62ee48aa27"
+      ],
+      "tree": "4123c3ac3395b7cf3b030d70e1b3c35c9c62aff0"
+    },
+    {
+      "commit": "146c1046ce27e4a46655835af4af1a8f63d324e9",
+      "governed_changes": [
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "30127203e24ba613587f287f3527562f10dc003b"
+      ],
+      "tree": "b73e76178038662e120f9e235f42b77bc87a0faf"
+    },
+    {
+      "commit": "a2dc88fca5eeb220d52e22c64fca7e57148fe7da",
+      "governed_changes": [
+        "tests/engineering_os/test_activation_ledger.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "146c1046ce27e4a46655835af4af1a8f63d324e9"
+      ],
+      "tree": "0dcdd3802598c7bcfcfabf8a3544eb54c984ac38"
+    },
+    {
+      "commit": "7eaa729c2bba275a2c5dd260be171570715e9e40",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py",
+        "scripts/engineering-os/validate-activation-closure",
+        "tests/engineering_os/test_activation_ledger.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "a2dc88fca5eeb220d52e22c64fca7e57148fe7da"
+      ],
+      "tree": "dc7d08f9054b5bc30bd269e6eff20d4cb383a0a2"
+    },
+    {
+      "commit": "49ca9338dc3c1aee74712c20eb66d955e1464817",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "7eaa729c2bba275a2c5dd260be171570715e9e40"
+      ],
+      "tree": "758ebf4778f427b15514923a447cd6f8f67aee0d"
+    },
+    {
+      "commit": "9e22f4fd683dc8bd3e8f61f79cccb700b20f69c2",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "49ca9338dc3c1aee74712c20eb66d955e1464817"
+      ],
+      "tree": "27dd843df70a2f7a4efe7a11b0bdca1d0a23fb59"
+    },
+    {
+      "commit": "eba7473d86761d2a37c00e09c996b160924c420d",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "scripts/engineering-os/validate-activation-closure"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "9e22f4fd683dc8bd3e8f61f79cccb700b20f69c2"
+      ],
+      "tree": "0cf558922eb3d71a33b35db17b473579e1e24281"
+    },
+    {
+      "commit": "76fd3cb177e0a5ca2ce2ac93474b9d34edf6e75b",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "eba7473d86761d2a37c00e09c996b160924c420d"
+      ],
+      "tree": "de3b1af078562d3fbfafa0ed2d64e5229a608c07"
+    },
+    {
+      "commit": "2f0fb2811ff62eaa117f96922720f429db968e35",
+      "governed_changes": [],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "6bd7050d1d6c3b8ad2dfd68a14789956c5c49a47",
+        "76fd3cb177e0a5ca2ce2ac93474b9d34edf6e75b"
+      ],
+      "tree": "de3b1af078562d3fbfafa0ed2d64e5229a608c07"
+    }
+  ],
+  "invariant_blobs": {
+    "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+    "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+    "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+    "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+    "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+    "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+  },
+  "invariant_paths": [
+    "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json",
+    "engineering_os/canonical.py",
+    "engineering_os/python_imports.py",
+    "engineering_os/test_integrity.py",
+    "engineering_os/test_integrity_cli.py",
+    "scripts/engineering-os/validate-test-integrity"
+  ],
+  "model": "reviewed_compatibility_chain",
+  "pre_baseline_parents": [
+    "77af0e93780134349abb15bd8d8b665c6de939a3"
+  ],
+  "repository": "josephmccann/AIFO-Control-Plane",
+  "schema_version": "1.0.0"
+}

@@ -71,7 +71,27 @@ MISSION_35_SUCCESSOR_PATHS = {
     "tests/engineering_os/test_validation_classification.py",
     "tests/engineering_os/test_workflow_boundaries.py",
 }
-SUCCESSOR_ALLOWED_PATHS = MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS
+# Mission #36 corrects the compatibility-chain merge-parent rule so the chain
+# can validate the real merged topology.  Only the paths its Ready-bound
+# declaration allows may change.
+MISSION_36_SUCCESSOR_PATHS = {
+    ".github/workflows/mission-command.yml",
+    "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
+    "engineering_os/commands.py",
+    "outputs/mission-36-closure-records.json",
+    "outputs/mission-36-compatibility-chain.json",
+    "outputs/mission-36-reconciliation.md",
+    "outputs/mission-36-review-a.md",
+    "outputs/mission-36-validation/exact-head-ci.log",
+    "outputs/mission-36-validation/local-full-suite.log",
+    "outputs/mission-36-validation/validate-all.log",
+    "scripts/engineering-os/validate-activation-closure",
+    "tests/engineering_os/test_activation_ledger.py",
+    "tests/engineering_os/test_workflow_boundaries.py",
+}
+SUCCESSOR_ALLOWED_PATHS = (
+    MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS | MISSION_36_SUCCESSOR_PATHS
+)
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
 REVIEW_PATHS = {
@@ -425,14 +445,21 @@ def verify_materialization_range(final_head, materialization_head):
         raise SystemExit("closure materialization child contains non-evidence changes")
 
 
-SUCCESSOR_RECORDS_PATH = "outputs/mission-35-closure-records.json"
+# Successor records pin exact reviewed content for the range from the closure
+# head.  Successive missions extend that same range, so each contributes its
+# own records file and a later mission supersedes an earlier pin for any path
+# it re-touches.  Order matters: later entries win.
+SUCCESSOR_RECORDS_PATHS = (
+    "outputs/mission-35-closure-records.json",
+    "outputs/mission-36-closure-records.json",
+)
 
 
 def successor_record_paths(changed):
     """Paths whose exact reviewed content the successor records must pin."""
     return sorted(
         path for path in changed
-        if path not in MATERIALIZATION_PATHS and path != SUCCESSOR_RECORDS_PATH
+        if path not in MATERIALIZATION_PATHS and path not in SUCCESSOR_RECORDS_PATHS
     )
 
 
@@ -452,12 +479,20 @@ def verify_successor_records(changed, successor_head):
     tracked = successor_record_paths(changed)
     if not tracked:
         return
-    try:
-        recorded = json.loads(git("show", "%s:%s" % (successor_head, SUCCESSOR_RECORDS_PATH)))
-    except Exception:
+    recorded = {}
+    found = False
+    for records_path in SUCCESSOR_RECORDS_PATHS:
+        try:
+            layer = json.loads(git("show", "%s:%s" % (successor_head, records_path)))
+        except Exception:
+            continue
+        if not isinstance(layer, dict):
+            raise SystemExit("successor records are malformed")
+        # A later mission supersedes an earlier pin for any path it re-touches.
+        recorded.update(layer)
+        found = True
+    if not found:
         raise SystemExit("successor records are missing at the successor head")
-    if not isinstance(recorded, dict):
-        raise SystemExit("successor records are malformed")
     if sorted(recorded) != tracked:
         raise SystemExit("successor records do not pin exactly the changed paths")
     for path in tracked:

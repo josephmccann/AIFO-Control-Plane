@@ -125,6 +125,11 @@ exercise
         self.assertIn('"$ROOT_DIR/scripts/install-dev-tools.sh"', source)
         self.assertIn('PATH="$ROOT_DIR/build/bin:$PATH"', source)
 
+    def test_standard_validation_replays_the_governed_closure(self):
+        source = ENTRYPOINT.read_text(encoding="utf-8")
+        self.assertIn('validate-activation-closure', source)
+        self.assertIn('ACTIVATION_DEPENDENCY_CLOSURE.json', source)
+
 
 if __name__ == "__main__":
     unittest.main()

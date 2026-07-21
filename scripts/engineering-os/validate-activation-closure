@@ -91,6 +91,12 @@ PR_BASE = {
     "sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
     "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b",
 }
+EXPECTED_CHECK_RESULTS = {
+    "Validate Terraform": ("success", True),
+    "GitGuardian Security Checks": ("success", True),
+    "Test Integrity / Authorize exact caller and workflow provenance": ("success", False),
+    "Test Integrity / Test Integrity": ("failure", False),
+}
 
 
 def git(*args):
@@ -156,6 +162,93 @@ def expected_edges(changed):
         for test in sorted(path for path in changed if path.startswith("tests/"))
         for source in sorted(path for path in changed if not path.startswith("tests/"))
     ]
+
+
+def validate_bootstrap_disposition(disposition, final, head):
+    """Validate the closed PR-33 disposition before trusting its evidence references."""
+    if head == LEGACY_CLOSURE_HEAD:
+        raise SystemExit("legacy closure cannot carry PR 33 bootstrap evidence")
+    integrity = disposition.get("test_integrity", {})
+    checks = disposition.get("checks", [])
+    deployment = disposition.get("deployment_audit", {})
+    pull_request_24 = disposition.get("preserved_pull_request", {})
+    actual_check_results = {
+        item.get("name"): (item.get("conclusion"), item.get("required"))
+        for item in checks if isinstance(item, dict)
+    }
+    check_ids = [item.get("check_run_id") for item in checks if isinstance(item, dict)]
+    if (
+        disposition.get("pull_request") != 33
+        or disposition.get("base") != PR_BASE
+        or disposition.get("candidate") != final
+        or disposition.get("prior_interim_closure_sha256")
+        != "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"
+        or disposition.get("required_contexts")
+        != ["Validate Terraform", "GitGuardian Security Checks"]
+        or disposition.get("activation_events") != []
+        or disposition.get("runtime_deployment") is not False
+        or actual_check_results != EXPECTED_CHECK_RESULTS
+        or len(check_ids) != len(EXPECTED_CHECK_RESULTS)
+        or len(set(check_ids)) != len(check_ids)
+        or any(not isinstance(item, int) or item < 1 for item in check_ids)
+        or integrity.get("head") != head
+        or not isinstance(integrity.get("run_id"), int)
+        or integrity.get("run_id", 0) < 1
+        or not isinstance(integrity.get("run_attempt"), int)
+        or integrity.get("run_attempt", 0) < 1
+        or integrity.get("caller_authorized") is not True
+        or integrity.get("allowed") is not False
+        or integrity.get("expected_bootstrap_denial") is not True
+        or integrity.get("suppressed") is not False
+        or integrity.get("overridden") is not False
+        or integrity.get("finding_counts") != {
+            "TEST_FILE_UNPARSABLE": 55,
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10,
+        }
+        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("report_sha256", "")) is None
+        or not isinstance(integrity.get("artifact_id"), int)
+        or integrity.get("artifact_id", 0) < 1
+        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("artifact_digest", "")) is None
+        or deployment != {
+            "deployment_id": 5528959623,
+            "status_id": 15719997167,
+            "state": "inactive",
+            "environment": "production",
+            "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+            "description": "Accidental API audit record; no deployment executed",
+            "runtime_executed": False,
+        }
+        or pull_request_24 != {
+            "number": 24,
+            "state": "open",
+            "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
+            "merged": False,
+        }
+    ):
+        raise SystemExit("bootstrap disposition is incomplete, stale, or contradictory")
+    return integrity
+
+
+def verify_bootstrap_transport(disposition, validation_text):
+    """Bind every disposition identifier to the governed authenticated transport record."""
+    integrity = disposition["test_integrity"]
+    checks = {item["name"]: item for item in disposition["checks"]}
+    required = (
+        "Job ID: %s" % checks["Validate Terraform"]["check_run_id"],
+        "GitGuardian check run ID: %s"
+        % checks["GitGuardian Security Checks"]["check_run_id"],
+        "Test Integrity caller job ID: %s"
+        % checks["Test Integrity / Authorize exact caller and workflow provenance"]["check_run_id"],
+        "Test Integrity run ID: %s" % integrity["run_id"],
+        "Test Integrity run attempt: %s" % integrity["run_attempt"],
+        "Test Integrity analysis job ID: %s"
+        % checks["Test Integrity / Test Integrity"]["check_run_id"],
+        "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+        "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+        "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+    )
+    if any(marker not in validation_text for marker in required):
+        raise SystemExit("bootstrap evidence is not bound to authenticated transport")
 
 
 def generate(base, head, records_path):
@@ -239,63 +332,9 @@ def validate(path, head):
     if disposition is None:
         if head != LEGACY_CLOSURE_HEAD:
             raise SystemExit("bootstrap disposition is required after the legacy closure")
-        disposition = {}
-    integrity = disposition.get("test_integrity", {})
-    checks = disposition.get("checks", [])
-    deployment = disposition.get("deployment_audit", {})
-    pull_request_24 = disposition.get("preserved_pull_request", {})
-    expected_check_results = {
-        "Validate Terraform": ("success", True),
-        "GitGuardian Security Checks": ("success", True),
-        "Test Integrity / Authorize exact caller and workflow provenance": ("success", False),
-        "Test Integrity / Test Integrity": ("failure", False),
-    }
-    actual_check_results = {
-        item.get("name"): (item.get("conclusion"), item.get("required"))
-        for item in checks if isinstance(item, dict)
-    }
-    if "bootstrap_disposition" in closure and (
-        disposition.get("pull_request") != 33
-        or disposition.get("base") != PR_BASE
-        or disposition.get("candidate") != final
-        or disposition.get("prior_interim_closure_sha256")
-        != "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"
-        or disposition.get("required_contexts")
-        != ["Validate Terraform", "GitGuardian Security Checks"]
-        or disposition.get("activation_events") != []
-        or disposition.get("runtime_deployment") is not False
-        or actual_check_results != expected_check_results
-        or integrity.get("head") != head
-        or integrity.get("caller_authorized") is not True
-        or integrity.get("allowed") is not False
-        or integrity.get("expected_bootstrap_denial") is not True
-        or integrity.get("suppressed") is not False
-        or integrity.get("overridden") is not False
-        or integrity.get("finding_counts") != {
-            "TEST_FILE_UNPARSABLE": 55,
-            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS": 10,
-        }
-        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("report_sha256", "")) is None
-        or not isinstance(integrity.get("artifact_id"), int)
-        or integrity.get("artifact_id", 0) < 1
-        or re.fullmatch(r"[0-9a-f]{64}", integrity.get("artifact_digest", "")) is None
-        or deployment != {
-            "deployment_id": 5528959623,
-            "status_id": 15719997167,
-            "state": "inactive",
-            "environment": "production",
-            "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
-            "description": "Accidental API audit record; no deployment executed",
-            "runtime_executed": False,
-        }
-        or pull_request_24 != {
-            "number": 24,
-            "state": "open",
-            "head": "066529950a94a6bb3a5f213af51beceb4fe9790f",
-            "merged": False,
-        }
-    ):
-        raise SystemExit("bootstrap disposition is incomplete, stale, or contradictory")
+        integrity = {}
+    else:
+        integrity = validate_bootstrap_disposition(disposition, final, head)
 
     historical = closure.get("historical", {}).get("mission_31", {})
     historical_identity = {key: value for key, value in historical.items() if key != "evidence"}
@@ -344,6 +383,8 @@ def validate(path, head):
         )
     if any(marker not in validation_text for marker in required_validation):
         raise SystemExit("CI evidence does not prove all required validators at the requested head")
+    if disposition is not None:
+        verify_bootstrap_transport(disposition, validation_text)
 
     reviews = closure.get("reviews", [])
     if len(reviews) != 2 or {item.get("report_path") for item in reviews} != REVIEW_PATHS:
@@ -387,6 +428,13 @@ def validate(path, head):
 
 
 def main(argv):
+    if len(argv) == 6 and argv[1] == "--validate-bootstrap-transport":
+        disposition = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
+        validation_text = Path(argv[3]).read_text(encoding="utf-8")
+        final = {"sha": argv[4], "tree": argv[5]}
+        validate_bootstrap_disposition(disposition, final, argv[4])
+        verify_bootstrap_transport(disposition, validation_text)
+        return 0
     if len(argv) == 5 and argv[1] == "--generate":
         return generate(argv[2], argv[3], Path(argv[4]))
     if len(argv) != 3:

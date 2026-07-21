@@ -117,7 +117,7 @@ class ActivationClosureTests(unittest.TestCase):
             with self.subTest(artifact=artifact):
                 self.assertNotEqual(self.run_validator(artifact).returncode, 0)
 
-    def test_bootstrap_disposition_is_exact_head_bound_and_fail_closed(self):
+    def test_legacy_closure_cannot_accept_attached_bootstrap_evidence(self):
         artifact = self.artifact()
         artifact["bootstrap_disposition"] = self.bootstrap_disposition(artifact)
         disposition = artifact["bootstrap_disposition"]
@@ -137,7 +137,72 @@ class ActivationClosureTests(unittest.TestCase):
         self.assertEqual(disposition["deployment_audit"]["state"], "inactive")
         self.assertEqual(disposition["activation_events"], [])
         result = self.run_validator(artifact)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_bootstrap_transport_evidence_is_exactly_bound(self):
+        final = {"sha": "a" * 40, "tree": "b" * 40}
+        artifact = {"final": final}
+        disposition = self.bootstrap_disposition(artifact)
+        disposition["test_integrity"].update({
+            "head": final["sha"],
+            "run_id": 29801088238,
+            "run_attempt": 1,
+            "report_sha256": "7f403811adbbffa817325b4e74c43d69da344ddab4e3ccfa35230871ed94ce3c",
+            "artifact_id": 8483765340,
+            "artifact_digest": "0653b33641d65dac59ea84748f6c02724c5459d8f0d63d24e337f08be4d01688",
+        })
+        check_ids = (88542158751, 88542153998, 88542156542, 88542167314)
+        for check, check_id in zip(disposition["checks"], check_ids):
+            check["check_run_id"] = check_id
+        evidence = "\n".join((
+            "Job ID: 88542158751",
+            "GitGuardian check run ID: 88542153998",
+            "Test Integrity caller job ID: 88542156542",
+            "Test Integrity run ID: 29801088238",
+            "Test Integrity run attempt: 1",
+            "Test Integrity analysis job ID: 88542167314",
+            "Test Integrity report SHA-256: 7f403811adbbffa817325b4e74c43d69da344ddab4e3ccfa35230871ed94ce3c",
+            "Test Integrity artifact ID: 8483765340",
+            "Test Integrity artifact digest: 0653b33641d65dac59ea84748f6c02724c5459d8f0d63d24e337f08be4d01688",
+        ))
+        def validate(candidate):
+            with tempfile.NamedTemporaryFile("w", suffix=".json") as disposition_file:
+                with tempfile.NamedTemporaryFile("w", suffix=".log") as evidence_file:
+                    json.dump(candidate, disposition_file)
+                    disposition_file.flush()
+                    evidence_file.write(evidence)
+                    evidence_file.flush()
+                    return subprocess.run([
+                        str(SCRIPT), "--validate-bootstrap-transport",
+                        disposition_file.name, evidence_file.name,
+                        final["sha"], final["tree"],
+                    ], cwd=ROOT, text=True, capture_output=True)
+
+        self.assertEqual(validate(disposition).returncode, 0)
+
+        mutations = []
+        for field, value in (
+            ("run_id", 1),
+            ("run_attempt", 2),
+            ("report_sha256", "0" * 64),
+            ("artifact_id", 999999999),
+            ("artifact_digest", "1" * 64),
+        ):
+            candidate = json.loads(json.dumps(disposition))
+            candidate["test_integrity"][field] = value
+            mutations.append(candidate)
+        duplicate = json.loads(json.dumps(disposition))
+        duplicate["checks"][1]["check_run_id"] = duplicate["checks"][0]["check_run_id"]
+        mutations.append(duplicate)
+        mismatched = json.loads(json.dumps(disposition))
+        mismatched["checks"][3]["check_run_id"] += 1
+        mutations.append(mismatched)
+        for candidate in mutations:
+            with self.subTest(candidate=candidate):
+                self.assertNotEqual(validate(candidate).returncode, 0)
+
+    def test_bootstrap_disposition_is_fail_closed(self):
+        artifact = self.artifact()
 
         mutations = []
         for key, value in (("allowed", True),):

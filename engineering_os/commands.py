@@ -267,15 +267,6 @@ def validate_compatibility_chain(
         return False, "COMPATIBILITY_CHAIN_INVALID"
     if len(commits) != checked["commit_count"]:
         return False, "COMPATIBILITY_CHAIN_COUNT_MISMATCH"
-    if endpoints["baseline"]["commit"] == endpoints["active"]["commit"]:
-        # Activating at the reviewed baseline itself needs no successor range,
-        # but it may not smuggle in unexplained commits either.
-        return (True, "COMPATIBILITY_CHAIN_VALID") if not commits else (
-            False, "COMPATIBILITY_CHAIN_RANGE_INVALID")
-    if not commits:
-        # An advanced execution identity with no enumerated range is exactly the
-        # ancestry-only proof this validator exists to reject.
-        return False, "COMPATIBILITY_CHAIN_RANGE_MISSING"
     baseline_commit = endpoints["baseline"]["commit"]
     # Parents outside the enumerated range that the builder has independently
     # verified to be ancestors of the reviewed baseline.  Because the range is
@@ -285,6 +276,10 @@ def validate_compatibility_chain(
     # reviewed baseline artifact -- or undeclared history, which must fail
     # closed.  This validator cannot compute ancestry, so it requires the claim
     # to be declared explicitly and rejects anything undeclared or contradictory.
+    #
+    # This is validated before any early return: a malformed or contradictory
+    # declaration must fail closed even when the range is empty, or a
+    # digest-bound chain could carry unchecked authority.
     pre_baseline = chain.get("pre_baseline_parents")
     if not isinstance(pre_baseline, (list, tuple)):
         return False, "COMPATIBILITY_CHAIN_INVALID"
@@ -293,6 +288,18 @@ def validate_compatibility_chain(
     pre_baseline = set(pre_baseline)
     if baseline_commit in pre_baseline:
         return False, "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"
+    if baseline_commit == endpoints["active"]["commit"]:
+        # Activating at the reviewed baseline itself needs no successor range,
+        # but it may not smuggle in unexplained commits or parents either.
+        if commits:
+            return False, "COMPATIBILITY_CHAIN_RANGE_INVALID"
+        if pre_baseline:
+            return False, "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"
+        return True, "COMPATIBILITY_CHAIN_VALID"
+    if not commits:
+        # An advanced execution identity with no enumerated range is exactly the
+        # ancestry-only proof this validator exists to reject.
+        return False, "COMPATIBILITY_CHAIN_RANGE_MISSING"
     records = {}
     for record in commits:
         if not isinstance(record, Mapping) or set(record) != _CHAIN_COMMIT_REQUIRED:

@@ -354,6 +354,29 @@ class CompatibilityChainTests(ActivationLedgerTests):
         self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
                          "COMPATIBILITY_CHAIN_RANGE_BROKEN")
 
+    def test_zero_range_still_validates_pre_baseline_declarations(self):
+        """The empty-range case must not skip declaration validation.
+
+        Activating at the reviewed baseline returns early, so a malformed or
+        contradictory declaration would otherwise ride through on a
+        digest-bound chain and yield ACTIVATION_AUTHORIZED.
+        """
+        base = {"commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+                "tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"}
+        proof = self.proof(active_commit=base["commit"], active_tree=base["tree"],
+                           commit_count=0)
+        for declared, expected in (
+            (["nope"], "COMPATIBILITY_CHAIN_INVALID"),
+            ([base["commit"]], "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"),
+            (["7" * 40], "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"),
+        ):
+            chain = self.compat_chain(active=dict(base), commits=[],
+                                      pre_baseline_parents=declared)
+            self.assertEqual(self.check(chain, proof)[1], expected)
+        # The genuinely empty case remains valid.
+        chain = self.compat_chain(active=dict(base), commits=[], pre_baseline_parents=[])
+        self.assertEqual(self.check(chain, proof), (True, "COMPATIBILITY_CHAIN_VALID"))
+
     def test_cyclic_chain_is_rejected(self):
         """Commit history is acyclic; a cycle is malformed authority.
 

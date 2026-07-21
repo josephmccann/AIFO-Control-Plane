@@ -237,15 +237,15 @@ class ActivationClosureTests(unittest.TestCase):
             "Run attempt: 1",
             "Terraform: PASS", "Actionlint: PASS", "ShellCheck: PASS",
             "Python: PASS", "Classification: PASS", "Closure: PASS",
-            "Ran 499 tests in 19.963s", "OK", "Validation complete",
+            "Ran 499 tests in 19.963s", "OK", "Conclusion: success", "Validation complete",
         ))
 
-        def validate(candidate):
+        def validate(candidate, evidence_text=evidence):
             with tempfile.NamedTemporaryFile("w", suffix=".json") as record_file:
                 with tempfile.NamedTemporaryFile("w", suffix=".log") as evidence_file:
                     json.dump(candidate, record_file)
                     record_file.flush()
-                    evidence_file.write(evidence)
+                    evidence_file.write(evidence_text)
                     evidence_file.flush()
                     return subprocess.run([
                         str(SCRIPT), "--validate-ci-record", record_file.name,
@@ -261,21 +261,25 @@ class ActivationClosureTests(unittest.TestCase):
         materialization["result"] = "expected_materialization_denial"
         denied_evidence = evidence.replace(
             "Closure: PASS", "Closure: EXPECTED MATERIALIZATION DENIAL",
-        ) + (
+        ).replace("\nConclusion: success", "").replace("\nValidation complete", "") + (
             "\nConclusion: failure"
             "\nExpected terminal: closure materialization must be the direct child of the reviewed head"
         )
-        with tempfile.NamedTemporaryFile("w", suffix=".json") as record_file:
-            with tempfile.NamedTemporaryFile("w", suffix=".log") as evidence_file:
-                json.dump(materialization, record_file)
-                record_file.flush()
-                evidence_file.write(denied_evidence)
-                evidence_file.flush()
-                denied = subprocess.run([
-                    str(SCRIPT), "--validate-ci-record", record_file.name,
-                    evidence_file.name, head,
-                ], cwd=ROOT, text=True, capture_output=True)
+        denied = validate(materialization, denied_evidence)
         self.assertEqual(denied.returncode, 0, denied.stderr)
+        for contradictory in (
+            "Terraform: FAIL",
+            "Python: FAIL",
+            "Closure: PASS",
+            "Conclusion: success",
+            "Validation complete",
+            "Expected terminal: unit tests failed",
+        ):
+            with self.subTest(contradictory=contradictory):
+                self.assertNotEqual(
+                    validate(materialization, denied_evidence + "\n" + contradictory).returncode,
+                    0,
+                )
 
     def test_materialization_requires_one_evidence_only_child(self):
         accepted = subprocess.run([

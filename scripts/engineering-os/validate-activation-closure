@@ -263,48 +263,66 @@ def verify_bootstrap_transport(disposition, validation_text):
 def verify_ci_validation(test, head, validation_text, integrity=None):
     """Require exact evidence lines for the claimed CI validation record."""
     if test.get("result") == "pass":
-        terminal = ("Closure: PASS", "Validation complete")
+        conclusion = "Conclusion: success"
+        closure_result = "Closure: PASS"
+        expected_terminal = None
     elif test.get("result") == "expected_materialization_denial":
-        terminal = (
-            "Closure: EXPECTED MATERIALIZATION DENIAL",
-            "Conclusion: failure",
-            "Expected terminal: closure materialization must be the direct child of the reviewed head",
+        conclusion = "Conclusion: failure"
+        closure_result = "Closure: EXPECTED MATERIALIZATION DENIAL"
+        expected_terminal = (
+            "Expected terminal: closure materialization must be the direct child of the reviewed head"
         )
     else:
         raise SystemExit("CI validation result is unknown")
-    required = (
-        "HEAD: %s" % head,
-        "Command: validate-all",
-        "Workflow: .github/workflows/terraform-validate.yml",
-        "Run ID: %s" % test["run_id"],
-        "Run attempt: %s" % test["run_attempt"],
-        "Terraform: PASS",
-        "Actionlint: PASS",
-        "ShellCheck: PASS",
-        "Python: PASS",
-        "Classification: PASS",
-        "OK",
-    ) + terminal
+    expected_fields = {
+        "HEAD:": "HEAD: %s" % head,
+        "Command:": "Command: validate-all",
+        "Workflow:": "Workflow: .github/workflows/terraform-validate.yml",
+        "Run ID:": "Run ID: %s" % test["run_id"],
+        "Run attempt:": "Run attempt: %s" % test["run_attempt"],
+        "Terraform:": "Terraform: PASS",
+        "Actionlint:": "Actionlint: PASS",
+        "ShellCheck:": "ShellCheck: PASS",
+        "Python:": "Python: PASS",
+        "Classification:": "Classification: PASS",
+        "Closure:": closure_result,
+        "Conclusion:": conclusion,
+    }
     if integrity is not None:
-        required += (
-            "PR: 33",
-            "Test Integrity caller authorization: PASS",
-            "Test Integrity allowed: false",
-            "TEST_FILE_UNPARSABLE: 55",
-            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10",
-            "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
-            "Test Integrity artifact ID: %s" % integrity["artifact_id"],
-            "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
-            "GitGuardian Security Checks: PASS",
-            "Deployment 5528959623: inactive",
-            "Activation events: none",
-            "Runtime deployment: none",
-            "PR 24: open, unmerged",
-        )
-    evidence_lines = set(validation_text.splitlines())
-    if any(marker not in evidence_lines for marker in required):
-        raise SystemExit("CI evidence does not prove all required validators at the requested head")
-    if not any(re.fullmatch(r"Ran [1-9][0-9]* tests in .+", line) for line in evidence_lines):
+        expected_fields.update({
+            "PR:": "PR: 33",
+            "Test Integrity caller authorization:": "Test Integrity caller authorization: PASS",
+            "Test Integrity allowed:": "Test Integrity allowed: false",
+            "Test Integrity expected bootstrap denial:": "Test Integrity expected bootstrap denial: true",
+            "Test Integrity suppressed:": "Test Integrity suppressed: false",
+            "Test Integrity overridden:": "Test Integrity overridden: false",
+            "TEST_FILE_UNPARSABLE:": "TEST_FILE_UNPARSABLE: 55",
+            "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS:": "VALIDATION_WORKFLOW_CHANGE_AMBIGUOUS: 10",
+            "Test Integrity report SHA-256:":
+                "Test Integrity report SHA-256: %s" % integrity["report_sha256"],
+            "Test Integrity artifact ID:": "Test Integrity artifact ID: %s" % integrity["artifact_id"],
+            "Test Integrity artifact digest:":
+                "Test Integrity artifact digest: %s" % integrity["artifact_digest"],
+            "GitGuardian Security Checks:": "GitGuardian Security Checks: PASS",
+            "Deployment 5528959623:": "Deployment 5528959623: inactive",
+            "Activation events:": "Activation events: none",
+            "Runtime deployment:": "Runtime deployment: none",
+            "PR 24:": "PR 24: open, unmerged",
+        })
+    evidence_lines = validation_text.splitlines()
+    for prefix, expected in expected_fields.items():
+        if [line for line in evidence_lines if line.startswith(prefix)] != [expected]:
+            raise SystemExit("CI evidence contains a missing, duplicate, or contradictory status")
+    terminal_lines = [line for line in evidence_lines if line.startswith("Expected terminal:")]
+    if terminal_lines != ([] if expected_terminal is None else [expected_terminal]):
+        raise SystemExit("CI evidence terminal status is missing, duplicated, or contradictory")
+    complete_lines = [line for line in evidence_lines if line == "Validation complete"]
+    if complete_lines != (["Validation complete"] if expected_terminal is None else []):
+        raise SystemExit("CI evidence completion status contradicts its terminal result")
+    outcomes = [line for line in evidence_lines if line == "OK" or line == "FAILED" or line.startswith("FAILED (")]
+    if outcomes != ["OK"]:
+        raise SystemExit("CI evidence deterministic test outcome is contradictory")
+    if len([line for line in evidence_lines if re.fullmatch(r"Ran [1-9][0-9]* tests in .+", line)]) != 1:
         raise SystemExit("CI evidence does not contain an exact deterministic test result")
 
 

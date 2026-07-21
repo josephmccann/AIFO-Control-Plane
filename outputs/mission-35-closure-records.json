@@ -1,0 +1,12 @@
+{
+  ".github/workflows/mission-command.yml": "61ab72889aeefe3dbb7aa6719343bc2f78c88ba3",
+  "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md": "5abb6140a3b29f8a20fbf269264812172d9451f8",
+  "engineering_os/commands.py": "2cf233ef511ea11224dc27e930cc95692573aed3",
+  "outputs/mission-35-compatibility-chain.json": "b3f2e0d441a88ea712502e5c0f2a6e200e323181",
+  "schemas/engineering-os/audit-event.schema.json": "3fba3017cdd12c64cbf47ad8b44a4664eaaca9d8",
+  "scripts/engineering-os/validate-activation-closure": "40ae70ae1f5c7777dabfff594121ba508b68030e",
+  "scripts/validate.sh": "c87c20395a2314829cf69805287c3fd4cd0b974c",
+  "tests/engineering_os/test_activation_ledger.py": "ef778afa2e1186a82de2fb1492afbf6731fafa2b",
+  "tests/engineering_os/test_commands.py": "42ec6629be34e9113939c46ac6abf79148e991ae",
+  "tests/engineering_os/test_workflow_boundaries.py": "a6d58ded911af258c1bc462242d959353ecab824"
+}

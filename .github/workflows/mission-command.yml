@@ -107,20 +107,26 @@ jobs:
             --events-output "$RUNNER_TEMP/events.json"
           python3 - <<'PY'
           import json, os, subprocess
-          from engineering_os.commands import validate_activation_ledger
+          from engineering_os.commands import _is_superseded_authorization, validate_activation_ledger
           events = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "events.json"), encoding="utf-8")) if os.path.exists(os.path.join(os.environ["RUNNER_TEMP"], "events.json")) else []
           activations = [event for event in events if event.get("type") == "test_integrity.baseline.authorized"]
+          usable = [event for event in activations if not _is_superseded_authorization(event)]
           if activations:
               current = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
               tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
-              ok, code, detail = validate_activation_ledger(events, activations[0]["details"], repository=os.environ["GITHUB_REPOSITORY"], current_commit=current, current_tree=tree)
-              # A superseded pre-identity-separation authorization is terminal:
-              # it can never be attempted or consumed.  It must not brick every
-              # other mission command on the issue, so it is reported, not fatal.
-              if not ok and code == "ACTIVATION_AUTHORIZATION_SUPERSEDED":
+              if usable:
+                  # A replacement exists, so the activation history must fully
+                  # validate.  Selecting activations[0] here would validate the
+                  # legacy event instead, downgrade the result to a warning, and
+                  # let a malformed or replayed replacement through unchecked.
+                  ok, code, detail = validate_activation_ledger(events, usable[0]["details"], repository=os.environ["GITHUB_REPOSITORY"], current_commit=current, current_tree=tree)
+                  if not ok:
+                      raise SystemExit(code)
+              else:
+                  # Only superseded authorizations remain.  That is terminal for
+                  # activation but must not brick every other mission command on
+                  # the issue, so it is reported rather than fatal.
                   print("::warning::activation authorization superseded; reauthorization required")
-              elif not ok:
-                  raise SystemExit(code)
           PY
           activation_args=()
           activation_source_args=()

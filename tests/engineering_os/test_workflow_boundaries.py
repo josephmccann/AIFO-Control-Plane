@@ -1019,7 +1019,19 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         """
         workflow = self.read("mission-command.yml")
         self.assertEqual(workflow.count("_is_superseded_authorization(item)"), 1)
-        self.assertEqual(workflow.count("_is_superseded_authorization(event)"), 1)
+        self.assertEqual(workflow.count("_is_superseded_authorization(event)"), 2)
+
+    def test_preflight_validates_the_replacement_not_the_legacy_authorization(self):
+        """A superseded entry must not downgrade validation of a replacement.
+
+        Validating activations[0] when the legacy event sorts first would turn
+        a malformed or replayed replacement into a warning instead of a
+        fail-closed rejection.
+        """
+        workflow = self.read("mission-command.yml")
+        self.assertIn("usable = [event for event in activations", workflow)
+        self.assertIn("validate_activation_ledger(events, usable[0][\"details\"]", workflow)
+        self.assertNotIn("validate_activation_ledger(events, activations[0][\"details\"]", workflow)
 
     def test_activation_checkout_fetches_full_history(self):
         """The compatibility-chain range walk needs more than a shallow clone."""

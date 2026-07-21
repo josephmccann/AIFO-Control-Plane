@@ -379,7 +379,7 @@ def verify_successor_head(final_head, successor_head):
         raise SystemExit("closure successor is not descended from the reviewed head")
     # Re-validate the closure's own content and hashes at the reviewed head;
     # successor implementation commits may carry refreshed historical evidence.
-    validate(CLOSURE_PATH, final_head)
+    validate(Path(CLOSURE_PATH), final_head)
 
 
 def exact_status_lines(text, expected, reconciliation=False):

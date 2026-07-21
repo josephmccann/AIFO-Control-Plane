@@ -1,0 +1,218 @@
+{
+  "base": {
+    "sha": "283f37b97a9df24ca056c5115197464043312185",
+    "tree": "a5eeb371beb8b83d693339721e5bbc15ceca272d"
+  },
+  "classification": {
+    "conflicting_signals": "fail",
+    "discovery_error": "fail",
+    "discovery_roots": [
+      "scripts",
+      "tests"
+    ],
+    "extensionless_python": [
+      "scripts/engineering-os/validate-activation-closure"
+    ],
+    "python_extensions": [
+      ".py"
+    ],
+    "python_interpreters": [
+      "python",
+      "python3",
+      "python3.x"
+    ],
+    "shell_extensions": [
+      ".sh"
+    ],
+    "shell_interpreters": [
+      "bash",
+      "dash",
+      "ksh",
+      "sh"
+    ],
+    "symlink_path": "fail",
+    "unknown_executable": "fail"
+  },
+  "edges": [
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "schemas/engineering-os/activation-closure.schema.json"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "scripts/engineering-os/validate-activation-closure"
+    },
+    {
+      "from": "tests/engineering_os/test_activation_closure.py",
+      "kind": "tests",
+      "to": "scripts/validate.sh"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "schemas/engineering-os/activation-closure.schema.json"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "scripts/engineering-os/validate-activation-closure"
+    },
+    {
+      "from": "tests/engineering_os/test_validation_classification.py",
+      "kind": "tests",
+      "to": "scripts/validate.sh"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "outputs/mission-31-validation/ci-29772912364.log",
+      "sha256": "141909357e141c380f2d3a69f76f055a69248dffc192235af4bff6e686c16384"
+    },
+    {
+      "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+      "sha256": "6ddfcfdfc5cbd722008ea7bf3cdc64233a81a3f13f115a487c4bdcc1df7bfcb6"
+    },
+    {
+      "path": "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+      "sha256": "c25a42750cad2367e3ebfbcbb3fd4ec49f5695673e0d6be224ba4345b8cced99"
+    }
+  ],
+  "files": [
+    {
+      "path": "schemas/engineering-os/activation-closure.schema.json",
+      "reason": "Mission 32 implementation",
+      "sha256": "c15b28073abbcf62314149ded48596cf6b5b3d77843c614ee673a84783e6f345"
+    },
+    {
+      "path": "scripts/engineering-os/validate-activation-closure",
+      "reason": "Mission 32 implementation",
+      "sha256": "ca8c8319c559b86c44b3b5f3efdb304e5b1e3fce33fc503a3236b8ff7baefae6"
+    },
+    {
+      "path": "scripts/validate.sh",
+      "reason": "Mission 32 implementation",
+      "sha256": "9a4942e69a6ec0482fc947c9e35f32c1467fe9520571f1ef7cfb5f1cec4b77d0"
+    },
+    {
+      "path": "tests/engineering_os/test_activation_closure.py",
+      "reason": "Mission 32 implementation",
+      "sha256": "ccde92709ebd230ec3cd336aec01a26940617b9b2d627220d9af02e743f58e14"
+    },
+    {
+      "path": "tests/engineering_os/test_validation_classification.py",
+      "reason": "Mission 32 implementation",
+      "sha256": "4fa51ab26cf7682a3352384e5606878beced3a63934fd4d6e03b8c0c22e98abc"
+    }
+  ],
+  "final": {
+    "sha": "dc8ef949c8da6fd343628e92cc377003071530c6",
+    "tree": "e5e99a3cfeeb0dbeaf67f97f5edc6131e01f1a0e"
+  },
+  "historical": {
+    "mission_31": {
+      "candidate": {
+        "sha": "7fd26fecc00f6d0c6ce4a7535a66b01aace064a7",
+        "tree": "aae7823d40235779f914a5486aa90ea91b106c1d"
+      },
+      "evidence": [
+        {
+          "path": "outputs/mission-31-validation/ci-29772912364.log",
+          "sha256": "141909357e141c380f2d3a69f76f055a69248dffc192235af4bff6e686c16384"
+        },
+        {
+          "path": "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+          "sha256": "6ddfcfdfc5cbd722008ea7bf3cdc64233a81a3f13f115a487c4bdcc1df7bfcb6"
+        },
+        {
+          "path": "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+          "sha256": "c25a42750cad2367e3ebfbcbb3fd4ec49f5695673e0d6be224ba4345b8cced99"
+        }
+      ],
+      "issue": 31,
+      "ready_declaration_sha256": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
+      "ready_event_hash": "7c796c64513b21732975999db7bbca695d3209207c5f26bcbdd7b313c489bb47",
+      "superseded_closure_sha256": "7c51214965441ef93008fdff629c0637e3e208de626c1e933920cb5308e70ebb"
+    }
+  },
+  "mission": {
+    "allowed_paths": [
+      "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json",
+      "outputs/mission-31-review/closure-records-d68c5da.json",
+      "outputs/mission-31-review/mission-32-review-a-final-r2.md",
+      "outputs/mission-31-review/mission-32-review-b-final-r2.md",
+      "outputs/mission-31-validation/ci-29772912364.log",
+      "outputs/mission-32-closure-records-ready.json",
+      "outputs/mission-32-reconciliation-ready.md",
+      "outputs/mission-32-reconciliation.md",
+      "outputs/mission-32-review-a-ready.md",
+      "outputs/mission-32-review-b-ready.md",
+      "outputs/mission-32-validation/exact-head-ci-ready.log",
+      "schemas/engineering-os/activation-closure.schema.json",
+      "scripts/engineering-os/validate-activation-closure",
+      "scripts/validate.sh",
+      "tests/engineering_os/test_activation_closure.py",
+      "tests/engineering_os/test_validation_classification.py"
+    ],
+    "declaration_path": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32",
+    "declaration_sha256": "72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9",
+    "issue": 32,
+    "mission_id": "aifo-control-plane-validation-classification-successor-ready-exception-2026-07-20",
+    "ready_declaration_sha256": "72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9",
+    "ready_event": {
+      "actor": "josephmccann",
+      "event_hash": "f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d",
+      "occurred_at": "2026-07-20T20:25:03Z",
+      "sequence": 1,
+      "source_url": "https://github.com/josephmccann/AIFO-Control-Plane/issues/32#issuecomment-5026935272"
+    },
+    "repository": "josephmccann/AIFO-Control-Plane"
+  },
+  "pins": [],
+  "reconciliation": {
+    "critical": 0,
+    "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+    "important": 0,
+    "path": "outputs/mission-32-reconciliation-ready.md",
+    "result": "pass",
+    "sha256": "adb96739ab58f38e9f12d2da4a91fbb6dc4e862b817a9b803f16a8e7fffdd941"
+  },
+  "records": {
+    "path": "outputs/mission-32-closure-records-ready.json",
+    "sha256": "94e1f5966eb2222a066dcc66b278da9912b8481813d4fad124c54ad31fd80e3e"
+  },
+  "reviews": [
+    {
+      "checkpoint": "9902f606ea3a10fc2ab079f4d0a2a62e23ee436d404fa52e21d910c8d8d6babd",
+      "critical": 0,
+      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "important": 0,
+      "report_path": "outputs/mission-32-review-a-ready.md",
+      "report_sha256": "b7eb69ab6dc0d211a85b07d4ffdbb0f7d95b91a1c637271c232bba6981568960",
+      "reviewer": "mission-32-reviewer-a-ready"
+    },
+    {
+      "checkpoint": "9f2b8f05d429a4b5e47707421741f6e7963e9097f32a38c4252bf85531e4a504",
+      "critical": 0,
+      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "important": 0,
+      "report_path": "outputs/mission-32-review-b-ready.md",
+      "report_sha256": "77070d04760ff1e8bb46acf9e838a0d2fcc396d59d25d694d58f24591e1f88c8",
+      "reviewer": "mission-32-reviewer-b-ready"
+    }
+  ],
+  "schema_version": "1.0.0",
+  "tests": [
+    {
+      "command": "validate-all",
+      "evidence_path": "outputs/mission-32-validation/exact-head-ci-ready.log",
+      "evidence_sha256": "61f59e2323f3a39b1dc3db35f0e9eb8b43849ac0384ba68c287c3d12421c54f6",
+      "head": "dc8ef949c8da6fd343628e92cc377003071530c6",
+      "result": "pass",
+      "run_attempt": 1,
+      "run_id": 29779004655,
+      "workflow_path": ".github/workflows/terraform-validate.yml"
+    }
+  ]
+}

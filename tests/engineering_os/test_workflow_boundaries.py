@@ -1010,6 +1010,23 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         workflow = self.read("mission-command.yml")
         self.assertIn("ACTIVATION_AUTHORIZATION_SUPERSEDED", workflow)
 
+    def test_superseded_authorizations_are_filtered_on_both_sides(self):
+        """Prepare and append must select the same authorization.
+
+        If append still picked the first authorized event it would select the
+        legacy one, fail closed as superseded, and never post the replacement
+        that prepare had already allowed.
+        """
+        workflow = self.read("mission-command.yml")
+        self.assertEqual(workflow.count("_is_superseded_authorization(item)"), 1)
+        self.assertEqual(workflow.count("_is_superseded_authorization(event)"), 1)
+
+    def test_activation_checkout_fetches_full_history(self):
+        """The compatibility-chain range walk needs more than a shallow clone."""
+        workflow = self.read("mission-command.yml")
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertEqual(workflow.count("fetch-depth: 0"), 2)
+
     def test_activation_lifecycle_revalidates_current_commit_and_tree(self):
         workflow = self.read("mission-command.yml")
         self.assertIn("current_commit=provenance[\"head_sha\"]", workflow)

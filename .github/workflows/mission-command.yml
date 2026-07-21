@@ -27,6 +27,12 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+          # The Model B compatibility chain walks the full range from the
+          # reviewed baseline commit to the active execution head.  A default
+          # shallow checkout fetches one commit, so the range walk and the
+          # per-commit invariant lookups would fail before any authorization
+          # could be built.
+          fetch-depth: 0
       - name: Recognize one exact command
         id: exact
         continue-on-error: true
@@ -292,6 +298,12 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+          # The Model B compatibility chain walks the full range from the
+          # reviewed baseline commit to the active execution head.  A default
+          # shallow checkout fetches one commit, so the range walk and the
+          # per-commit invariant lookups would fail before any authorization
+          # could be built.
+          fetch-depth: 0
       - name: Re-fetch and re-authenticate the complete history before append
         env:
           ENCODED_BODY: ${{ needs.prepare.outputs.encoded_body }}
@@ -354,7 +366,14 @@ jobs:
                       or provenance.get("run_id") != int(os.environ["GITHUB_RUN_ID"])
                       or provenance.get("run_attempt") != int(os.environ["GITHUB_RUN_ATTEMPT"])):
                   raise SystemExit("activation checkout/run provenance changed before append")
-              activation = next((item for item in decision.events if item.get("type") == "test_integrity.baseline.authorized"), None)
+              from engineering_os.commands import _is_superseded_authorization
+              # Filter the same way prepare does.  Selecting the legacy event
+              # here would return ACTIVATION_AUTHORIZATION_SUPERSEDED and exit
+              # before the replacement authorization could be appended, even
+              # though prepare correctly allowed it.
+              activation = next((item for item in decision.events
+                                 if item.get("type") == "test_integrity.baseline.authorized"
+                                 and not _is_superseded_authorization(item)), None)
               if event["type"] != "test_integrity.baseline.authorized" and activation is None:
                   raise SystemExit("activation authorization missing at append boundary")
               if activation:

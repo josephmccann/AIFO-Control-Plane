@@ -336,14 +336,23 @@ def verify_materialization_range(final_head, materialization_head):
     if (git("rev-parse", final_head) != final_head
             or git("rev-parse", materialization_head) != materialization_head):
         raise SystemExit("closure materialization revisions must be full commit SHAs")
-    try:
-        parent = git("rev-parse", "%s^" % materialization_head)
-    except subprocess.CalledProcessError:
-        raise SystemExit("closure materialization must have exactly one parent")
-    if parent != final_head:
+    topology = git("rev-list", "--parents", "-n", "1", materialization_head).split()
+    if len(topology) == 2:
+        evidence_child = materialization_head
+    elif len(topology) == 3:
+        if topology[1] != PR_BASE["sha"]:
+            raise SystemExit("closure merge candidate has the wrong protected-base parent")
+        evidence_child = topology[2]
+        if git("rev-parse", "%s^{tree}" % materialization_head) != git(
+                "rev-parse", "%s^{tree}" % evidence_child):
+            raise SystemExit("closure merge candidate tree differs from the evidence child")
+    else:
+        raise SystemExit("closure materialization has an unsupported parent topology")
+    evidence_topology = git("rev-list", "--parents", "-n", "1", evidence_child).split()
+    if len(evidence_topology) != 2 or evidence_topology[1] != final_head:
         raise SystemExit("closure materialization must be the direct child of the reviewed head")
     changed = set(git(
-        "diff-tree", "--no-commit-id", "--name-only", "-r", materialization_head,
+        "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_child,
     ).splitlines())
     if not changed or not changed <= MATERIALIZATION_PATHS:
         raise SystemExit("closure materialization child contains non-evidence changes")

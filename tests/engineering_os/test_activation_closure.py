@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -318,6 +320,33 @@ class ActivationClosureTests(unittest.TestCase):
             "a60088c1114bcf96cf400ffbbe14c81fcf93a19b",
         ], cwd=ROOT, text=True, capture_output=True)
         self.assertNotEqual(code_child.returncode, 0)
+
+        with tempfile.TemporaryDirectory() as directory:
+            clone = Path(directory) / "clone"
+            subprocess.run(["git", "clone", "--quiet", "--no-local", str(ROOT), str(clone)], check=True)
+            shutil.copy2(
+                SCRIPT,
+                clone / "scripts/engineering-os/validate-activation-closure",
+            )
+            tree = subprocess.check_output(
+                ["git", "rev-parse", "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a^{tree}"],
+                cwd=clone, text=True,
+            ).strip()
+            merge = subprocess.run([
+                "git", "commit-tree", tree,
+                "-p", "77af0e93780134349abb15bd8d8b665c6de939a3",
+                "-p", "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a",
+            ], cwd=clone, text=True, input="synthetic PR merge\n", capture_output=True,
+               env={**os.environ,
+                    "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@example.com",
+                    "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.com"})
+            self.assertEqual(merge.returncode, 0, merge.stderr)
+            merged = subprocess.run([
+                str(clone / "scripts/engineering-os/validate-activation-closure"),
+                "--validate-materialization-range",
+                "dc8ef949c8da6fd343628e92cc377003071530c6", merge.stdout.strip(),
+            ], cwd=clone, text=True, capture_output=True)
+            self.assertEqual(merged.returncode, 0, merged.stderr)
 
     def test_review_and_reconciliation_status_lines_are_closed(self):
         review = "\n".join((

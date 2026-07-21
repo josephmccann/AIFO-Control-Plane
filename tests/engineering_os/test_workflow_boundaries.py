@@ -1033,6 +1033,20 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("validate_activation_ledger(events, usable[0][\"details\"]", workflow)
         self.assertNotIn("validate_activation_ledger(events, activations[0][\"details\"]", workflow)
 
+    def test_chain_builder_verifies_pre_baseline_ancestry_against_git(self):
+        """The ancestry claim must be proven where the evidence exists.
+
+        The pure validator cannot compute ancestry, so a parent outside the
+        enumerated range is accepted only if the builder has verified against
+        Git that it predates the reviewed baseline.  Anything else is
+        undeclared history and must fail closed before an event is built.
+        """
+        workflow = self.read("mission-command.yml")
+        self.assertIn("merge-base", workflow)
+        self.assertIn("--is-ancestor", workflow)
+        self.assertIn("ACTIVATION_COMPATIBILITY_PARENT_UNDECLARED", workflow)
+        self.assertIn('"pre_baseline_parents": sorted(pre_baseline)', workflow)
+
     def test_activation_checkout_fetches_full_history(self):
         """The compatibility-chain range walk needs more than a shallow clone."""
         workflow = self.read("mission-command.yml")

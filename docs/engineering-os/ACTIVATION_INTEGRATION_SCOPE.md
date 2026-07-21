@@ -82,3 +82,31 @@ An authorization issued before this separation existed is reported as
 visible, and unconsumed, but can never be attempted or consumed, because it
 pairs an opaque historical artifact digest with whatever the default branch has
 since become.
+
+### Merge parents and pre-baseline ancestry
+
+The enumerated range is `rev-list baseline..active`. Every commit reachable from
+the active execution commit and not reachable from the reviewed baseline is
+therefore enumerated, by definition. A merge parent is consequently either
+inside that range or an ancestor of the baseline — there is no third case.
+
+Commits reachable from an ancestor of the baseline are already subsumed by the
+reviewed baseline artifact, which captured the governed inventory at the
+baseline commit. Accepting such a parent is a correctness requirement, not a
+relaxation: the real default-branch topology contains one, because the reviewed
+baseline was produced on a side branch while the mainline continued
+independently.
+
+The validator has no repository access and cannot compute ancestry, so the
+chain builder verifies it against Git and declares the result in
+`pre_baseline_parents`. A parent that is neither enumerated, nor the baseline,
+nor a declared pre-baseline ancestor fails closed as
+`COMPATIBILITY_CHAIN_PARENT_UNDECLARED`, and the builder itself fails closed
+with `ACTIVATION_COMPATIBILITY_PARENT_UNDECLARED` before any event is
+constructed. A commit that is both enumerated and declared pre-baseline, or a
+declaration naming the baseline itself, is contradictory and is rejected.
+
+The range is validated as a DAG reachable from the active execution commit
+rather than as a linear predecessor walk. A linear walk cannot express a real
+merge topology, and it could not detect an enumerated commit that sits outside
+the active commit's history; such an orphan is now rejected.

@@ -73,6 +73,7 @@ class ActivationLedgerTests(unittest.TestCase):
             "active": {"commit": "a" * 40, "tree": "b" * 40},
             "invariant_paths": list(_INVARIANT_BASELINE_PATHS),
             "invariant_blobs": blobs,
+            "pre_baseline_parents": [],
             "commits": [{
                 "commit": "a" * 40, "tree": "b" * 40,
                 "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
@@ -286,7 +287,7 @@ class CompatibilityChainTests(ActivationLedgerTests):
             {"commit": "a" * 40, "tree": "b" * 40, "parents": ["9" * 40],
              "invariant_blobs": self.invariant_blobs(), "governed_changes": []},
         ])
-        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_RANGE_BROKEN")
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_PARENT_UNDECLARED")
 
     def test_merge_importing_undeclared_history_is_rejected(self):
         chain = self.compat_chain(commits=[
@@ -294,7 +295,123 @@ class CompatibilityChainTests(ActivationLedgerTests):
              "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", "7" * 40],
              "invariant_blobs": self.invariant_blobs(), "governed_changes": []},
         ])
-        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_MERGE_UNDECLARED")
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_PARENT_UNDECLARED")
+
+    def test_verified_pre_baseline_parent_is_accepted_when_declared(self):
+        """A merge parent that predates the reviewed baseline is safe.
+
+        Everything reachable from it is already subsumed by the reviewed
+        baseline artifact, which captured the governed inventory at the
+        baseline commit.  This is the real merged-topology case that the
+        original linear walk rejected.
+        """
+        chain = self.compat_chain(
+            pre_baseline_parents=["7" * 40],
+            commits=[{"commit": "a" * 40, "tree": "b" * 40,
+                      "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", "7" * 40],
+                      "invariant_blobs": self.invariant_blobs(), "governed_changes": []}],
+        )
+        self.assertEqual(self.check(chain), (True, "COMPATIBILITY_CHAIN_VALID"))
+
+    def test_undeclared_merge_parent_is_still_rejected_when_others_are_declared(self):
+        chain = self.compat_chain(
+            pre_baseline_parents=["7" * 40],
+            commits=[{"commit": "a" * 40, "tree": "b" * 40,
+                      "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", "6" * 40],
+                      "invariant_blobs": self.invariant_blobs(), "governed_changes": []}],
+        )
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_PARENT_UNDECLARED")
+
+    def test_commit_cannot_be_both_enumerated_and_pre_baseline(self):
+        chain = self.compat_chain(pre_baseline_parents=["a" * 40])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY")
+
+    def test_baseline_cannot_be_declared_pre_baseline(self):
+        chain = self.compat_chain(
+            pre_baseline_parents=["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY")
+
+    def test_malformed_pre_baseline_declaration_is_rejected(self):
+        self.assertEqual(self.check(self.compat_chain(pre_baseline_parents=["nope"]))[1],
+                         "COMPATIBILITY_CHAIN_INVALID")
+        self.assertEqual(self.check(self.compat_chain(pre_baseline_parents="7" * 40))[1],
+                         "COMPATIBILITY_CHAIN_INVALID")
+
+    def test_orphan_record_outside_active_history_is_rejected(self):
+        """An enumerated commit unreachable from the active commit is an orphan.
+
+        The linear walk could not detect this; the DAG closure must.
+        """
+        blobs = self.invariant_blobs()
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40,
+             "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+            {"commit": "d" * 40, "tree": "e" * 40,
+             "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
+                         "COMPATIBILITY_CHAIN_RANGE_BROKEN")
+
+    def test_zero_range_still_validates_pre_baseline_declarations(self):
+        """The empty-range case must not skip declaration validation.
+
+        Activating at the reviewed baseline returns early, so a malformed or
+        contradictory declaration would otherwise ride through on a
+        digest-bound chain and yield ACTIVATION_AUTHORIZED.
+        """
+        base = {"commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+                "tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"}
+        proof = self.proof(active_commit=base["commit"], active_tree=base["tree"],
+                           commit_count=0)
+        for declared, expected in (
+            (["nope"], "COMPATIBILITY_CHAIN_INVALID"),
+            ([base["commit"]], "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"),
+            (["7" * 40], "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"),
+        ):
+            chain = self.compat_chain(active=dict(base), commits=[],
+                                      pre_baseline_parents=declared)
+            self.assertEqual(self.check(chain, proof)[1], expected)
+        # The genuinely empty case remains valid.
+        chain = self.compat_chain(active=dict(base), commits=[], pre_baseline_parents=[])
+        self.assertEqual(self.check(chain, proof), (True, "COMPATIBILITY_CHAIN_VALID"))
+
+    def test_cyclic_chain_is_rejected(self):
+        """Commit history is acyclic; a cycle is malformed authority.
+
+        Two records naming each other are mutually reachable, so reachability
+        alone accepts a history no Git repository could produce.
+        """
+        blobs = self.invariant_blobs()
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40, "parents": ["d" * 40],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+            {"commit": "d" * 40, "tree": "e" * 40,
+             "parents": ["a" * 40, "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
+                         "COMPATIBILITY_CHAIN_CYCLIC")
+
+    def test_self_referencing_commit_is_rejected(self):
+        blobs = self.invariant_blobs()
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40,
+             "parents": ["a" * 40, "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_CYCLIC")
+
+    def test_range_detached_from_the_baseline_is_rejected(self):
+        """The enumerated range must actually attach to the reviewed baseline."""
+        blobs = self.invariant_blobs()
+        chain = self.compat_chain(
+            pre_baseline_parents=["7" * 40],
+            commits=[{"commit": "a" * 40, "tree": "b" * 40, "parents": ["7" * 40],
+                      "invariant_blobs": dict(blobs), "governed_changes": []}],
+        )
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_RANGE_BROKEN")
 
     def test_governed_change_touching_an_invariant_path_is_rejected(self):
         chain = self.compat_chain(commits=[

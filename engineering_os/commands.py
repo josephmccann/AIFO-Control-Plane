@@ -127,7 +127,7 @@ _COMPATIBILITY_PROOF_REQUIRED = frozenset({
 })
 _CHAIN_REQUIRED = frozenset({
     "schema_version", "model", "repository", "baseline", "active",
-    "invariant_paths", "invariant_blobs", "commits",
+    "invariant_paths", "invariant_blobs", "commits", "pre_baseline_parents",
 })
 _CHAIN_ENDPOINT_REQUIRED = frozenset({"commit", "tree"})
 _CHAIN_COMMIT_REQUIRED = frozenset({"commit", "tree", "parents", "invariant_blobs", "governed_changes"})
@@ -267,36 +267,52 @@ def validate_compatibility_chain(
         return False, "COMPATIBILITY_CHAIN_INVALID"
     if len(commits) != checked["commit_count"]:
         return False, "COMPATIBILITY_CHAIN_COUNT_MISMATCH"
-    if endpoints["baseline"]["commit"] == endpoints["active"]["commit"]:
+    baseline_commit = endpoints["baseline"]["commit"]
+    # Parents outside the enumerated range that the builder has independently
+    # verified to be ancestors of the reviewed baseline.  Because the range is
+    # rev-list baseline..active, any commit reachable from the active commit and
+    # not from the baseline is necessarily enumerated; a parent that is absent
+    # is therefore either pre-baseline history -- already subsumed by the
+    # reviewed baseline artifact -- or undeclared history, which must fail
+    # closed.  This validator cannot compute ancestry, so it requires the claim
+    # to be declared explicitly and rejects anything undeclared or contradictory.
+    #
+    # This is validated before any early return: a malformed or contradictory
+    # declaration must fail closed even when the range is empty, or a
+    # digest-bound chain could carry unchecked authority.
+    pre_baseline = chain.get("pre_baseline_parents")
+    if not isinstance(pre_baseline, (list, tuple)):
+        return False, "COMPATIBILITY_CHAIN_INVALID"
+    if any(not _sha(parent, 40) for parent in pre_baseline):
+        return False, "COMPATIBILITY_CHAIN_INVALID"
+    pre_baseline = set(pre_baseline)
+    if baseline_commit in pre_baseline:
+        return False, "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"
+    if baseline_commit == endpoints["active"]["commit"]:
         # Activating at the reviewed baseline itself needs no successor range,
-        # but it may not smuggle in unexplained commits either.
-        return (True, "COMPATIBILITY_CHAIN_VALID") if not commits else (
-            False, "COMPATIBILITY_CHAIN_RANGE_INVALID")
+        # but it may not smuggle in unexplained commits or parents either.
+        if commits:
+            return False, "COMPATIBILITY_CHAIN_RANGE_INVALID"
+        if pre_baseline:
+            return False, "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"
+        return True, "COMPATIBILITY_CHAIN_VALID"
     if not commits:
         # An advanced execution identity with no enumerated range is exactly the
         # ancestry-only proof this validator exists to reject.
         return False, "COMPATIBILITY_CHAIN_RANGE_MISSING"
-    seen = set()
-    previous = endpoints["baseline"]["commit"]
+    records = {}
     for record in commits:
         if not isinstance(record, Mapping) or set(record) != _CHAIN_COMMIT_REQUIRED:
             return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
         if not _sha(record.get("commit"), 40) or not _sha(record.get("tree"), 40):
             return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
-        if record["commit"] in seen:
+        if record["commit"] in records:
             return False, "COMPATIBILITY_CHAIN_COMMIT_DUPLICATE"
-        seen.add(record["commit"])
         parents = record.get("parents")
         if not isinstance(parents, (list, tuple)) or not parents:
             return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
         if any(not _sha(parent, 40) for parent in parents):
             return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
-        if previous not in parents:
-            # A gap, a reordering, or a merge importing undeclared history.
-            return False, "COMPATIBILITY_CHAIN_RANGE_BROKEN"
-        if len(parents) > 1 and any(parent not in seen and parent != endpoints["baseline"]["commit"]
-                                    for parent in parents):
-            return False, "COMPATIBILITY_CHAIN_MERGE_UNDECLARED"
         blobs = _invariant_blobs(record.get("invariant_blobs"))
         if blobs is None:
             return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
@@ -312,11 +328,55 @@ def validate_compatibility_chain(
             return False, "COMPATIBILITY_CHAIN_COMMIT_INVALID"
         if any(path in _INVARIANT_BASELINE_PATHS for path in changes):
             return False, "COMPATIBILITY_INVARIANT_VIOLATED"
-        previous = record["commit"]
-    if previous != endpoints["active"]["commit"]:
+        records[record["commit"]] = record
+    # A commit cannot be both enumerated in the range and claimed to predate the
+    # baseline.
+    if pre_baseline & set(records):
+        return False, "COMPATIBILITY_PRE_BASELINE_CONTRADICTORY"
+    if endpoints["active"]["commit"] not in records:
         return False, "COMPATIBILITY_CHAIN_RANGE_INCOMPLETE"
-    if commits[-1]["tree"] != endpoints["active"]["tree"]:
+    if records[endpoints["active"]["commit"]]["tree"] != endpoints["active"]["tree"]:
         return False, "COMPATIBILITY_CHAIN_ENDPOINT_MISMATCH"
+    # Walk the DAG from the active commit.  Every parent must be enumerated, be
+    # the baseline, or be a declared pre-baseline ancestor; a linear predecessor
+    # walk cannot express a real merge topology and rejected valid history.
+    reachable = set()
+    frontier = [endpoints["active"]["commit"]]
+    while frontier:
+        commit = frontier.pop()
+        if commit in reachable:
+            continue
+        reachable.add(commit)
+        for parent in records[commit]["parents"]:
+            if parent == baseline_commit or parent in pre_baseline:
+                continue
+            if parent not in records:
+                return False, "COMPATIBILITY_CHAIN_PARENT_UNDECLARED"
+            frontier.append(parent)
+    # No enumerated commit may sit outside the active commit's history.
+    if reachable != set(records):
+        return False, "COMPATIBILITY_CHAIN_RANGE_BROKEN"
+    # Commit history is acyclic.  Reachability alone cannot tell a real range
+    # from a cycle -- two records naming each other are mutually reachable and
+    # would otherwise satisfy every later check -- so require a topological
+    # order to exist.  Anything left over is part of a cycle.
+    remaining = dict(records)
+    settled = set()
+    while True:
+        ready = [
+            commit for commit, record in remaining.items()
+            if all(parent not in remaining for parent in record["parents"])
+        ]
+        if not ready:
+            break
+        for commit in ready:
+            settled.add(commit)
+            del remaining[commit]
+    if remaining:
+        return False, "COMPATIBILITY_CHAIN_CYCLIC"
+    # The range must actually attach to the reviewed baseline.
+    if not any(baseline_commit in record["parents"] for record in records.values()):
+        return False, "COMPATIBILITY_CHAIN_RANGE_BROKEN"
     return True, "COMPATIBILITY_CHAIN_VALID"
 
 

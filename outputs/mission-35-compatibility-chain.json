@@ -1,7 +1,7 @@
 {
   "active": {
-    "commit": "d2a7dee717f476f179f108106a9c1731cfe27d6c",
-    "tree": "6d1917b5d71ab2d7eae78d7dc78adeff5507ef46"
+    "commit": "01b50bbf04a0b8eb78ad0df4ad504e62ee48aa27",
+    "tree": "8c92c1951f8a17f4ca22c4d0d8abf98048b93249"
   },
   "baseline": {
     "commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
@@ -1547,6 +1547,28 @@
         "32f30b34fbab40bbfba65b63b65fe7e0be07d148"
       ],
       "tree": "6d1917b5d71ab2d7eae78d7dc78adeff5507ef46"
+    },
+    {
+      "commit": "01b50bbf04a0b8eb78ad0df4ad504e62ee48aa27",
+      "governed_changes": [
+        ".github/workflows/mission-command.yml",
+        "engineering_os/commands.py",
+        "tests/engineering_os/test_activation_ledger.py",
+        "tests/engineering_os/test_commands.py",
+        "tests/engineering_os/test_workflow_boundaries.py"
+      ],
+      "invariant_blobs": {
+        "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json": "8c2bfde70f3bb6caad9f433e46adef587a06ded9",
+        "engineering_os/canonical.py": "1ab676feb0f88b6bd6ef4371ca255dfa1444e76b",
+        "engineering_os/python_imports.py": "fe5d97956d0cf5ad6906f1ab8ca7b59fe51fa0f8",
+        "engineering_os/test_integrity.py": "72d31c87eb715e0ca2715fc690c134edc4743791",
+        "engineering_os/test_integrity_cli.py": "018b13204ffaf0e9c0624f27f19c986a7a0b1168",
+        "scripts/engineering-os/validate-test-integrity": "3a76d85a284659284a7077af823a97303bc3d8c1"
+      },
+      "parents": [
+        "d2a7dee717f476f179f108106a9c1731cfe27d6c"
+      ],
+      "tree": "8c92c1951f8a17f4ca22c4d0d8abf98048b93249"
     }
   ],
   "invariant_blobs": {

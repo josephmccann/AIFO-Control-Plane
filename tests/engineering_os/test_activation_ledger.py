@@ -2,7 +2,9 @@ import copy
 import unittest
 
 from engineering_os.canonical import content_sha256
-from engineering_os.commands import validate_activation_ledger
+from engineering_os.commands import (
+    _INVARIANT_BASELINE_PATHS, validate_activation_ledger, validate_compatibility_chain,
+)
 
 
 class ActivationLedgerTests(unittest.TestCase):
@@ -19,6 +21,11 @@ class ActivationLedgerTests(unittest.TestCase):
             "authorization_provenance": self.provenance(1, "prepare"),
             "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
             "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "active_execution_commit": "a" * 40,
+            "active_execution_tree": "b" * 40,
+            "compatibility_proof": self.proof(),
             "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
             "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
             "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
@@ -34,6 +41,45 @@ class ActivationLedgerTests(unittest.TestCase):
             "founder_authorization_identity": "founder@example.test",
             "founder_authorization_sequence": 1,
         }
+
+    def invariant_blobs(self):
+        return {path: "%040x" % (index + 1) for index, path in enumerate(_INVARIANT_BASELINE_PATHS)}
+
+    def proof(self, **overrides):
+        value = {
+            "model": "reviewed_compatibility_chain",
+            "chain_sha256": "c" * 64,
+            "chain_path": "outputs/mission-35-compatibility-chain.json",
+            "baseline_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "baseline_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "active_commit": "a" * 40,
+            "active_tree": "b" * 40,
+            "commit_count": 1,
+            "invariant_paths": list(_INVARIANT_BASELINE_PATHS),
+            "invariant_digest": content_sha256(self.invariant_blobs()),
+        }
+        value.update(overrides)
+        return value
+
+    def compat_chain(self, **overrides):
+        blobs = self.invariant_blobs()
+        value = {
+            "schema_version": "1.0.0", "model": "reviewed_compatibility_chain",
+            "repository": "josephmccann/AIFO-Control-Plane",
+            "baseline": {"commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+                         "tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"},
+            "active": {"commit": "a" * 40, "tree": "b" * 40},
+            "invariant_paths": list(_INVARIANT_BASELINE_PATHS),
+            "invariant_blobs": blobs,
+            "commits": [{
+                "commit": "a" * 40, "tree": "b" * 40,
+                "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+                "invariant_blobs": dict(blobs),
+                "governed_changes": ["engineering_os/state.py"],
+            }],
+        }
+        value.update(overrides)
+        return value
 
     def provenance(self, run_id, job):
         sha = "3" * 40
@@ -101,8 +147,16 @@ class ActivationLedgerTests(unittest.TestCase):
         auth = self.chain([self.auth()])[0]
         ok, code, details = validate_activation_ledger(
             [auth], self.activation, repository=self.activation["repository"],
-            current_commit=self.activation["remediation_head"], current_tree=self.activation["remediation_tree"])
+            current_commit=self.activation["active_execution_commit"],
+            current_tree=self.activation["active_execution_tree"])
         self.assertEqual((ok, code), (True, "ACTIVATION_AUTHORIZED"))
+        # The historical remediation identity is never the live checkout.
+        self.assertEqual(
+            validate_activation_ledger(
+                [auth], self.activation, repository=self.activation["repository"],
+                current_commit=self.activation["remediation_head"],
+                current_tree=self.activation["remediation_tree"])[1],
+            "ACTIVATION_COMMIT_MISMATCH")
         self.assertFalse(details["consumed"])
         attempt = self.attempt(auth)
         consumed = self.consume(auth)
@@ -117,13 +171,15 @@ class ActivationLedgerTests(unittest.TestCase):
     def test_replay_mismatch_and_context_changes_fail_closed(self):
         auth = self.chain([self.auth()])[0]
         for mutation, expected in (({"activation_nonce": "different-nonce-012345678901234567890123"}, "ACTIVATION_TUPLE_MISMATCH"),
-                                   ({"remediation_head": "0" * 40}, "ACTIVATION_COMMIT_MISMATCH"),
-                                   ({"remediation_tree": "0" * 40}, "ACTIVATION_TREE_MISMATCH")):
+                                   ({"active_execution_commit": "0" * 40,
+                                     "compatibility_proof": self.proof(active_commit="0" * 40)}, "ACTIVATION_COMMIT_MISMATCH"),
+                                   ({"active_execution_tree": "0" * 40,
+                                     "compatibility_proof": self.proof(active_tree="0" * 40)}, "ACTIVATION_TREE_MISMATCH")):
             candidate = copy.deepcopy(self.activation)
             candidate.update(mutation)
             args = {"repository": self.activation["repository"]}
-            if expected == "ACTIVATION_COMMIT_MISMATCH": args["current_commit"] = self.activation["remediation_head"]
-            if expected == "ACTIVATION_TREE_MISMATCH": args["current_tree"] = self.activation["remediation_tree"]
+            if expected == "ACTIVATION_COMMIT_MISMATCH": args["current_commit"] = self.activation["active_execution_commit"]
+            if expected == "ACTIVATION_TREE_MISMATCH": args["current_tree"] = self.activation["active_execution_tree"]
             self.assertEqual(validate_activation_ledger([auth], candidate, **args)[1], expected)
         self.assertEqual(validate_activation_ledger([auth, auth], self.activation,
             repository=self.activation["repository"])[1], "ACTIVATION_HISTORY_INVALID")
@@ -179,6 +235,181 @@ class ActivationLedgerTests(unittest.TestCase):
                                        repository=self.activation["repository"])[1],
             "ACTIVATION_HISTORY_INVALID",
         )
+
+
+class CompatibilityChainTests(ActivationLedgerTests):
+    """Adversarial coverage for the Model B compatibility chain.
+
+    Every case here asserts a *rejection*.  The chain exists to prove that the
+    reviewed historical baseline artifact still means what it meant when it was
+    reviewed; anything that cannot prove that must fail closed.
+    """
+
+    REPOSITORY = "josephmccann/AIFO-Control-Plane"
+
+    def check(self, chain, proof=None):
+        return validate_compatibility_chain(
+            chain, proof or self.proof(), repository=self.REPOSITORY)
+
+    def test_complete_enumerated_range_is_accepted(self):
+        self.assertEqual(self.check(self.compat_chain()), (True, "COMPATIBILITY_CHAIN_VALID"))
+
+    def test_ancestry_alone_is_not_a_proof(self):
+        chain = self.compat_chain(commits=[])
+        self.assertEqual(self.check(chain, self.proof(commit_count=0))[1],
+                         "COMPATIBILITY_CHAIN_RANGE_MISSING")
+
+    def test_final_tree_equality_alone_is_not_a_proof(self):
+        # The endpoints agree and the final tree matches, but the range between
+        # them is not enumerated, so nothing constrains the intermediate commits.
+        chain = self.compat_chain(commits=[])
+        self.assertFalse(self.check(chain, self.proof(commit_count=0))[0])
+
+    def test_unauthorized_change_reverted_before_the_end_is_still_rejected(self):
+        blobs = self.invariant_blobs()
+        moved = dict(blobs)
+        moved["engineering_os/test_integrity.py"] = "f" * 40
+        chain = self.compat_chain(commits=[
+            {"commit": "d" * 40, "tree": "e" * 40,
+             "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": moved, "governed_changes": []},
+            {"commit": "a" * 40, "tree": "b" * 40, "parents": ["d" * 40],
+             "invariant_blobs": dict(blobs), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
+                         "COMPATIBILITY_INVARIANT_VIOLATED")
+
+    def test_missing_intermediate_commit_breaks_the_range(self):
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40, "parents": ["9" * 40],
+             "invariant_blobs": self.invariant_blobs(), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_RANGE_BROKEN")
+
+    def test_merge_importing_undeclared_history_is_rejected(self):
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40,
+             "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", "7" * 40],
+             "invariant_blobs": self.invariant_blobs(), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_MERGE_UNDECLARED")
+
+    def test_governed_change_touching_an_invariant_path_is_rejected(self):
+        chain = self.compat_chain(commits=[
+            {"commit": "a" * 40, "tree": "b" * 40,
+             "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": self.invariant_blobs(),
+             "governed_changes": ["engineering_os/test_integrity_cli.py"]},
+        ])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_INVARIANT_VIOLATED")
+
+    def test_partial_invariant_coverage_is_rejected(self):
+        partial = self.invariant_blobs()
+        partial.pop("engineering_os/canonical.py")
+        chain = self.compat_chain(invariant_blobs=partial)
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_INVARIANT_PATHS_INVALID")
+
+    def test_invariant_digest_must_match_the_declared_blobs(self):
+        self.assertEqual(self.check(self.compat_chain(), self.proof(invariant_digest="0" * 64))[1],
+                         "COMPATIBILITY_INVARIANT_DIGEST_MISMATCH")
+
+    def test_endpoint_substitution_is_rejected(self):
+        chain = self.compat_chain(active={"commit": "9" * 40, "tree": "8" * 40})
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_ENDPOINT_MISMATCH")
+
+    def test_commit_count_must_match_the_enumerated_range(self):
+        self.assertEqual(self.check(self.compat_chain(), self.proof(commit_count=9))[1],
+                         "COMPATIBILITY_CHAIN_COUNT_MISMATCH")
+
+    def test_duplicate_commit_is_rejected(self):
+        record = {"commit": "a" * 40, "tree": "b" * 40,
+                  "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+                  "invariant_blobs": self.invariant_blobs(), "governed_changes": []}
+        chain = self.compat_chain(commits=[record, copy.deepcopy(record)])
+        self.assertEqual(self.check(chain, self.proof(commit_count=2))[1],
+                         "COMPATIBILITY_CHAIN_COMMIT_DUPLICATE")
+
+    def test_wrong_repository_is_rejected(self):
+        chain = self.compat_chain(repository="attacker/AIFO-Control-Plane")
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_REPOSITORY_INVALID")
+
+    def test_range_must_terminate_at_the_active_execution_commit(self):
+        chain = self.compat_chain(commits=[
+            {"commit": "d" * 40, "tree": "e" * 40,
+             "parents": ["b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"],
+             "invariant_blobs": self.invariant_blobs(), "governed_changes": []},
+        ])
+        self.assertEqual(self.check(chain)[1], "COMPATIBILITY_CHAIN_RANGE_INCOMPLETE")
+
+    def test_activating_at_the_reviewed_baseline_needs_no_range(self):
+        base = {"commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+                "tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"}
+        chain = self.compat_chain(active=dict(base), commits=[])
+        proof = self.proof(active_commit=base["commit"], active_tree=base["tree"], commit_count=0)
+        self.assertEqual(self.check(chain, proof), (True, "COMPATIBILITY_CHAIN_VALID"))
+
+    def test_unknown_proof_model_is_rejected(self):
+        self.assertEqual(self.check(self.compat_chain(), self.proof(model="ancestry"))[1],
+                         "COMPATIBILITY_PROOF_INVALID")
+
+
+class ActivationIdentityRoleTests(ActivationLedgerTests):
+    """Identity roles may not be substituted for one another."""
+
+    def ledger(self, activation, **kwargs):
+        auth = self.chain([self.auth()])[0]
+        auth["details"] = copy.deepcopy(activation)
+        auth["event_hash"] = content_sha256(auth)
+        return validate_activation_ledger(
+            [auth], activation, repository=self.activation["repository"], **kwargs)
+
+    def test_historical_artifact_paired_with_active_commit_without_proof_is_rejected(self):
+        # This is the exact defect: the tuple claims the active checkout while
+        # the artifact digest still describes the historical tree.
+        candidate = copy.deepcopy(self.activation)
+        candidate["baseline_generation_commit"] = candidate["active_execution_commit"]
+        self.assertEqual(self.ledger(candidate)[1], "ACTIVATION_TUPLE_INVALID")
+
+    def test_proof_must_describe_the_declared_active_execution_identity(self):
+        candidate = copy.deepcopy(self.activation)
+        candidate["compatibility_proof"] = self.proof(active_commit="9" * 40)
+        self.assertEqual(self.ledger(candidate)[1], "ACTIVATION_TUPLE_INVALID")
+
+    def test_missing_compatibility_proof_is_rejected(self):
+        candidate = copy.deepcopy(self.activation)
+        candidate.pop("compatibility_proof")
+        self.assertEqual(self.ledger(candidate)[1], "ACTIVATION_TUPLE_INVALID")
+
+    def test_legacy_authorization_is_terminally_superseded(self):
+        legacy = copy.deepcopy(self.activation)
+        for field in ("baseline_generation_commit", "baseline_generation_tree",
+                      "active_execution_commit", "active_execution_tree",
+                      "compatibility_proof"):
+            legacy.pop(field)
+        ok, code, details = self.ledger(legacy)
+        self.assertFalse(ok)
+        self.assertEqual(code, "ACTIVATION_AUTHORIZATION_SUPERSEDED")
+        self.assertTrue(details["superseded"])
+        self.assertFalse(details["consumed"])
+
+    def test_default_branch_advance_after_authorization_fails_closed(self):
+        self.assertEqual(
+            self.ledger(self.activation, current_commit="9" * 40)[1],
+            "ACTIVATION_COMMIT_MISMATCH")
+
+    def test_chain_digest_must_match_the_declared_proof(self):
+        self.assertEqual(
+            self.ledger(self.activation, compatibility_chain=self.compat_chain())[1],
+            "ACTIVATION_COMPATIBILITY_CHAIN_DIGEST_MISMATCH")
+
+    def test_ledger_validates_the_supplied_chain(self):
+        chain = self.compat_chain(commits=[])
+        candidate = copy.deepcopy(self.activation)
+        candidate["compatibility_proof"] = self.proof(
+            chain_sha256=content_sha256(chain), commit_count=0)
+        self.assertEqual(
+            self.ledger(candidate, compatibility_chain=chain)[1],
+            "COMPATIBILITY_CHAIN_RANGE_MISSING")
 
 
 if __name__ == "__main__":

@@ -4,51 +4,884 @@
   "title": "AI.FO Audit Event",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "mission_id", "sequence", "type", "actor", "actor_role", "occurred_at", "source_url", "previous_event_hash", "event_hash", "details"],
+  "required": [
+    "schema_version",
+    "mission_id",
+    "sequence",
+    "type",
+    "actor",
+    "actor_role",
+    "occurred_at",
+    "source_url",
+    "previous_event_hash",
+    "event_hash",
+    "details"
+  ],
   "properties": {
-    "schema_version": {"const": "1.0.0"}, "mission_id": {"type": "string", "minLength": 1},
-    "sequence": {"type": "integer", "minimum": 1}, "type": {"type": "string", "minLength": 1},
-    "actor": {"type": "string", "minLength": 1}, "actor_role": {"enum": ["producer", "adversary", "founder", "system"]},
-    "occurred_at": {"type": "string", "format": "date-time"}, "source_url": {"type": "string", "pattern": "^https://github\\.com/.+$"},
-    "previous_event_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-    "event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "details": {"type": "object"}
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "mission_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor_role": {
+      "enum": [
+        "producer",
+        "adversary",
+        "founder",
+        "system"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_url": {
+      "type": "string",
+      "pattern": "^https://github\\.com/.+$"
+    },
+    "previous_event_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "details": {
+      "type": "object"
+    }
   },
   "allOf": [
     {
-      "if": {"properties": {"type": {"const": "test_integrity.baseline.authorized"}}},
-      "then": {"properties": {"actor_role": {"const": "founder"}, "source_url": {"type": "string", "pattern": "^https://github\\.com/josephmccann/AIFO-Control-Plane/issues/26#issuecomment-[1-9][0-9]*$"}, "details": {
-        "type": "object", "additionalProperties": false,
-        "required": ["repository", "mission_issue", "mission_issue_identity", "authorization_provenance", "remediation_head", "remediation_tree", "baseline_artifact_sha256", "canonical_inventory_sha256", "baseline_generator_identity", "analyzer_identity", "workflow_identity", "caller_identity", "immutable_kernel_identity", "manifest_identity", "rollback_sha", "activation_nonce", "activation_type", "single_use", "founder_authorization_identity", "founder_authorization_sequence"],
+      "if": {
         "properties": {
-          "repository": {"const": "josephmccann/AIFO-Control-Plane"}, "mission_issue": {"const": 26},
-          "mission_issue_identity": {"type": "object", "additionalProperties": false, "required": ["repository", "number", "node_id", "url", "state", "ready_event_hash", "ready_sequence", "ready_declaration_sha256"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "number": {"const": 26}, "node_id": {"type": "string", "minLength": 1}, "url": {"const": "https://github.com/josephmccann/AIFO-Control-Plane/issues/26"}, "state": {"const": "open"}, "ready_event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "ready_sequence": {"type": "integer", "minimum": 1}, "ready_declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
-          "authorization_provenance": {"type": "object", "additionalProperties": false, "required": ["repository", "workflow_path", "workflow_ref", "workflow_sha", "run_id", "run_attempt", "job", "actor", "trigger_actor", "event", "head_sha", "head_tree"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "workflow_path": {"const": ".github/workflows/mission-command.yml"}, "workflow_ref": {"type": "string", "pattern": "^josephmccann/AIFO-Control-Plane/\\.github/workflows/mission-command\\.yml@[0-9a-f]{40}$"}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}, "job": {"enum": ["prepare", "append"]}, "actor": {"const": "github-actions[bot]"}, "trigger_actor": {"type": "string", "minLength": 1}, "event": {"const": "issue_comment"}, "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "head_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
-          "remediation_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "remediation_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "baseline_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "canonical_inventory_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "baseline_generator_identity": {"type": "string", "minLength": 1}, "analyzer_identity": {"type": "string", "minLength": 1}, "workflow_identity": {"type": "string", "minLength": 1}, "caller_identity": {"type": "string", "minLength": 1}, "immutable_kernel_identity": {"type": "string", "minLength": 1}, "manifest_identity": {"type": "string", "minLength": 1},
-          "rollback_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "activation_nonce": {"type": "string", "minLength": 32}, "activation_type": {"const": "initial_test_integrity_baseline"}, "single_use": {"const": true}, "founder_authorization_identity": {"type": "string", "minLength": 1}, "founder_authorization_sequence": {"type": "integer", "minimum": 1}
+          "type": {
+            "const": "test_integrity.baseline.authorized"
+          }
         }
-      }}}
+      },
+      "then": {
+        "properties": {
+          "actor_role": {
+            "const": "founder"
+          },
+          "source_url": {
+            "type": "string",
+            "pattern": "^https://github\\.com/josephmccann/AIFO-Control-Plane/issues/26#issuecomment-[1-9][0-9]*$"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repository",
+              "mission_issue",
+              "mission_issue_identity",
+              "authorization_provenance",
+              "remediation_head",
+              "remediation_tree",
+              "baseline_artifact_sha256",
+              "canonical_inventory_sha256",
+              "baseline_generator_identity",
+              "analyzer_identity",
+              "workflow_identity",
+              "caller_identity",
+              "immutable_kernel_identity",
+              "manifest_identity",
+              "rollback_sha",
+              "activation_nonce",
+              "activation_type",
+              "single_use",
+              "founder_authorization_identity",
+              "founder_authorization_sequence",
+              "baseline_generation_commit",
+              "baseline_generation_tree",
+              "active_execution_commit",
+              "active_execution_tree",
+              "compatibility_proof"
+            ],
+            "properties": {
+              "repository": {
+                "const": "josephmccann/AIFO-Control-Plane"
+              },
+              "mission_issue": {
+                "const": 26
+              },
+              "mission_issue_identity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repository",
+                  "number",
+                  "node_id",
+                  "url",
+                  "state",
+                  "ready_event_hash",
+                  "ready_sequence",
+                  "ready_declaration_sha256"
+                ],
+                "properties": {
+                  "repository": {
+                    "const": "josephmccann/AIFO-Control-Plane"
+                  },
+                  "number": {
+                    "const": 26
+                  },
+                  "node_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "url": {
+                    "const": "https://github.com/josephmccann/AIFO-Control-Plane/issues/26"
+                  },
+                  "state": {
+                    "const": "open"
+                  },
+                  "ready_event_hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "ready_sequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "ready_declaration_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "authorization_provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repository",
+                  "workflow_path",
+                  "workflow_ref",
+                  "workflow_sha",
+                  "run_id",
+                  "run_attempt",
+                  "job",
+                  "actor",
+                  "trigger_actor",
+                  "event",
+                  "head_sha",
+                  "head_tree"
+                ],
+                "properties": {
+                  "repository": {
+                    "const": "josephmccann/AIFO-Control-Plane"
+                  },
+                  "workflow_path": {
+                    "const": ".github/workflows/mission-command.yml"
+                  },
+                  "workflow_ref": {
+                    "type": "string",
+                    "pattern": "^josephmccann/AIFO-Control-Plane/\\.github/workflows/mission-command\\.yml@[0-9a-f]{40}$"
+                  },
+                  "workflow_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "run_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "run_attempt": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "job": {
+                    "enum": [
+                      "prepare",
+                      "append"
+                    ]
+                  },
+                  "actor": {
+                    "const": "github-actions[bot]"
+                  },
+                  "trigger_actor": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "event": {
+                    "const": "issue_comment"
+                  },
+                  "head_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "head_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  }
+                }
+              },
+              "remediation_head": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "remediation_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "baseline_artifact_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "canonical_inventory_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "baseline_generator_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "analyzer_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "workflow_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "caller_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "immutable_kernel_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "manifest_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "rollback_sha": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "activation_nonce": {
+                "type": "string",
+                "minLength": 32
+              },
+              "activation_type": {
+                "const": "initial_test_integrity_baseline"
+              },
+              "single_use": {
+                "const": true
+              },
+              "founder_authorization_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "founder_authorization_sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "baseline_generation_commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "baseline_generation_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "active_execution_commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "active_execution_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "compatibility_proof": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "model",
+                  "chain_sha256",
+                  "chain_path",
+                  "baseline_commit",
+                  "baseline_tree",
+                  "active_commit",
+                  "active_tree",
+                  "commit_count",
+                  "invariant_paths",
+                  "invariant_digest"
+                ],
+                "properties": {
+                  "model": {
+                    "const": "reviewed_compatibility_chain"
+                  },
+                  "chain_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "chain_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "baseline_commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "baseline_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "active_commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "active_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "commit_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "invariant_paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 6,
+                    "maxItems": 6,
+                    "const": [
+                      "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json",
+                      "engineering_os/canonical.py",
+                      "engineering_os/python_imports.py",
+                      "engineering_os/test_integrity.py",
+                      "engineering_os/test_integrity_cli.py",
+                      "scripts/engineering-os/validate-test-integrity"
+                    ]
+                  },
+                  "invariant_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": {"properties": {"type": {"enum": ["test_integrity.baseline.consumption_attempted", "test_integrity.baseline.consumed"]}}},
-      "then": {"properties": {"actor": {"const": "system"}, "actor_role": {"const": "system"}, "source_url": {"type": "string", "pattern": "^https://github\\.com/josephmccann/AIFO-Control-Plane/actions/runs/[1-9][0-9]*$"}, "details": {
-        "type": "object", "additionalProperties": false,
-        "required": ["repository", "mission_issue", "mission_issue_identity", "authorization_provenance", "remediation_head", "remediation_tree", "baseline_artifact_sha256", "canonical_inventory_sha256", "baseline_generator_identity", "analyzer_identity", "workflow_identity", "caller_identity", "immutable_kernel_identity", "manifest_identity", "rollback_sha", "activation_nonce", "activation_type", "single_use", "founder_authorization_identity", "founder_authorization_sequence", "authorization_event_hash", "authorization_sequence", "consumer_identity", "consumer_provenance", "consumed_at", "consumption_result", "post_consumption_state", "attempt_event_hash"],
+      "if": {
         "properties": {
-          "repository": {"const": "josephmccann/AIFO-Control-Plane"}, "mission_issue": {"const": 26},
-          "mission_issue_identity": {"type": "object", "additionalProperties": false, "required": ["repository", "number", "node_id", "url", "state", "ready_event_hash", "ready_sequence", "ready_declaration_sha256"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "number": {"const": 26}, "node_id": {"type": "string", "minLength": 1}, "url": {"const": "https://github.com/josephmccann/AIFO-Control-Plane/issues/26"}, "state": {"const": "open"}, "ready_event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "ready_sequence": {"type": "integer", "minimum": 1}, "ready_declaration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
-          "authorization_provenance": {"type": "object", "additionalProperties": false, "required": ["repository", "workflow_path", "workflow_ref", "workflow_sha", "run_id", "run_attempt", "job", "actor", "trigger_actor", "event", "head_sha", "head_tree"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "workflow_path": {"const": ".github/workflows/mission-command.yml"}, "workflow_ref": {"type": "string", "pattern": "^josephmccann/AIFO-Control-Plane/\\.github/workflows/mission-command\\.yml@[0-9a-f]{40}$"}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}, "job": {"enum": ["prepare", "append"]}, "actor": {"const": "github-actions[bot]"}, "trigger_actor": {"type": "string", "minLength": 1}, "event": {"const": "issue_comment"}, "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "head_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
-          "remediation_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "remediation_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "baseline_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "canonical_inventory_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "baseline_generator_identity": {"type": "string", "minLength": 1}, "analyzer_identity": {"type": "string", "minLength": 1}, "workflow_identity": {"type": "string", "minLength": 1}, "caller_identity": {"type": "string", "minLength": 1}, "immutable_kernel_identity": {"type": "string", "minLength": 1}, "manifest_identity": {"type": "string", "minLength": 1}, "rollback_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-          "activation_nonce": {"type": "string", "minLength": 32}, "activation_type": {"const": "initial_test_integrity_baseline"}, "single_use": {"const": true}, "founder_authorization_identity": {"type": "string", "minLength": 1}, "founder_authorization_sequence": {"type": "integer", "minimum": 1},
-          "authorization_event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "authorization_sequence": {"type": "integer", "minimum": 1},
-          "consumer_identity": {"type": "object", "additionalProperties": false, "required": ["repository", "workflow_path", "job", "actor"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "workflow_path": {"const": ".github/workflows/mission-command.yml"}, "job": {"const": "append"}, "actor": {"const": "github-actions[bot]"}}},
-          "consumer_provenance": {"type": "object", "additionalProperties": false, "required": ["repository", "workflow_path", "workflow_ref", "workflow_sha", "run_id", "run_attempt", "job", "actor", "trigger_actor", "event", "head_sha", "head_tree"], "properties": {"repository": {"const": "josephmccann/AIFO-Control-Plane"}, "workflow_path": {"const": ".github/workflows/mission-command.yml"}, "workflow_ref": {"type": "string", "pattern": "^josephmccann/AIFO-Control-Plane/\\.github/workflows/mission-command\\.yml@[0-9a-f]{40}$"}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}, "job": {"const": "append"}, "actor": {"const": "github-actions[bot]"}, "trigger_actor": {"type": "string", "minLength": 1}, "event": {"const": "issue_comment"}, "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "head_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
-          "consumed_at": {"type": "string", "format": "date-time"}, "consumption_result": {"enum": ["attempted", "activated"]}, "post_consumption_state": {"enum": ["locked", "active"]}, "attempt_event_hash": {"type": "string", "pattern": "^(|[0-9a-f]{64})$"}
+          "type": {
+            "enum": [
+              "test_integrity.baseline.consumption_attempted",
+              "test_integrity.baseline.consumed"
+            ]
+          }
         }
-      }}}
+      },
+      "then": {
+        "properties": {
+          "actor": {
+            "const": "system"
+          },
+          "actor_role": {
+            "const": "system"
+          },
+          "source_url": {
+            "type": "string",
+            "pattern": "^https://github\\.com/josephmccann/AIFO-Control-Plane/actions/runs/[1-9][0-9]*$"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repository",
+              "mission_issue",
+              "mission_issue_identity",
+              "authorization_provenance",
+              "remediation_head",
+              "remediation_tree",
+              "baseline_artifact_sha256",
+              "canonical_inventory_sha256",
+              "baseline_generator_identity",
+              "analyzer_identity",
+              "workflow_identity",
+              "caller_identity",
+              "immutable_kernel_identity",
+              "manifest_identity",
+              "rollback_sha",
+              "activation_nonce",
+              "activation_type",
+              "single_use",
+              "founder_authorization_identity",
+              "founder_authorization_sequence",
+              "authorization_event_hash",
+              "authorization_sequence",
+              "consumer_identity",
+              "consumer_provenance",
+              "consumed_at",
+              "consumption_result",
+              "post_consumption_state",
+              "attempt_event_hash",
+              "baseline_generation_commit",
+              "baseline_generation_tree",
+              "active_execution_commit",
+              "active_execution_tree",
+              "compatibility_proof"
+            ],
+            "properties": {
+              "repository": {
+                "const": "josephmccann/AIFO-Control-Plane"
+              },
+              "mission_issue": {
+                "const": 26
+              },
+              "mission_issue_identity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repository",
+                  "number",
+                  "node_id",
+                  "url",
+                  "state",
+                  "ready_event_hash",
+                  "ready_sequence",
+                  "ready_declaration_sha256"
+                ],
+                "properties": {
+                  "repository": {
+                    "const": "josephmccann/AIFO-Control-Plane"
+                  },
+                  "number": {
+                    "const": 26
+                  },
+                  "node_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "url": {
+                    "const": "https://github.com/josephmccann/AIFO-Control-Plane/issues/26"
+                  },
+                  "state": {
+                    "const": "open"
+                  },
+                  "ready_event_hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "ready_sequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "ready_declaration_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "authorization_provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repository",
+                  "workflow_path",
+                  "workflow_ref",
+                  "workflow_sha",
+                  "run_id",
+                  "run_attempt",
+                  "job",
+                  "actor",
+                  "trigger_actor",
+                  "event",
+                  "head_sha",
+                  "head_tree"
+                ],
+                "properties": {
+                  "repository": {
+                    "const": "josephmccann/AIFO-Control-Plane"
+                  },
+                  "workflow_path": {
+                    "const": ".github/workflows/mission-command.yml"
+                  },
+                  "workflow_ref": {
+                    "type": "string",
+                    "pattern": "^josephmccann/AIFO-Control-Plane/\\.github/workflows/mission-command\\.yml@[0-9a-f]{40}$"
+                  },
+                  "workflow_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "run_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "run_attempt": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "job": {
+                    "enum": [
+                      "prepare",
+                      "append"
+                    ]
+                  },
+                  "actor": {
+                    "const": "github-actions[bot]"
+                  },
+                  "trigger_actor": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "event": {
+                    "const": "issue_comment"
+                  },
+                  "head_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "head_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  }
+                }
+              },
+              "remediation_head": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "remediation_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "baseline_artifact_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "canonical_inventory_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "baseline_generator_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "analyzer_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "workflow_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "caller_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "immutable_kernel_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "manifest_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "rollback_sha": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "activation_nonce": {
+                "type": "string",
+                "minLength": 32
+              },
+              "activation_type": {
+                "const": "initial_test_integrity_baseline"
+              },
+              "single_use": {
+                "const": true
+              },
+              "founder_authorization_identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "founder_authorization_sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "authorization_event_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "authorization_sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "consumer_identity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repository",
+                  "workflow_path",
+                  "job",
+                  "actor"
+                ],
+                "properties": {
+                  "repository": {
+                    "const": "josephmccann/AIFO-Control-Plane"
+                  },
+                  "workflow_path": {
+                    "const": ".github/workflows/mission-command.yml"
+                  },
+                  "job": {
+                    "const": "append"
+                  },
+                  "actor": {
+                    "const": "github-actions[bot]"
+                  }
+                }
+              },
+              "consumer_provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repository",
+                  "workflow_path",
+                  "workflow_ref",
+                  "workflow_sha",
+                  "run_id",
+                  "run_attempt",
+                  "job",
+                  "actor",
+                  "trigger_actor",
+                  "event",
+                  "head_sha",
+                  "head_tree"
+                ],
+                "properties": {
+                  "repository": {
+                    "const": "josephmccann/AIFO-Control-Plane"
+                  },
+                  "workflow_path": {
+                    "const": ".github/workflows/mission-command.yml"
+                  },
+                  "workflow_ref": {
+                    "type": "string",
+                    "pattern": "^josephmccann/AIFO-Control-Plane/\\.github/workflows/mission-command\\.yml@[0-9a-f]{40}$"
+                  },
+                  "workflow_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "run_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "run_attempt": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "job": {
+                    "const": "append"
+                  },
+                  "actor": {
+                    "const": "github-actions[bot]"
+                  },
+                  "trigger_actor": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "event": {
+                    "const": "issue_comment"
+                  },
+                  "head_sha": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "head_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  }
+                }
+              },
+              "consumed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "consumption_result": {
+                "enum": [
+                  "attempted",
+                  "activated"
+                ]
+              },
+              "post_consumption_state": {
+                "enum": [
+                  "locked",
+                  "active"
+                ]
+              },
+              "attempt_event_hash": {
+                "type": "string",
+                "pattern": "^(|[0-9a-f]{64})$"
+              },
+              "baseline_generation_commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "baseline_generation_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "active_execution_commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "active_execution_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "compatibility_proof": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "model",
+                  "chain_sha256",
+                  "chain_path",
+                  "baseline_commit",
+                  "baseline_tree",
+                  "active_commit",
+                  "active_tree",
+                  "commit_count",
+                  "invariant_paths",
+                  "invariant_digest"
+                ],
+                "properties": {
+                  "model": {
+                    "const": "reviewed_compatibility_chain"
+                  },
+                  "chain_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "chain_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "baseline_commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "baseline_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "active_commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "active_tree": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "commit_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "invariant_paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 6,
+                    "maxItems": 6,
+                    "const": [
+                      "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json",
+                      "engineering_os/canonical.py",
+                      "engineering_os/python_imports.py",
+                      "engineering_os/test_integrity.py",
+                      "engineering_os/test_integrity_cli.py",
+                      "scripts/engineering-os/validate-test-integrity"
+                    ]
+                  },
+                  "invariant_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
-    {"if": {"properties": {"type": {"const": "test_integrity.baseline.consumption_attempted"}}}, "then": {"properties": {"details": {"properties": {"consumption_result": {"const": "attempted"}, "post_consumption_state": {"const": "locked"}, "attempt_event_hash": {"const": ""}}}}}},
-    {"if": {"properties": {"type": {"const": "test_integrity.baseline.consumed"}}}, "then": {"properties": {"details": {"properties": {"consumption_result": {"const": "activated"}, "post_consumption_state": {"const": "active"}, "attempt_event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}}}
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "test_integrity.baseline.consumption_attempted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "details": {
+            "properties": {
+              "consumption_result": {
+                "const": "attempted"
+              },
+              "post_consumption_state": {
+                "const": "locked"
+              },
+              "attempt_event_hash": {
+                "const": ""
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "test_integrity.baseline.consumed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "details": {
+            "properties": {
+              "consumption_result": {
+                "const": "activated"
+              },
+              "post_consumption_state": {
+                "const": "active"
+              },
+              "attempt_event_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    }
   ]
 }

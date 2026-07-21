@@ -107,8 +107,13 @@ jobs:
           if activations:
               current = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
               tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
-              ok, code, _ = validate_activation_ledger(events, activations[0]["details"], repository=os.environ["GITHUB_REPOSITORY"], current_commit=current, current_tree=tree)
-              if not ok:
+              ok, code, detail = validate_activation_ledger(events, activations[0]["details"], repository=os.environ["GITHUB_REPOSITORY"], current_commit=current, current_tree=tree)
+              # A superseded pre-identity-separation authorization is terminal:
+              # it can never be attempted or consumed.  It must not brick every
+              # other mission command on the issue, so it is reported, not fatal.
+              if not ok and code == "ACTIVATION_AUTHORIZATION_SUPERSEDED":
+                  print("::warning::activation authorization superseded; reauthorization required")
+              elif not ok:
                   raise SystemExit(code)
           PY
           activation_args=()
@@ -126,8 +131,73 @@ jobs:
           if ready is None:
               raise SystemExit("authenticated Mission 26 Ready event is required")
           import subprocess
+          from engineering_os.canonical import content_sha256
+          from engineering_os.commands import (
+              _INVARIANT_BASELINE_PATHS, validate_compatibility_chain,
+          )
           head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
           tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+          chain_path = "outputs/mission-35-compatibility-chain.json"
+          baseline_commit = "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"
+          baseline_tree = "9fd7af9c8f231759ebbee851836dd83a097418d6"
+
+          def git(*args):
+              return subprocess.check_output(("git",) + args, text=True).strip()
+
+          def invariants(commit):
+              blobs = {}
+              for path in _INVARIANT_BASELINE_PATHS:
+                  try:
+                      blobs[path] = git("rev-parse", "%s:%s" % (commit, path))
+                  except subprocess.CalledProcessError:
+                      raise SystemExit("ACTIVATION_COMPATIBILITY_INVARIANT_MISSING")
+              return blobs
+
+          # Derive the chain from authenticated git history at command time.  A
+          # committed artifact would be stale the moment the default branch
+          # advanced; the range is a mechanical fact and is validated below.
+          invariant_blobs = invariants(baseline_commit)
+          records = []
+          listed = git("rev-list", "--reverse", "--topo-order",
+                       "%s..%s" % (baseline_commit, head))
+          for commit in [line for line in listed.splitlines() if line.strip()]:
+              parents = git("rev-list", "--parents", "-n", "1", commit).split()[1:]
+              changed = git("diff-tree", "--no-commit-id", "--name-only", "-r", commit)
+              governed = sorted({
+                  path for path in changed.splitlines()
+                  if path.startswith((
+                      ".github/actions/", ".github/workflows/", "engineering_os/",
+                      "scripts/engineering-os/", "tests/engineering_os/", "docs/engineering-os/"))
+              })
+              records.append({
+                  "commit": commit, "tree": git("rev-parse", "%s^{tree}" % commit),
+                  "parents": parents, "invariant_blobs": invariants(commit),
+                  "governed_changes": governed,
+              })
+          chain = {
+              "schema_version": "1.0.0", "model": "reviewed_compatibility_chain",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "baseline": {"commit": baseline_commit, "tree": baseline_tree},
+              "active": {"commit": head, "tree": tree},
+              "invariant_paths": list(_INVARIANT_BASELINE_PATHS),
+              "invariant_blobs": invariant_blobs, "commits": records,
+          }
+          proof = {
+              "model": "reviewed_compatibility_chain",
+              "chain_sha256": content_sha256(chain),
+              "chain_path": chain_path,
+              "baseline_commit": baseline_commit,
+              "baseline_tree": baseline_tree,
+              "active_commit": head,
+              "active_tree": tree,
+              "commit_count": len(chain.get("commits") or []),
+              "invariant_paths": list(_INVARIANT_BASELINE_PATHS),
+              "invariant_digest": content_sha256(invariant_blobs),
+          }
+          chain_ok, chain_code = validate_compatibility_chain(
+              chain, proof, repository=os.environ["GITHUB_REPOSITORY"])
+          if not chain_ok:
+              raise SystemExit(chain_code)
           issue = json.loads(os.environ["GITHUB_EVENT_ISSUE"])
           provenance = {
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -148,11 +218,23 @@ jobs:
                   "ready_declaration_sha256": ready["details"]["mission_sha256"],
               },
               "authorization_provenance": provenance,
-              # Bind the activation tuple to the exact immutable checkout used
-              # by this authenticated command run.  A historical remediation
-              # head is evidence, not the execution head eligible for activation.
-              "remediation_head": head,
-              "remediation_tree": tree,
+              # Historical identities keep their historical role.  The reviewed
+              # remediation and the commit/tree embedded in the reviewed baseline
+              # artifact do not advance with the default branch, and relabelling
+              # them to the live checkout would assert a correspondence that was
+              # never reviewed and is not proven.
+              "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+              "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+              "baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+              "baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+              # The live checkout is the active execution identity, authenticated
+              # from this run, and is what the ledger validates against.
+              "active_execution_commit": head,
+              "active_execution_tree": tree,
+              # Model B: the reviewed historical artifact stays authoritative only
+              # while a complete enumerated commit range proves the generator and
+              # analyzer surface never moved.  Ancestry is not a proof.
+              "compatibility_proof": proof,
               "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
               "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
               "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",

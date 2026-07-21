@@ -983,12 +983,32 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         ):
             self.assertIn(required, workflow)
 
-    def test_activation_tuple_binds_current_execution_head_not_historical_remediation(self):
+    def test_activation_tuple_separates_historical_identity_from_active_execution(self):
+        """The live checkout is the active execution identity, never a relabelled
+        historical remediation.  Binding ``remediation_head`` to the checkout
+        while keeping a historical ``baseline_artifact_sha256`` asserts a
+        correspondence that was never reviewed and is not proven."""
         workflow = self.read("mission-command.yml")
-        self.assertIn('"remediation_head": head', workflow)
-        self.assertIn('"remediation_tree": tree', workflow)
-        self.assertNotIn("b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", workflow)
-        self.assertNotIn("9fd7af9c8f231759ebbee851836dd83a097418d6", workflow)
+        self.assertIn('"active_execution_commit": head', workflow)
+        self.assertIn('"active_execution_tree": tree', workflow)
+        self.assertNotIn('"remediation_head": head', workflow)
+        self.assertNotIn('"remediation_tree": tree', workflow)
+        self.assertIn('"remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"', workflow)
+        self.assertIn('"baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e"', workflow)
+        self.assertIn('"baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6"', workflow)
+        self.assertIn('"compatibility_proof": proof', workflow)
+
+    def test_activation_requires_validated_compatibility_chain(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn("validate_compatibility_chain(", workflow)
+        self.assertIn("raise SystemExit(chain_code)", workflow)
+        # The range must be derived from git, not read from a committable file
+        # that would go stale the moment the default branch advanced.
+        self.assertIn('git("rev-list", "--reverse", "--topo-order"', workflow)
+
+    def test_superseded_authorization_is_terminal_but_not_fatal(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn("ACTIVATION_AUTHORIZATION_SUPERSEDED", workflow)
 
     def test_activation_lifecycle_revalidates_current_commit_and_tree(self):
         workflow = self.read("mission-command.yml")

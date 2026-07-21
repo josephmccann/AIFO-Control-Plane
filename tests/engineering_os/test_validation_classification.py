@@ -89,27 +89,32 @@ class ValidationClassificationTests(unittest.TestCase):
         self.assertIn("Unclassified script path", result.stderr)
 
     def test_tests_cannot_leave_tracked_validation_code_modified(self):
-        with tempfile.TemporaryDirectory() as directory:
-            clone = Path(directory) / "clone"
-            subprocess.run(
-                ["git", "clone", "--quiet", "--no-local", str(ROOT), str(clone)],
-                check=True,
-            )
-            shutil.copy2(ENTRYPOINT, clone / "scripts/validate.sh")
-            validator = clone / "scripts/engineering-os/validate-activation-closure"
-            validator.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-            result = subprocess.run(
-                [
-                    "bash", "-c",
-                    'source "$1"; verify_tracked_validation_state',
-                    "bash", str(clone / "scripts/validate.sh"),
-                ],
-                cwd=clone,
-                capture_output=True,
-                text=True,
-            )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("changed the tracked closure runtime surface", result.stderr)
+        for relative_path in (
+            "scripts/engineering-os/validate-activation-closure",
+            "engineering_os/__init__.py",
+            "scripts/install-dev-tools.sh",
+        ):
+            with self.subTest(relative_path=relative_path):
+                with tempfile.TemporaryDirectory() as directory:
+                    clone = Path(directory) / "clone"
+                    subprocess.run(
+                        ["git", "clone", "--quiet", "--no-local", str(ROOT), str(clone)],
+                        check=True,
+                    )
+                    shutil.copy2(ENTRYPOINT, clone / "scripts/validate.sh")
+                    (clone / relative_path).write_text("# runtime mutation\n", encoding="utf-8")
+                    result = subprocess.run(
+                        [
+                            "bash", "-c",
+                            'source "$1"; verify_tracked_validation_state',
+                            "bash", str(clone / "scripts/validate.sh"),
+                        ],
+                        cwd=clone,
+                        capture_output=True,
+                        text=True,
+                    )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("changed the tracked closure runtime surface", result.stderr)
 
     def test_symlinked_script_fails_closed_and_discovery_includes_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -12,6 +12,7 @@ SHELL_FILES=()
 PYTHON_FILES=()
 VALIDATION_RUNTIME_PATHS=(
   "scripts/validate.sh"
+  "scripts/install-dev-tools.sh"
   "scripts/engineering-os/validate-activation-closure"
   "docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json"
   "outputs/mission-32-closure-records-ready.json"
@@ -20,6 +21,7 @@ VALIDATION_RUNTIME_PATHS=(
   "outputs/mission-32-review-b-ready.md"
   "outputs/mission-32-reconciliation-ready.md"
   "schemas/engineering-os/activation-closure.schema.json"
+  "engineering_os/__init__.py"
   "engineering_os/schema.py"
   "engineering_os/errors.py"
 )

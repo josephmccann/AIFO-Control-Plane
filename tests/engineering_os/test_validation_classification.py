@@ -129,6 +129,8 @@ exercise
         source = ENTRYPOINT.read_text(encoding="utf-8")
         self.assertIn('validate-activation-closure', source)
         self.assertIn('ACTIVATION_DEPENDENCY_CLOSURE.json', source)
+        self.assertIn('materialization_head="$(git rev-parse HEAD)"', source)
+        self.assertIn('"$closure_head" "$materialization_head"', source)
 
 
 if __name__ == "__main__":

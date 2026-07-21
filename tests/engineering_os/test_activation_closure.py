@@ -256,6 +256,64 @@ class ActivationClosureTests(unittest.TestCase):
         prefix["run_id"] = 2
         self.assertNotEqual(validate(prefix).returncode, 0)
 
+    def test_materialization_requires_one_evidence_only_child(self):
+        accepted = subprocess.run([
+            str(SCRIPT), "--validate-materialization-range",
+            "dc8ef949c8da6fd343628e92cc377003071530c6",
+            "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a",
+        ], cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+        stale = subprocess.run([
+            str(SCRIPT), "--validate-materialization-range",
+            "dc8ef949c8da6fd343628e92cc377003071530c6",
+            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        ], cwd=ROOT, text=True, capture_output=True)
+        self.assertNotEqual(stale.returncode, 0)
+
+        code_child = subprocess.run([
+            str(SCRIPT), "--validate-materialization-range",
+            "0a07d5fd62c4844dd12449376ffdd0761db5b371",
+            "a60088c1114bcf96cf400ffbbe14c81fcf93a19b",
+        ], cwd=ROOT, text=True, capture_output=True)
+        self.assertNotEqual(code_child.returncode, 0)
+
+    def test_review_and_reconciliation_status_lines_are_closed(self):
+        review = "\n".join((
+            "Reviewer: reviewer-a", "HEAD: `%s`" % ("a" * 40),
+            "Critical: 0", "Important: 0", "PASS", "Checkpoint: " + "b" * 64,
+        ))
+        reconciliation = "\n".join((
+            "HEAD: `%s`" % ("a" * 40), "Critical: 0", "Important: 0",
+            "Reconciliation: PASS",
+        ))
+
+        def validate(mode, content):
+            with tempfile.NamedTemporaryFile("w", suffix=".md") as stream:
+                stream.write(content)
+                stream.flush()
+                return subprocess.run(
+                    [str(SCRIPT), mode, stream.name], cwd=ROOT, text=True, capture_output=True,
+                )
+
+        self.assertEqual(validate("--validate-review-status", review).returncode, 0)
+        self.assertEqual(validate("--validate-reconciliation-status", reconciliation).returncode, 0)
+        for candidate in (
+            review.replace("Critical: 0", "Critical: 01"),
+            review.replace("Important: 0", "Important: 01"),
+            review.replace("PASS", "Verdict: FAIL — not PASS"),
+            review + "\nCritical: 1",
+            review + "\nFAIL",
+        ):
+            self.assertNotEqual(validate("--validate-review-status", candidate).returncode, 0)
+        for candidate in (
+            reconciliation.replace("Critical: 0", "Critical: 01"),
+            reconciliation.replace("Important: 0", "Important: 01"),
+            reconciliation.replace("Reconciliation: PASS", "Reconciliation: PASSIVE"),
+            reconciliation + "\nReconciliation: FAIL",
+        ):
+            self.assertNotEqual(validate("--validate-reconciliation-status", candidate).returncode, 0)
+
     def test_missing_extra_stale_and_contradictory_records_fail(self):
         mutations = []
         missing = self.artifact(); missing["files"].pop(); mutations.append(missing)

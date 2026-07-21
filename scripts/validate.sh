@@ -178,8 +178,10 @@ main() {
   echo "Replaying the governed activation closure."
   closure_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["final"]["sha"])' \
     "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json")"
+  materialization_head="$(git rev-parse HEAD)"
   "$ROOT_DIR/scripts/engineering-os/validate-activation-closure" \
-    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json" "$closure_head"
+    "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json" \
+    "$closure_head" "$materialization_head"
 
   echo "Validation complete."
 }

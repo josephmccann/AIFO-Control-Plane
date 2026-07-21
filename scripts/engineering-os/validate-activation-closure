@@ -25,6 +25,13 @@ REVIEW_PATHS = {
     "outputs/mission-32-review-a-ready.md",
     "outputs/mission-32-review-b-ready.md",
 }
+MATERIALIZATION_PATHS = {
+    CLOSURE_PATH,
+    RECORDS_PATH,
+    RECONCILIATION_PATH,
+    VALIDATION_PATH,
+    *REVIEW_PATHS,
+}
 HISTORICAL_EVIDENCE_PATHS = {
     "outputs/mission-31-validation/ci-29772912364.log",
     "outputs/mission-31-review/mission-32-review-a-final-r2.md",
@@ -292,6 +299,41 @@ def verify_ci_validation(test, head, validation_text, integrity=None):
         raise SystemExit("CI evidence does not contain an exact deterministic test result")
 
 
+def verify_materialization_range(final_head, materialization_head):
+    """Require one evidence-only child after the reviewed implementation parent."""
+    if (git("rev-parse", final_head) != final_head
+            or git("rev-parse", materialization_head) != materialization_head):
+        raise SystemExit("closure materialization revisions must be full commit SHAs")
+    try:
+        parent = git("rev-parse", "%s^" % materialization_head)
+    except subprocess.CalledProcessError:
+        raise SystemExit("closure materialization must have exactly one parent")
+    if parent != final_head:
+        raise SystemExit("closure materialization must be the direct child of the reviewed head")
+    changed = set(git(
+        "diff-tree", "--no-commit-id", "--name-only", "-r", materialization_head,
+    ).splitlines())
+    if not changed or not changed <= MATERIALIZATION_PATHS:
+        raise SystemExit("closure materialization child contains non-evidence changes")
+
+
+def exact_status_lines(text, expected, reconciliation=False):
+    """Accept one closed status footer and reject prefixes, duplicates, or contradictions."""
+    lines = text.splitlines()
+    for prefix, value in expected.items():
+        matching = [line for line in lines if line.startswith(prefix)]
+        if matching != [value]:
+            raise SystemExit("review status evidence is missing, duplicated, or contradictory")
+    if reconciliation:
+        matching = [line for line in lines if line.startswith("Reconciliation:")]
+        if matching != ["Reconciliation: PASS"]:
+            raise SystemExit("reconciliation verdict is missing, duplicated, or contradictory")
+    else:
+        verdicts = [line for line in lines if line in {"PASS", "FAIL"} or line.startswith("Verdict:")]
+        if verdicts != ["PASS"]:
+            raise SystemExit("review verdict is missing, duplicated, or contradictory")
+
+
 def generate(base, head, records_path):
     """Emit canonical closure JSON; claims come only from explicit governed records."""
     if base != BASE_SHA:
@@ -425,12 +467,16 @@ def validate(path, head):
         report = report_data.decode("utf-8")
         canonical_report = re.sub(r"(?m)^Checkpoint:.*\n?", "", report)
         expected_checkpoint = hashlib.sha256(canonical_report.encode()).hexdigest()
-        required_report = (
-            "Reviewer: %s" % item["reviewer"], "HEAD: `%s`" % head,
-            "Critical: 0", "Important: 0", "PASS", "Checkpoint: %s" % expected_checkpoint,
-        )
-        if item.get("checkpoint") != expected_checkpoint or any(marker not in report for marker in required_report):
+        expected_status = {
+            "Reviewer:": "Reviewer: %s" % item["reviewer"],
+            "HEAD:": "HEAD: `%s`" % head,
+            "Critical:": "Critical: 0",
+            "Important:": "Important: 0",
+            "Checkpoint:": "Checkpoint: %s" % expected_checkpoint,
+        }
+        if item.get("checkpoint") != expected_checkpoint:
             raise SystemExit("closure review report is not checkpointed and head-bound")
+        exact_status_lines(report, expected_status)
         reviewers.add(item["reviewer"])
         checkpoints.add(item["checkpoint"])
 
@@ -443,14 +489,34 @@ def validate(path, head):
         RECONCILIATION_PATH,
     )
     reconciliation_text = reconciliation_data.decode("utf-8")
-    if any(marker not in reconciliation_text for marker in (
-        "HEAD: `%s`" % head, "Critical: 0", "Important: 0", "Reconciliation: PASS",
-    )):
-        raise SystemExit("reconciliation evidence is incomplete")
+    exact_status_lines(reconciliation_text, {
+        "HEAD:": "HEAD: `%s`" % head,
+        "Critical:": "Critical: 0",
+        "Important:": "Important: 0",
+    }, reconciliation=True)
     return 0
 
 
 def main(argv):
+    if len(argv) == 4 and argv[1] == "--validate-materialization-range":
+        verify_materialization_range(argv[2], argv[3])
+        return 0
+    if len(argv) == 3 and argv[1] == "--validate-review-status":
+        exact_status_lines(Path(argv[2]).read_text(encoding="utf-8"), {
+            "Reviewer:": "Reviewer: reviewer-a",
+            "HEAD:": "HEAD: `%s`" % ("a" * 40),
+            "Critical:": "Critical: 0",
+            "Important:": "Important: 0",
+            "Checkpoint:": "Checkpoint: %s" % ("b" * 64),
+        })
+        return 0
+    if len(argv) == 3 and argv[1] == "--validate-reconciliation-status":
+        exact_status_lines(Path(argv[2]).read_text(encoding="utf-8"), {
+            "HEAD:": "HEAD: `%s`" % ("a" * 40),
+            "Critical:": "Critical: 0",
+            "Important:": "Important: 0",
+        }, reconciliation=True)
+        return 0
     if len(argv) == 5 and argv[1] == "--validate-ci-record":
         test = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
         validation_text = Path(argv[3]).read_text(encoding="utf-8")
@@ -465,8 +531,16 @@ def main(argv):
         return 0
     if len(argv) == 5 and argv[1] == "--generate":
         return generate(argv[2], argv[3], Path(argv[4]))
+    if len(argv) == 4:
+        materialization_head = argv[3]
+        if git("rev-parse", "HEAD") != materialization_head:
+            raise SystemExit("closure materialization must match the checked-out HEAD")
+        result = validate(Path(argv[1]), argv[2])
+        verify_materialization_range(argv[2], materialization_head)
+        return result
     if len(argv) != 3:
         raise SystemExit("usage: validate-activation-closure CLOSURE.json ATTESTED_HEAD\n"
+                         "   or: validate-activation-closure CLOSURE.json ATTESTED_HEAD MATERIALIZATION_HEAD\n"
                          "   or: validate-activation-closure --generate BASE HEAD RECORDS.json")
     return validate(Path(argv[1]), argv[2])
 

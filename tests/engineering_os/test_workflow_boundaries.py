@@ -983,6 +983,13 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         ):
             self.assertIn(required, workflow)
 
+    def test_activation_tuple_binds_current_execution_head_not_historical_remediation(self):
+        workflow = self.read("mission-command.yml")
+        self.assertIn('"remediation_head": head', workflow)
+        self.assertIn('"remediation_tree": tree', workflow)
+        self.assertNotIn("b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e", workflow)
+        self.assertNotIn("9fd7af9c8f231759ebbee851836dd83a097418d6", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

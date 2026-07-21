@@ -146,8 +146,11 @@ jobs:
                   "ready_declaration_sha256": ready["details"]["mission_sha256"],
               },
               "authorization_provenance": provenance,
-              "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
-              "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+              # Bind the activation tuple to the exact immutable checkout used
+              # by this authenticated command run.  A historical remediation
+              # head is evidence, not the execution head eligible for activation.
+              "remediation_head": head,
+              "remediation_tree": tree,
               "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
               "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
               "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",

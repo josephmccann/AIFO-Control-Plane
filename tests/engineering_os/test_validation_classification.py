@@ -133,7 +133,7 @@ class ValidationClassificationTests(unittest.TestCase):
                     subprocess.run(
                         [
                             "git", "-c", "user.name=test", "-c", "user.email=test@example.com",
-                            "commit", "-am", "install current validation entrypoint",
+                            "commit", "--allow-empty", "-am", "install current validation entrypoint",
                         ],
                         cwd=clone,
                         check=True,

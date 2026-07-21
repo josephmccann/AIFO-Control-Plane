@@ -99,7 +99,7 @@ PR_BASE = {
     "tree": "6baecd54d0fd73a6e8e436b436c218ce0d64897b",
 }
 EXPECTED_CHECK_RESULTS = {
-    "Validate Terraform": ("success", True),
+    "Validate Terraform": ("failure", True),
     "GitGuardian Security Checks": ("success", True),
     "Test Integrity / Authorize exact caller and workflow provenance": ("success", False),
     "Test Integrity / Test Integrity": ("failure", False),
@@ -190,6 +190,7 @@ def validate_bootstrap_disposition(disposition, final, head):
         or disposition.get("candidate") != final
         or disposition.get("prior_interim_closure_sha256")
         != "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"
+        or disposition.get("materialization_required") is not True
         or disposition.get("required_contexts")
         != ["Validate Terraform", "GitGuardian Security Checks"]
         or disposition.get("activation_events") != []
@@ -261,6 +262,16 @@ def verify_bootstrap_transport(disposition, validation_text):
 
 def verify_ci_validation(test, head, validation_text, integrity=None):
     """Require exact evidence lines for the claimed CI validation record."""
+    if test.get("result") == "pass":
+        terminal = ("Closure: PASS", "Validation complete")
+    elif test.get("result") == "expected_materialization_denial":
+        terminal = (
+            "Closure: EXPECTED MATERIALIZATION DENIAL",
+            "Conclusion: failure",
+            "Expected terminal: closure materialization must be the direct child of the reviewed head",
+        )
+    else:
+        raise SystemExit("CI validation result is unknown")
     required = (
         "HEAD: %s" % head,
         "Command: validate-all",
@@ -272,10 +283,8 @@ def verify_ci_validation(test, head, validation_text, integrity=None):
         "ShellCheck: PASS",
         "Python: PASS",
         "Classification: PASS",
-        "Closure: PASS",
         "OK",
-        "Validation complete",
-    )
+    ) + terminal
     if integrity is not None:
         required += (
             "PR: 33",
@@ -436,8 +445,9 @@ def validate(path, head):
     if len(tests) != 1:
         raise SystemExit("closure requires one exact-head CI validation record")
     test = tests[0]
+    expected_result = "pass" if disposition is None else "expected_materialization_denial"
     if (test.get("head") != head or test.get("command") != "validate-all"
-            or test.get("result") != "pass"
+            or test.get("result") != expected_result
             or test.get("workflow_path") != ".github/workflows/terraform-validate.yml"
             or not isinstance(test.get("run_id"), int) or test["run_id"] < 1
             or not isinstance(test.get("run_attempt"), int) or test["run_attempt"] < 1):

@@ -34,9 +34,10 @@ class ActivationClosureTests(unittest.TestCase):
             "candidate": dict(artifact["final"]),
             "prior_interim_closure_sha256":
                 "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8",
+            "materialization_required": True,
             "required_contexts": ["Validate Terraform", "GitGuardian Security Checks"],
             "checks": [
-                {"name": "Validate Terraform", "conclusion": "success", "required": True, "check_run_id": 1},
+                {"name": "Validate Terraform", "conclusion": "failure", "required": True, "check_run_id": 1},
                 {"name": "GitGuardian Security Checks", "conclusion": "success", "required": True, "check_run_id": 2},
                 {"name": "Test Integrity / Authorize exact caller and workflow provenance", "conclusion": "success", "required": False, "check_run_id": 3},
                 {"name": "Test Integrity / Test Integrity", "conclusion": "failure", "required": False, "check_run_id": 4},
@@ -255,6 +256,26 @@ class ActivationClosureTests(unittest.TestCase):
         prefix = dict(record)
         prefix["run_id"] = 2
         self.assertNotEqual(validate(prefix).returncode, 0)
+
+        materialization = dict(record)
+        materialization["result"] = "expected_materialization_denial"
+        denied_evidence = evidence.replace(
+            "Closure: PASS", "Closure: EXPECTED MATERIALIZATION DENIAL",
+        ) + (
+            "\nConclusion: failure"
+            "\nExpected terminal: closure materialization must be the direct child of the reviewed head"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as record_file:
+            with tempfile.NamedTemporaryFile("w", suffix=".log") as evidence_file:
+                json.dump(materialization, record_file)
+                record_file.flush()
+                evidence_file.write(denied_evidence)
+                evidence_file.flush()
+                denied = subprocess.run([
+                    str(SCRIPT), "--validate-ci-record", record_file.name,
+                    evidence_file.name, head,
+                ], cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual(denied.returncode, 0, denied.stderr)
 
     def test_materialization_requires_one_evidence_only_child(self):
         accepted = subprocess.run([

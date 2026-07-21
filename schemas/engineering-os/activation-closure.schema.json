@@ -70,12 +70,13 @@
     },
     "bootstrap_disposition": {
       "type": "object", "additionalProperties": false,
-      "required": ["pull_request", "base", "candidate", "prior_interim_closure_sha256", "required_contexts", "checks", "test_integrity", "deployment_audit", "activation_events", "runtime_deployment", "preserved_pull_request"],
+      "required": ["pull_request", "base", "candidate", "prior_interim_closure_sha256", "materialization_required", "required_contexts", "checks", "test_integrity", "deployment_audit", "activation_events", "runtime_deployment", "preserved_pull_request"],
       "properties": {
         "pull_request": {"const": 33},
         "base": {"$ref": "#/$defs/revision"},
         "candidate": {"$ref": "#/$defs/revision"},
         "prior_interim_closure_sha256": {"const": "1a92c72f1b1631f1d6f5382a776cacfc72020f7d0c4fe0203f655fdd52c3a1a8"},
+        "materialization_required": {"const": true},
         "required_contexts": {"const": ["Validate Terraform", "GitGuardian Security Checks"]},
         "checks": {
           "type": "array", "minItems": 4, "maxItems": 4,
@@ -143,7 +144,7 @@
       }
     },
     "records": {"$ref": "#/$defs/fileDigest"},
-    "tests": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["command", "result", "head", "evidence_path", "evidence_sha256", "workflow_path", "run_id", "run_attempt"], "properties": {"command": {"const": "validate-all"}, "result": {"const": "pass"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "evidence_path": {"const": "outputs/mission-32-validation/exact-head-ci-ready.log"}, "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "workflow_path": {"const": ".github/workflows/terraform-validate.yml"}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}}}},
+    "tests": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["command", "result", "head", "evidence_path", "evidence_sha256", "workflow_path", "run_id", "run_attempt"], "properties": {"command": {"const": "validate-all"}, "result": {"enum": ["pass", "expected_materialization_denial"]}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "evidence_path": {"const": "outputs/mission-32-validation/exact-head-ci-ready.log"}, "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "workflow_path": {"const": ".github/workflows/terraform-validate.yml"}, "run_id": {"type": "integer", "minimum": 1}, "run_attempt": {"type": "integer", "minimum": 1}}}},
     "evidence": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/fileDigest"}},
     "reviews": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "object", "additionalProperties": false, "required": ["reviewer", "checkpoint", "head", "critical", "important", "report_path", "report_sha256"], "properties": {"reviewer": {"type": "string", "minLength": 1}, "checkpoint": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "critical": {"const": 0}, "important": {"const": 0}, "report_path": {"enum": ["outputs/mission-32-review-a-ready.md", "outputs/mission-32-review-b-ready.md"]}, "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}},
     "reconciliation": {"type": "object", "additionalProperties": false, "required": ["head", "critical", "important", "result", "path", "sha256"], "properties": {"head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "critical": {"const": 0}, "important": {"const": 0}, "result": {"const": "pass"}, "path": {"const": "outputs/mission-32-reconciliation-ready.md"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}

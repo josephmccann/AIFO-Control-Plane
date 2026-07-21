@@ -110,3 +110,29 @@ The range is validated as a DAG reachable from the active execution commit
 rather than as a linear predecessor walk. A linear walk cannot express a real
 merge topology, and it could not detect an enumerated commit that sits outside
 the active commit's history; such an orphan is now rejected.
+
+### Activation nonce retirement
+
+Every nonce that has appeared in any activation authorization event is
+permanently reserved and can never be reused by a later authorization. This
+holds for structurally superseded authorizations: they are excluded from active
+authorization selection, but their nonces stay retired.
+
+Selection and retirement are deliberately separate concerns. A superseded
+authorization is skipped when choosing the active authorization — so a valid
+replacement can be appended — while its nonce is still added to the retired set,
+so the replacement may not reuse it.
+
+Retirement is enforced at two independent layers, and neither trusts the other:
+
+- `authorize_command_proposal` rejects a proposed authorization whose nonce
+  matches any prior authorization event, including superseded ones, before any
+  event can be appended.
+- `validate_activation_ledger` reserves the nonce of every superseded
+  authorization and rejects a live authorization that reuses one, so a manually
+  constructed or malformed history that bypasses the proposal path still fails
+  closed. Both paths return `ACTIVATION_NONCE_RETIRED`.
+
+A distinct fresh nonce is unaffected and authorizes normally. Single-use
+activation is unchanged: repeated authorization, attempt, or consumption still
+fail closed.

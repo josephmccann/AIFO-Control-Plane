@@ -542,6 +542,9 @@ class ActivationIdentityRoleTests(ActivationLedgerTests):
                       "active_execution_commit", "active_execution_tree",
                       "compatibility_proof"):
             legacy.pop(field)
+        # The superseded authorization carried its own (now retired) nonce,
+        # distinct from the replacement's fresh nonce.
+        legacy["activation_nonce"] = "retired-legacy-nonce-000000000000000000"
         return legacy
 
     def test_superseded_authorization_can_be_replaced(self):
@@ -605,6 +608,99 @@ class ActivationIdentityRoleTests(ActivationLedgerTests):
         self.assertEqual(
             self.ledger(candidate, compatibility_chain=chain)[1],
             "COMPATIBILITY_CHAIN_RANGE_MISSING")
+
+
+class NonceRetirementTests(ActivationLedgerTests):
+    """A nonce reserved by a prior authorization can never be reused.
+
+    Retirement is enforced by the ledger itself, independent of any
+    proposal-time control, so a manually constructed or malformed history
+    cannot smuggle a reused nonce past validation.
+    """
+
+    def legacy_with_nonce(self, nonce, sequence=1):
+        legacy = copy.deepcopy(self.activation)
+        for field in ("baseline_generation_commit", "baseline_generation_tree",
+                      "active_execution_commit", "active_execution_tree",
+                      "compatibility_proof"):
+            legacy.pop(field)
+        legacy["activation_nonce"] = nonce
+        legacy["founder_authorization_sequence"] = sequence
+        evt = self.auth()
+        evt["details"] = legacy
+        evt["sequence"] = sequence
+        return evt
+
+    def fresh_with_nonce(self, nonce, sequence=2):
+        fresh = copy.deepcopy(self.activation)
+        fresh["activation_nonce"] = nonce
+        fresh["founder_authorization_sequence"] = sequence
+        evt = self.auth()
+        evt["details"] = copy.deepcopy(fresh)
+        evt["sequence"] = sequence
+        return evt, fresh
+
+    def test_replacement_reusing_a_retired_nonce_fails_closed(self):
+        retired = self.activation["activation_nonce"]
+        legacy = self.legacy_with_nonce(retired, sequence=1)
+        fresh_evt, fresh = self.fresh_with_nonce(retired, sequence=2)
+        events = self.chain([legacy, fresh_evt])
+        ok, code, _ = validate_activation_ledger(
+            events, fresh, repository=self.activation["repository"])
+        self.assertEqual((ok, code), (False, "ACTIVATION_NONCE_RETIRED"))
+
+    def test_replacement_with_a_distinct_nonce_still_authorizes(self):
+        legacy = self.legacy_with_nonce("retired-nonce-aaaaaaaaaaaaaaaaaaaaaaaaaaaa", sequence=1)
+        fresh_evt, fresh = self.fresh_with_nonce("fresh-nonce-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", sequence=2)
+        events = self.chain([legacy, fresh_evt])
+        ok, code, _ = validate_activation_ledger(
+            events, fresh, repository=self.activation["repository"])
+        self.assertEqual((ok, code), (True, "ACTIVATION_AUTHORIZED"))
+
+    def test_no_attempt_or_consume_event_is_appended_on_retired_rejection(self):
+        retired = self.activation["activation_nonce"]
+        legacy = self.legacy_with_nonce(retired, sequence=1)
+        fresh_evt, fresh = self.fresh_with_nonce(retired, sequence=2)
+        events = self.chain([legacy, fresh_evt])
+        ok, code, details = validate_activation_ledger(
+            events, fresh, repository=self.activation["repository"])
+        self.assertFalse(ok)
+        # Fail-closed: the rejection yields no projected activation state.
+        self.assertEqual(details, {})
+
+    def test_retirement_holds_when_the_reused_nonce_matches_the_active_execution(self):
+        """Even with matching current-commit/tree, a retired nonce is rejected."""
+        retired = self.activation["activation_nonce"]
+        legacy = self.legacy_with_nonce(retired, sequence=1)
+        fresh_evt, fresh = self.fresh_with_nonce(retired, sequence=2)
+        events = self.chain([legacy, fresh_evt])
+        ok, code, _ = validate_activation_ledger(
+            events, fresh, repository=self.activation["repository"],
+            current_commit=fresh["active_execution_commit"],
+            current_tree=fresh["active_execution_tree"])
+        self.assertEqual((ok, code), (False, "ACTIVATION_NONCE_RETIRED"))
+
+    def test_zero_state_history_has_no_retired_nonces(self):
+        """With no prior authorization, nothing is retired and a first
+        authorization proceeds normally."""
+        fresh_evt, fresh = self.fresh_with_nonce(self.activation["activation_nonce"], sequence=1)
+        fresh["founder_authorization_sequence"] = 1
+        fresh_evt["details"]["founder_authorization_sequence"] = 1
+        events = self.chain([fresh_evt])
+        ok, code, _ = validate_activation_ledger(
+            events, fresh, repository=self.activation["repository"])
+        self.assertEqual((ok, code), (True, "ACTIVATION_AUTHORIZED"))
+
+    def test_superseded_authorization_is_still_excluded_from_active_selection(self):
+        """Retirement accounting does not resurrect the superseded event as a
+        usable authorization; the two concerns stay separate."""
+        legacy = self.legacy_with_nonce("retired-nonce-cccccccccccccccccccccccccccc", sequence=1)
+        legacy_details = copy.deepcopy(legacy["details"])
+        events = self.chain([legacy])
+        # Asked to validate the superseded tuple itself -> still superseded.
+        ok, code, _ = validate_activation_ledger(
+            events, legacy_details, repository=self.activation["repository"])
+        self.assertEqual((ok, code), (False, "ACTIVATION_AUTHORIZATION_SUPERSEDED"))
 
 
 if __name__ == "__main__":

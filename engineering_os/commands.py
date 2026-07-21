@@ -529,6 +529,10 @@ def validate_activation_ledger(
     attempts = []
     consumptions = []
     nonces = set()
+    # Nonces permanently reserved by prior authorization events (currently the
+    # structurally superseded ones).  A retired nonce can never be reused by a
+    # later authorization, independent of any proposal-time control.
+    retired_nonces = set()
     strict_chain = all(
         isinstance(event, Mapping)
         and isinstance(event.get("mission_id"), str)
@@ -553,7 +557,17 @@ def validate_activation_ledger(
             # and stays visible, but it can never be attempted or consumed, so
             # it must not be compared against the current tuple nor block the
             # replacement authorization that identity separation requires.
+            #
+            # Selection and nonce-retirement accounting are deliberately
+            # separate concerns: the superseded event is excluded from active
+            # authorization selection, but its nonce is permanently reserved so
+            # no later authorization can reuse it.
             superseded.append(event)
+            _superseded_details = event.get("details")
+            if isinstance(_superseded_details, Mapping):
+                _superseded_nonce = _superseded_details.get("activation_nonce")
+                if isinstance(_superseded_nonce, str):
+                    retired_nonces.add(_superseded_nonce)
             continue
         if (not isinstance(event.get("sequence"), int)
                 or isinstance(event.get("sequence"), bool)
@@ -616,6 +630,12 @@ def validate_activation_ledger(
         return False, "ACTIVATION_AUTHORIZATION_REPLAY", {}
     if len(nonces) != len(authorizations):
         return False, "ACTIVATION_NONCE_REPLAY", {}
+    # A live authorization may never reuse a nonce retired by a superseded
+    # authorization.  This holds even if a manually constructed history bypasses
+    # the proposal-time guard, because the ledger reserves the retired nonce
+    # itself rather than trusting the proposal path.
+    if nonces & retired_nonces:
+        return False, "ACTIVATION_NONCE_RETIRED", {}
     if len(attempts) > 1:
         return False, "ACTIVATION_ATTEMPT_REPLAY", {}
     if len(consumptions) > 1:
@@ -1456,6 +1476,19 @@ def authorize_command_proposal(
             existing_consumption = next((item for item in history.events if item.get("type") == _ACTIVATION_CONSUMED), None)
             if event_type == _ACTIVATION_AUTHORIZED and existing_authorization:
                 return ProposalDecision(False, "ACTIVATION_AUTHORIZATION_REPLAY")
+            if event_type == _ACTIVATION_AUTHORIZED:
+                # Reject reuse of any nonce from any prior authorization event,
+                # including structurally superseded ones, before an event can be
+                # appended.  Superseded authorizations are excluded from active
+                # selection above but their nonces stay permanently reserved.
+                proposed_nonce = event_details.get("activation_nonce")
+                for item in history.events:
+                    if item.get("type") != _ACTIVATION_AUTHORIZED:
+                        continue
+                    prior = item.get("details")
+                    prior_nonce = prior.get("activation_nonce") if isinstance(prior, Mapping) else None
+                    if isinstance(prior_nonce, str) and prior_nonce == proposed_nonce:
+                        return ProposalDecision(False, "ACTIVATION_NONCE_RETIRED")
             if event_type == _ACTIVATION_ATTEMPTED and (existing_attempt or existing_consumption):
                 return ProposalDecision(False, "ACTIVATION_ATTEMPT_REPLAY")
             if event_type == _ACTIVATION_CONSUMED and existing_consumption:

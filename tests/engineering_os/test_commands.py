@@ -427,6 +427,107 @@ class CommandTests(unittest.TestCase):
         self.assertTrue(consume.allowed)
         self.assertEqual(consume.events[0]["details"]["consumption_result"], "activated")
 
+    def _retired_nonce_context(self, proposed_nonce):
+        """Build a history containing a superseded legacy authorization and an
+        ``/eos authorize-baseline`` command proposing ``proposed_nonce``."""
+        mission, policy = valid_context()
+        ready_source = source_comment(40, "agent-a", "/eos ready", issue=26)
+        ready = audit_event(
+            "mission.ready", "agent-a", "producer", ready_source["html_url"],
+            ready_source["created_at"], 1, None, ready_details(mission, "ready-40"),
+        )
+        workflow_sha = "3" * 40
+        provenance = {
+            "repository": REPOSITORY, "workflow_path": ".github/workflows/mission-command.yml",
+            "workflow_ref": "%s/.github/workflows/mission-command.yml@%s" % (REPOSITORY, workflow_sha),
+            "workflow_sha": workflow_sha, "run_id": 41, "run_attempt": 1, "job": "prepare",
+            "actor": BOT, "trigger_actor": "josephmccann", "event": "issue_comment",
+            "head_sha": workflow_sha, "head_tree": "4" * 40,
+        }
+        identity = {
+            "repository": REPOSITORY, "number": 26, "node_id": "I_kwDOmission26",
+            "url": "https://github.com/%s/issues/26" % REPOSITORY, "state": "open",
+            "ready_event_hash": ready["event_hash"], "ready_sequence": ready["sequence"],
+            "ready_declaration_sha256": ready["details"]["mission_sha256"],
+        }
+        full = {
+            "repository": REPOSITORY, "mission_issue": 26,
+            "mission_issue_identity": identity, "authorization_provenance": provenance,
+            "remediation_head": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+            "baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+            "active_execution_commit": ACTIVE_COMMIT, "active_execution_tree": ACTIVE_TREE,
+            "compatibility_proof": activation_proof(),
+            "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
+            "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
+            "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
+            "analyzer_identity": "engineering_os.test_integrity_cli:b3c0a2c7",
+            "workflow_identity": "reusable-test-integrity@b3142f5bbed547a97a70f29bda33682294948aed",
+            "caller_identity": "test-integrity-caller@80256915bdca989edc7580898971dbad1b199170",
+            "immutable_kernel_identity": "5a273627a1a4d4addfcf81129dcdbda4dc58c383",
+            "manifest_identity": "db1f444bad41ecf1db5057c8cbbae6390ffb7f5f7477e0c7a3bd8ae35a7a6dab",
+            "rollback_sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+            "activation_type": "initial_test_integrity_baseline", "single_use": True,
+            "founder_authorization_identity": "josephmccann", "founder_authorization_sequence": 2,
+        }
+        # Superseded legacy authorization already on the issue, carrying the
+        # retired nonce.
+        RETIRED = "retired-nonce-012345678901234567890123456789"
+        legacy = {k: v for k, v in full.items() if k not in (
+            "baseline_generation_commit", "baseline_generation_tree",
+            "active_execution_commit", "active_execution_tree", "compatibility_proof",
+        )}
+        legacy["activation_nonce"] = RETIRED
+        legacy["founder_authorization_sequence"] = 1
+        legacy_source = source_comment(42, "josephmccann",
+                                       "/eos authorize-baseline %s" % RETIRED, issue=26)
+        legacy_event = audit_event(
+            "test_integrity.baseline.authorized", "josephmccann", "founder",
+            legacy_source["html_url"], legacy_source["created_at"], 2,
+            ready["event_hash"], copy.deepcopy(legacy),
+        )
+        proposed = copy.deepcopy(full)
+        proposed["activation_nonce"] = proposed_nonce
+        run_url = "https://github.com/%s/actions/runs/41" % REPOSITORY
+        run = {"id": 41, "html_url": run_url, "name": "Mission command",
+               "path": ".github/workflows/mission-command.yml", "event": "issue_comment",
+               "run_attempt": 1, "head_sha": workflow_sha,
+               "actor": {"login": "josephmccann"}, "repository": {"full_name": REPOSITORY}}
+        cmd = source_comment(44, "josephmccann",
+                             "/eos authorize-baseline %s" % proposed_nonce, issue=26)
+        comments = [ready_source, event_comment(43, [ready], issue=26),
+                    legacy_source, event_comment(45, [legacy_event], issue=26), cmd]
+        return dict(comments=comments, mission=mission, policy=policy,
+                    activation=proposed, run=run, run_url=run_url, cmd=cmd, retired=RETIRED)
+
+    def test_authorize_proposal_rejects_retired_nonce(self):
+        """A replacement authorization reusing a superseded nonce fails closed
+        before any event can be appended."""
+        ctx = self._retired_nonce_context(proposed_nonce="retired-nonce-012345678901234567890123456789")
+        proposal = authorize_command_proposal(
+            ctx["comments"], ctx["mission"], ctx["policy"], repository=REPOSITORY,
+            command_comment_url=ctx["cmd"]["html_url"], actions_runs=[ctx["run"]],
+            activation=ctx["activation"], activation_source_url=ctx["run_url"],
+        )
+        self.assertFalse(proposal.allowed)
+        self.assertEqual(proposal.code, "ACTIVATION_NONCE_RETIRED")
+
+    def test_authorize_proposal_allows_distinct_replacement_nonce(self):
+        """A distinct fresh nonce still produces a valid replacement proposal."""
+        ctx = self._retired_nonce_context(proposed_nonce="fresh-distinct-nonce-98765432109876543210")
+        proposal = authorize_command_proposal(
+            ctx["comments"], ctx["mission"], ctx["policy"], repository=REPOSITORY,
+            command_comment_url=ctx["cmd"]["html_url"], actions_runs=[ctx["run"]],
+            activation=ctx["activation"], activation_source_url=ctx["run_url"],
+        )
+        self.assertTrue(proposal.allowed, proposal.code)
+        self.assertEqual(proposal.events[0]["type"], "test_integrity.baseline.authorized")
+        self.assertEqual(
+            proposal.events[0]["details"]["activation_nonce"],
+            "fresh-distinct-nonce-98765432109876543210",
+        )
+
     def test_forged_founder_event_and_wrong_source_command_are_rejected(self):
         mission, policy = valid_context()
         source = source_comment(3, "agent-a", "/eos ready")

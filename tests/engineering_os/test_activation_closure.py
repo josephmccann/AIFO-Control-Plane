@@ -300,11 +300,15 @@ class ActivationClosureTests(unittest.TestCase):
                 )
 
     def test_materialization_requires_one_evidence_only_child(self):
+        local_environment = {
+            key: value for key, value in os.environ.items()
+            if key not in {"GITHUB_ACTIONS", "GITHUB_EVENT_NAME"}
+        }
         accepted = subprocess.run([
             str(SCRIPT), "--validate-materialization-range",
             "dc8ef949c8da6fd343628e92cc377003071530c6",
             "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a",
-        ], cwd=ROOT, text=True, capture_output=True)
+        ], cwd=ROOT, text=True, capture_output=True, env=local_environment)
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
         stale = subprocess.run([
@@ -345,7 +349,7 @@ class ActivationClosureTests(unittest.TestCase):
                 str(clone / "scripts/engineering-os/validate-activation-closure"),
                 "--validate-materialization-range",
                 "dc8ef949c8da6fd343628e92cc377003071530c6", merge.stdout.strip(),
-            ], cwd=clone, text=True, capture_output=True)
+            ], cwd=clone, text=True, capture_output=True, env=local_environment)
             self.assertEqual(merged.returncode, 0, merged.stderr)
             ci_environment = {
                 **os.environ,

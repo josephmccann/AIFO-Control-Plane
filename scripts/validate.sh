@@ -59,8 +59,19 @@ classify_script() {
   elif [[ -x "$file" ]]; then
     echo "Unclassified executable script: ${file#"$ROOT_DIR"/}" >&2
     return 1
+  elif [[ "$file" == "$ROOT_DIR/scripts/"* || "${file##*/}" != *.* ]]; then
+    echo "Unclassified script path: ${file#"$ROOT_DIR"/}" >&2
+    return 1
   else
     echo "ignore"
+  fi
+}
+
+verify_tracked_validation_state() {
+  if ! git -C "$ROOT_DIR" diff --quiet HEAD -- \
+      || ! git -C "$ROOT_DIR" diff --cached --quiet HEAD --; then
+    echo "Validation tests modified tracked repository state." >&2
+    return 1
   fi
 }
 
@@ -117,6 +128,7 @@ main() {
 
   echo "Running Engineering OS tests."
   python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v
+  verify_tracked_validation_state
 
   echo "Checking Engineering OS Python syntax."
   python3 -m py_compile "$ROOT_DIR"/engineering_os/*.py
@@ -175,6 +187,7 @@ main() {
   echo "Running actionlint."
   actionlint "$ROOT_DIR"/.github/workflows/*.yml
 
+  verify_tracked_validation_state
   echo "Replaying the governed activation closure."
   closure_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["final"]["sha"])' \
     "$ROOT_DIR/docs/engineering-os/ACTIVATION_DEPENDENCY_CLOSURE.json")"

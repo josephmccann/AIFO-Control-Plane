@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -77,10 +78,38 @@ class ValidationClassificationTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Unclassified executable script", result.stderr)
 
-    def test_non_executable_unclassified_file_is_ignored(self):
-        result = self.classify("notes", "not a script\n", executable=False)
+    def test_non_executable_data_file_is_ignored(self):
+        result = self.classify("notes.txt", "not a script\n", executable=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "ignore")
+
+    def test_non_executable_extensionless_script_path_fails_closed(self):
+        result = self.classify("payload", "echo bypass\n", executable=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unclassified script path", result.stderr)
+
+    def test_tests_cannot_leave_tracked_validation_code_modified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clone = Path(directory) / "clone"
+            subprocess.run(
+                ["git", "clone", "--quiet", "--no-local", str(ROOT), str(clone)],
+                check=True,
+            )
+            shutil.copy2(ENTRYPOINT, clone / "scripts/validate.sh")
+            validator = clone / "scripts/engineering-os/validate-activation-closure"
+            validator.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; verify_tracked_validation_state',
+                    "bash", str(clone / "scripts/validate.sh"),
+                ],
+                cwd=clone,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("modified tracked repository state", result.stderr)
 
     def test_symlinked_script_fails_closed_and_discovery_includes_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -131,6 +160,7 @@ exercise
         self.assertIn('ACTIVATION_DEPENDENCY_CLOSURE.json', source)
         self.assertIn('materialization_head="$(git rev-parse HEAD)"', source)
         self.assertIn('"$closure_head" "$materialization_head"', source)
+        self.assertGreaterEqual(source.count("verify_tracked_validation_state"), 3)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 """Generate or validate the deterministic Mission #32 dependency closure."""
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -338,8 +339,13 @@ def verify_materialization_range(final_head, materialization_head):
         raise SystemExit("closure materialization revisions must be full commit SHAs")
     topology = git("rev-list", "--parents", "-n", "1", materialization_head).split()
     if len(topology) == 2:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            raise SystemExit("CI closure materialization requires the exact protected-base merge candidate")
         evidence_child = materialization_head
     elif len(topology) == 3:
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get(
+                "GITHUB_EVENT_NAME") not in {"pull_request", "push"}:
+            raise SystemExit("CI closure materialization has an unauthorized workflow event")
         if topology[1] != PR_BASE["sha"]:
             raise SystemExit("closure merge candidate has the wrong protected-base parent")
         evidence_child = topology[2]

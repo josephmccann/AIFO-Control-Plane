@@ -347,6 +347,34 @@ class ActivationClosureTests(unittest.TestCase):
                 "dc8ef949c8da6fd343628e92cc377003071530c6", merge.stdout.strip(),
             ], cwd=clone, text=True, capture_output=True)
             self.assertEqual(merged.returncode, 0, merged.stderr)
+            ci_environment = {
+                **os.environ,
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_EVENT_NAME": "pull_request",
+            }
+            ci_merged = subprocess.run([
+                str(clone / "scripts/engineering-os/validate-activation-closure"),
+                "--validate-materialization-range",
+                "dc8ef949c8da6fd343628e92cc377003071530c6", merge.stdout.strip(),
+            ], cwd=clone, text=True, capture_output=True, env=ci_environment)
+            self.assertEqual(ci_merged.returncode, 0, ci_merged.stderr)
+            ci_direct = subprocess.run([
+                str(clone / "scripts/engineering-os/validate-activation-closure"),
+                "--validate-materialization-range",
+                "dc8ef949c8da6fd343628e92cc377003071530c6",
+                "0fc6d91d93a1fad24b76c4fead81dd3d3e18ea2a",
+            ], cwd=clone, text=True, capture_output=True, env=ci_environment)
+            self.assertNotEqual(ci_direct.returncode, 0)
+            dispatch_environment = {
+                **ci_environment,
+                "GITHUB_EVENT_NAME": "workflow_dispatch",
+            }
+            dispatched = subprocess.run([
+                str(clone / "scripts/engineering-os/validate-activation-closure"),
+                "--validate-materialization-range",
+                "dc8ef949c8da6fd343628e92cc377003071530c6", merge.stdout.strip(),
+            ], cwd=clone, text=True, capture_output=True, env=dispatch_environment)
+            self.assertNotEqual(dispatched.returncode, 0)
 
     def test_review_and_reconciliation_status_lines_are_closed(self):
         review = "\n".join((

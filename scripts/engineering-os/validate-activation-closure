@@ -373,6 +373,15 @@ def verify_materialization_range(final_head, materialization_head):
         raise SystemExit("closure materialization child contains non-evidence changes")
 
 
+def verify_successor_head(final_head, successor_head):
+    """Preserve a reviewed closure while validating a descendant successor."""
+    if git("merge-base", final_head, successor_head) != final_head:
+        raise SystemExit("closure successor is not descended from the reviewed head")
+    # Re-validate the closure's own content and hashes at the reviewed head;
+    # successor implementation commits may carry refreshed historical evidence.
+    validate(CLOSURE_PATH, final_head)
+
+
 def exact_status_lines(text, expected, reconciliation=False):
     """Accept one closed status footer and reject prefixes, duplicates, or contradictions."""
     lines = text.splitlines()
@@ -557,6 +566,9 @@ def validate(path, head):
 def main(argv):
     if len(argv) == 4 and argv[1] == "--validate-materialization-range":
         verify_materialization_range(argv[2], argv[3])
+        return 0
+    if len(argv) == 4 and argv[1] == "--validate-successor-head":
+        verify_successor_head(argv[2], argv[3])
         return 0
     if len(argv) == 3 and argv[1] == "--validate-review-status":
         exact_status_lines(Path(argv[2]).read_text(encoding="utf-8"), {

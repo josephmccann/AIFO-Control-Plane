@@ -88,6 +88,41 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def test_non_ready_validation_record_fails_closed(self):
+        # A snapshot that internally records a failed/dirty validation state must
+        # not validate as ready, even with consistent digests.
+        import copy
+        import hashlib
+        import re
+        import tempfile
+        for path, value in (
+            (("validate_all",), "dirty"),
+            (("deterministic_tests", "result"), "FAILED"),
+        ):
+            snap = copy.deepcopy(self.snapshot)
+            target = snap["validation_and_review"]
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            new_json = json.dumps(snap, indent=2, sort_keys=True) + "\n"
+            json_digest = hashlib.sha256(new_json.encode()).hexdigest()
+            md = re.sub(r"(Machine artifact:\*\* `[^`]+` — sha256 `)[0-9a-f]{64}(`)",
+                        r"\g<1>%s\g<2>" % json_digest, self.md)
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                (tmp / JSON_PATH.name).write_text(new_json, encoding="utf-8")
+                (tmp / MD_PATH.name).write_text(md, encoding="utf-8")
+                (tmp / SHA_PATH.name).write_text(
+                    "# d\n%s  %s\n%s  %s\n" % (
+                        JSON_PATH.name, json_digest,
+                        MD_PATH.name, hashlib.sha256(md.encode()).hexdigest()),
+                    encoding="utf-8")
+                result = subprocess.run(
+                    [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertNotEqual(result.returncode, 0, path)
+            self.assertIn("READINESS_SNAPSHOT_INVALID", result.stderr)
+
     def test_drifted_boundary_rows_fail_closed(self):
         for row in ("| deployment_performed | `False` |",
                     "| credential_or_secret_changed | `False` |",

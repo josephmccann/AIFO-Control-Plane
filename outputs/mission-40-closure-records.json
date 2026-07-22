@@ -5,8 +5,8 @@
   "outputs/eos-activation-readiness/activation-readiness-snapshot.md": "9ee4955e75e9a12eca7f16d2a1ef942345b2c9b1",
   "outputs/eos-activation-readiness/activation-readiness-snapshot.sha256": "3ccd0f4d41cd6da2eb74d64ceb55e5d5c5dc1f2d",
   "scripts/engineering-os/validate-activation-closure": "1fbb8af897153c8276bde4df03af77bb194aa02a",
-  "scripts/engineering-os/validate-activation-readiness": "ae5cd7affd44bbf19a060c2f80e744bd851207c9",
+  "scripts/engineering-os/validate-activation-readiness": "70c5a602062481ced49923bc063ab55e426ba47d",
   "tests/engineering_os/test_activation_ledger.py": "2f8a8d5ce533ae5dd1fbee30d3cf6473fcd7e788",
-  "tests/engineering_os/test_activation_readiness.py": "389e16bf2d9208f723ef843ae5b6033cc684ecfa",
+  "tests/engineering_os/test_activation_readiness.py": "8cac7d6760f67169983ff522c17c6f1c2dd35189",
   "tests/engineering_os/test_commands.py": "3d96a9939c92fad3bd8381ed972488beff438e4e"
 }

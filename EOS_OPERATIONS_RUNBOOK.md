@@ -40,10 +40,10 @@ Post on **issue #26**:
 
 ## 2. `/eos attempt-baseline <SAME_NONCE>`
 
-Post on **issue #26** using the **same** nonce:
+Post on **issue #26** using the **same** nonce authorized in step 1:
 
 ```
-/eos attempt-baseline <FRESH_NONCE>
+/eos attempt-baseline <SAME_NONCE>
 ```
 
 **Expected success:** a `test_integrity.baseline.consumption_attempted` event, `consumption_result: attempted`, `post_consumption_state: locked`.
@@ -59,10 +59,10 @@ Post on **issue #26** using the **same** nonce:
 
 ## 3. `/eos consume-baseline <SAME_NONCE>`
 
-Post on **issue #26** using the **same** nonce:
+Post on **issue #26** using the **same** nonce authorized in step 1:
 
 ```
-/eos consume-baseline <FRESH_NONCE>
+/eos consume-baseline <SAME_NONCE>
 ```
 
 **Expected success:** a `test_integrity.baseline.consumed` event, `consumption_result: activated`, `post_consumption_state: active`. Single-use lockout is now permanent.

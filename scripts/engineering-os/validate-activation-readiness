@@ -226,8 +226,11 @@ def validate(json_path: Path, md_path: Path) -> int:
     if not re.fullmatch(r"[0-9a-f]{64}", str(nonce.get("retired_nonce_sha256", ""))):
         return _fail("retired-nonce digest identity is missing or malformed")
 
-    # The ledger must record a fail-closed pre-activation state.
+    # The ledger must record the pre-activation state: exactly one
+    # authorization, unattempted and unconsumed.
     ledger = snapshot.get("activation_ledger_state", {})
+    if ledger.get("authorized") != 1:
+        return _fail("ledger does not record exactly one authorization")
     if ledger.get("attempted") != 0 or ledger.get("consumed") != 0:
         return _fail("ledger records an attempt or consumption")
     if ledger.get("proof_retired_nonce_rejected", {}).get("result") != [False, "ACTIVATION_NONCE_RETIRED"]:
@@ -249,6 +252,10 @@ def validate(json_path: Path, md_path: Path) -> int:
     ci = review.get("required_ci_on_main", [])
     if not ci or any(entry.get("conclusion") != "success" for entry in ci):
         return _fail("recorded required CI is not all success")
+    # Every required-CI entry must be attributed to the source-of-truth commit,
+    # so an unattributed or stale status cannot satisfy the readiness gate.
+    if any(entry.get("commit") != commit for entry in ci):
+        return _fail("a required CI entry is not attributed to the source-of-truth commit")
     # Every branch-protection required context must have passing CI evidence, so
     # a snapshot cannot omit a required gate and still validate.
     ci_names = {entry.get("name") for entry in ci}

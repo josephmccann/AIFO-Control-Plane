@@ -5,7 +5,7 @@
 - **Generated (UTC, informational):** 2026-07-22T03:17:52Z
 - **Source-of-truth commit:** `1921a8d67ff758f07894113e3553136d2f8d7696`
 - **Governing mission:** #40 (Ready `5768d96b9ab21ac906d50b91c52ca1c5b3f8d40bb277dadcc310e3d8854394a3`)
-- **Machine artifact:** `outputs/eos-activation-readiness/activation-readiness-snapshot.json` — sha256 `5e0697abd96d2ecca70326d8f2b56a889c1539d33c106d08519fb934115445ef`
+- **Machine artifact:** `outputs/eos-activation-readiness/activation-readiness-snapshot.json` — sha256 `1d61474c7d5fd06616384fb4438e24dfa92ca5c47f47bf746d0982408b5f527a`
 
 ## 1. Repository identity
 

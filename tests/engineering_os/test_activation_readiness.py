@@ -88,7 +88,7 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    def _validate_mutated(self, mutate):
+    def _validate_mutated(self, mutate, md_mutate=None):
         import copy
         import hashlib
         import re
@@ -97,8 +97,9 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
         mutate(snap)
         new_json = json.dumps(snap, indent=2, sort_keys=True) + "\n"
         json_digest = hashlib.sha256(new_json.encode()).hexdigest()
+        md = md_mutate(self.md, snap) if md_mutate else self.md
         md = re.sub(r"(Machine artifact:\*\* `[^`]+` — sha256 `)[0-9a-f]{64}(`)",
-                    r"\g<1>%s\g<2>" % json_digest, self.md)
+                    r"\g<1>%s\g<2>" % json_digest, md)
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp / JSON_PATH.name).write_text(new_json, encoding="utf-8")
@@ -110,6 +111,24 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
             return subprocess.run(
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def test_authorization_count_must_be_exactly_one(self):
+        import re
+        for count in (0, 2):
+            def mutate(snap, c=count):
+                snap["activation_ledger_state"]["authorized"] = c
+            def md_mutate(md, snap, c=count):
+                return re.sub(r"\| authorized \| `\d+` \|", "| authorized | `%d` |" % c, md)
+            result = self._validate_mutated(mutate, md_mutate)
+            self.assertNotEqual(result.returncode, 0, count)
+            self.assertIn("exactly one authorization", result.stderr)
+
+    def test_ci_entry_must_be_attributed_to_source_commit(self):
+        def mutate(snap):
+            snap["validation_and_review"]["required_ci_on_main"][0]["commit"] = "0" * 40
+        result = self._validate_mutated(mutate)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("source-of-truth commit", result.stderr)
 
     def test_missing_required_ci_context_fails_closed(self):
         def drop_gitguardian(snap):

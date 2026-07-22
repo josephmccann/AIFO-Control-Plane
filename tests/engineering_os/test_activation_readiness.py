@@ -64,6 +64,28 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
         result = self._run_validator(sha_override=tampered)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_stale_identity_row_in_markdown_fails_closed(self):
+        import hashlib
+        import tempfile
+        commit = self.snapshot["repository_identity"]["commit"]
+        stale_md = self.md.replace(
+            "| commit | `%s` |" % commit, "| commit | `%s` |" % ("0" * 40), 1)
+        self.assertNotEqual(stale_md, self.md)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / JSON_PATH.name).write_bytes(JSON_PATH.read_bytes())
+            (tmp / MD_PATH.name).write_text(stale_md, encoding="utf-8")
+            (tmp / SHA_PATH.name).write_text(
+                "# digests\n%s  %s\n%s  %s\n" % (
+                    JSON_PATH.name, hashlib.sha256(JSON_PATH.read_bytes()).hexdigest(),
+                    MD_PATH.name, hashlib.sha256(stale_md.encode()).hexdigest()),
+                encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("identity fields disagree", result.stderr)
+
     def test_markdown_and_json_reference_the_same_commit_and_tree(self):
         commit = self.snapshot["repository_identity"]["commit"]
         tree = self.snapshot["repository_identity"]["tree"]

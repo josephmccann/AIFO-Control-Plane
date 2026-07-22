@@ -79,8 +79,26 @@ def validate(json_path: Path, md_path: Path) -> int:
         return _fail("repository commit is not a 40-hex sha")
     if not (isinstance(tree, str) and re.fullmatch(r"[0-9a-f]{40}", tree)):
         return _fail("repository tree is not a 40-hex sha")
-    if commit not in md_text or tree not in md_text:
-        return _fail("Markdown does not reference the same commit and tree as the JSON")
+    # Parse the specific Markdown identity fields rather than checking substring
+    # presence: a stale commit/tree in the identity table must fail closed even
+    # if the correct SHA still appears elsewhere in the document.
+    def _md_field(pattern, label):
+        found = re.findall(pattern, md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("Markdown %s field is missing or ambiguous" % label), None
+        return None, found[0]
+
+    err, md_commit = _md_field(r"^\| commit \| `([0-9a-f]{40})` \|$", "repository-identity commit")
+    if err:
+        return err
+    err, md_tree = _md_field(r"^\| tree \| `([0-9a-f]{40})` \|$", "repository-identity tree")
+    if err:
+        return err
+    err, md_source = _md_field(r"Source-of-truth commit:\*\* `([0-9a-f]{40})`", "source-of-truth commit")
+    if err:
+        return err
+    if md_commit != commit or md_tree != tree or md_source != commit:
+        return _fail("Markdown identity fields disagree with the JSON commit/tree")
     if snapshot.get("metadata", {}).get("source_of_truth_commit") != commit:
         return _fail("metadata source-of-truth commit disagrees with repository commit")
 

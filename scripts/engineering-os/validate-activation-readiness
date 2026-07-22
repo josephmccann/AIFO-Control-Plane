@@ -19,6 +19,10 @@ import sys
 from pathlib import Path
 
 
+_GOVERNING_MISSION = 40
+_REQUIRED_MISSION_BINDINGS = {"26", "31", "32", "35", "36", "38"}
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -145,18 +149,34 @@ def validate(json_path: Path, md_path: Path) -> int:
                         ("authorization_event_hash", auth_hash)):
         if not (isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)):
             return _fail("%s is not a 64-hex event hash" % name)
-    err = _md_exact(r"Governing mission:\*\* #\d+ \(Ready `([0-9a-f]{64})`\)",
-                    "governing-mission Ready hash", ready_hash)
-    if err:
-        return err
+    # The governing mission is the readiness snapshot's authority. Bind both the
+    # issue number and the Ready hash: this artifact is authored under Mission
+    # #40, so a Markdown line that keeps the hash but changes the number must
+    # fail closed.
+    governing = snapshot.get("metadata", {}).get("governing_mission")
+    if governing != _GOVERNING_MISSION:
+        return _fail("metadata governing_mission is not #%d" % _GOVERNING_MISSION)
+    gm = re.findall(r"Governing mission:\*\* #(\d+) \(Ready `([0-9a-f]{64})`\)", md_text)
+    if len(gm) != 1:
+        return _fail("Markdown governing-mission field is missing or ambiguous")
+    if int(gm[0][0]) != governing or gm[0][1] != ready_hash:
+        return _fail("Markdown governing-mission number or Ready hash disagrees with the JSON")
     err = _md_exact(r"Authorization authenticity:\*\* event hash `([0-9a-f]{64})`",
                     "authorization event hash", auth_hash)
     if err:
         return err
 
+    # The readiness snapshot depends on the complete predecessor authority set.
+    # Reject a snapshot that drops or adds a mission binding before comparing
+    # the individual rows.
+    bindings = snapshot.get("mission_bindings", {})
+    if set(bindings) != _REQUIRED_MISSION_BINDINGS:
+        return _fail("mission bindings are not exactly the required predecessor set %s"
+                     % sorted(_REQUIRED_MISSION_BINDINGS))
+
     # Every mission-binding row in the Markdown table must match the JSON
     # bindings exactly (declaration digest and Ready event hash).
-    for issue, binding in sorted(snapshot.get("mission_bindings", {}).items()):
+    for issue, binding in sorted(bindings.items()):
         pattern = r"^\| #%s \|[^|]*\| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|" % re.escape(issue)
         found = re.findall(pattern, md_text, re.MULTILINE)
         if len(found) != 1:

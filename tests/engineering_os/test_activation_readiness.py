@@ -88,6 +88,39 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def test_wrong_governing_mission_number_fails_closed(self):
+        result = self._tamper_and_validate(
+            "Governing mission:** #40 (Ready", "Governing mission:** #99 (Ready")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("governing-mission", result.stderr)
+
+    def test_incomplete_mission_binding_set_fails_closed(self):
+        # Drop a predecessor binding from BOTH JSON and Markdown and refresh all
+        # digests so only the required-set check can catch it.
+        import hashlib
+        import re
+        import tempfile
+        snap = json.loads(JSON_PATH.read_text(encoding="utf-8"))
+        snap["mission_bindings"].pop("38")
+        new_json = json.dumps(snap, indent=2, sort_keys=True) + "\n"
+        json_digest = hashlib.sha256(new_json.encode()).hexdigest()
+        md = "\n".join(l for l in self.md.splitlines() if not l.startswith("| #38 |")) + "\n"
+        md = re.sub(r"(Machine artifact:\*\* `[^`]+` — sha256 `)[0-9a-f]{64}(`)",
+                    r"\g<1>%s\g<2>" % json_digest, md)
+        md_digest = hashlib.sha256(md.encode()).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / JSON_PATH.name).write_text(new_json, encoding="utf-8")
+            (tmp / MD_PATH.name).write_text(md, encoding="utf-8")
+            (tmp / SHA_PATH.name).write_text(
+                "# d\n%s  %s\n%s  %s\n" % (JSON_PATH.name, json_digest, MD_PATH.name, md_digest),
+                encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("required predecessor set", result.stderr)
+
     def test_drifted_mission_binding_and_table_rows_fail_closed(self):
         # A drifted mission-binding hash, ledger count, or historical field in
         # the Markdown must fail closed even when the digest file is refreshed.

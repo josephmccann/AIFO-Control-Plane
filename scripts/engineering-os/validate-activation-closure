@@ -104,9 +104,28 @@ MISSION_38_SUCCESSOR_PATHS = {
     "tests/engineering_os/test_activation_ledger.py",
     "tests/engineering_os/test_commands.py",
 }
+# Mission #40 adds the evidence-only Activation Readiness Snapshot and its
+# deterministic cross-field validator.  Only the paths its Ready-bound
+# declaration allows may change.
+MISSION_40_SUCCESSOR_PATHS = {
+    "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md",
+    "outputs/eos-activation-readiness/activation-readiness-snapshot.json",
+    "outputs/eos-activation-readiness/activation-readiness-snapshot.md",
+    "outputs/eos-activation-readiness/activation-readiness-snapshot.sha256",
+    "outputs/mission-40-closure-records.json",
+    "outputs/mission-40-reconciliation.md",
+    "outputs/mission-40-review-a.md",
+    "outputs/mission-40-validation/exact-head-ci.log",
+    "outputs/mission-40-validation/local-full-suite.log",
+    "outputs/mission-40-validation/validate-all.log",
+    "scripts/engineering-os/validate-activation-closure",
+    "scripts/engineering-os/validate-activation-readiness",
+    "tests/engineering_os/test_activation_readiness.py",
+}
 SUCCESSOR_ALLOWED_PATHS = (
     MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS
     | MISSION_36_SUCCESSOR_PATHS | MISSION_38_SUCCESSOR_PATHS
+    | MISSION_40_SUCCESSOR_PATHS
 )
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
@@ -469,6 +488,7 @@ SUCCESSOR_RECORDS_PATHS = (
     "outputs/mission-35-closure-records.json",
     "outputs/mission-36-closure-records.json",
     "outputs/mission-38-closure-records.json",
+    "outputs/mission-40-closure-records.json",
 )
 
 

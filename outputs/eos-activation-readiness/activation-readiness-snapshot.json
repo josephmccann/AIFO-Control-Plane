@@ -1,0 +1,239 @@
+{
+  "activation_ledger_state": {
+    "attempted": 0,
+    "authenticated_event_count": 2,
+    "authorized": 1,
+    "consumed": 0,
+    "event_type_counts": {
+      "mission.ready": 1,
+      "test_integrity.baseline.authorized": 1
+    },
+    "no_event_appended_during_validation": true,
+    "proof_distinct_fixture_nonce_eligible": {
+      "expected": [
+        "True",
+        "ACTIVATION_AUTHORIZED"
+      ],
+      "fixture_note": "non-secret placeholder fixture; not a real founder nonce",
+      "result": [
+        true,
+        "ACTIVATION_AUTHORIZED"
+      ]
+    },
+    "proof_retired_nonce_rejected": {
+      "expected": [
+        "False",
+        "ACTIVATION_NONCE_RETIRED"
+      ],
+      "result": [
+        false,
+        "ACTIVATION_NONCE_RETIRED"
+      ]
+    },
+    "retired_nonce_behavior": "ACTIVATION_NONCE_RETIRED at both proposal-time and ledger-validation layers.",
+    "superseded_selection_behavior": "The superseded authorization is excluded from active authorization selection while its nonce remains permanently retired."
+  },
+  "baseline_identity": {
+    "active_execution": {
+      "active_execution_commit": "1921a8d67ff758f07894113e3553136d2f8d7696",
+      "active_execution_tree": "5e76dd9a210b466b96c94eb02ced22c3f4532256",
+      "note": "The live default-branch checkout is the active-execution identity, distinct from the historical baseline identity above."
+    },
+    "authorization_authenticity": {
+      "authorization_event_hash": "b20599a1396bd174d5b4a3ff2cf60d82c34013b4fafd6c2d05d8a1ebeeb91fdb",
+      "authorization_state": "structurally_superseded",
+      "raw_nonce_disclosed": false,
+      "retired_nonce_sha256": "db6eaa2a8221f6e4529b85cb3fc80019318e00f491ed04858cc1f81c604f2512"
+    },
+    "historical": {
+      "analyzer_identity": "engineering_os.test_integrity_cli:b3c0a2c7",
+      "baseline_artifact_sha256": "3bd53aa718599ae33a5093b5b5c6e1d416216631e7818acf5472128ea9e38bce",
+      "baseline_generation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+      "baseline_generation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+      "baseline_generator_identity": "engineering_os.test_integrity_cli:initial-baseline-v1",
+      "caller_identity": "test-integrity-caller@80256915bdca989edc7580898971dbad1b199170",
+      "canonical_inventory_sha256": "23211f7a871c8a9a9f15cb5c010fd5167a1f21314bceebe43c2a38d8d1f04c0e",
+      "immutable_kernel_identity": "5a273627a1a4d4addfcf81129dcdbda4dc58c383",
+      "manifest_identity": "db1f444bad41ecf1db5057c8cbbae6390ffb7f5f7477e0c7a3bd8ae35a7a6dab",
+      "remediation_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+      "remediation_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+      "rollback_sha": "77af0e93780134349abb15bd8d8b665c6de939a3",
+      "workflow_identity": "reusable-test-integrity@b3142f5bbed547a97a70f29bda33682294948aed"
+    },
+    "note": "Historical identities describe the reviewed baseline; they never advance with the default branch."
+  },
+  "compatibility_chain": {
+    "active_endpoint_commit": "1921a8d67ff758f07894113e3553136d2f8d7696",
+    "active_endpoint_tree": "5e76dd9a210b466b96c94eb02ced22c3f4532256",
+    "chain_sha256": "93f85846681ea9bfac614b0257beab736a2f0b2d272e983db40ebe579fddad82",
+    "commit_count": 101,
+    "historical_anchor_commit": "b3c0a2c7c85fbd45167d61ae29fc1f21dfafad9e",
+    "historical_anchor_tree": "9fd7af9c8f231759ebbee851836dd83a097418d6",
+    "invariant_digest": "49568437df8094714e0fb8783a3b836463cf9168e25369f45e085e8e34e63355",
+    "invariant_paths": [
+      "docs/engineering-os/TEST_INTEGRITY_CANONICAL_FINDINGS.json",
+      "engineering_os/canonical.py",
+      "engineering_os/python_imports.py",
+      "engineering_os/test_integrity.py",
+      "engineering_os/test_integrity_cli.py",
+      "scripts/engineering-os/validate-test-integrity"
+    ],
+    "pre_baseline_parent_declarations": [
+      "77af0e93780134349abb15bd8d8b665c6de939a3"
+    ],
+    "regeneration_procedure": "Derive rev-list b3c0a2c7..origin/main, record each commit's tree/parents/invariant blobs and governed changes, declare pre-baseline parents verified via git merge-base --is-ancestor <parent> b3c0a2c7, then engineering_os.commands.validate_compatibility_chain(chain, proof, repository).",
+    "validated": true,
+    "validation_result": "COMPATIBILITY_CHAIN_VALID"
+  },
+  "founder_controlled_next_sequence": {
+    "note": "Each step below is a privileged founder-controlled lifecycle event and requires separate founder authorization. This snapshot documents but does not execute any of them. No real nonce is included.",
+    "steps": [
+      {
+        "command": "/eos authorize-baseline <FRESH_NONCE>",
+        "n": 1,
+        "nonce_rules": "fresh, high-entropy, >=32 chars, charset [A-Za-z0-9._:-], MUST NOT equal the retired nonce (rejected fail-closed as ACTIVATION_NONCE_RETIRED)",
+        "on_issue": 26,
+        "validate_after": "authenticate the resulting test_integrity.baseline.authorized event; confirm identity separation and a valid compatibility_proof"
+      },
+      {
+        "command": "/eos attempt-baseline <SAME_FRESH_NONCE>",
+        "n": 2,
+        "on_issue": 26,
+        "validate_after": "authenticate the attempted-consumption event and workflow provenance"
+      },
+      {
+        "command": "/eos consume-baseline <SAME_FRESH_NONCE>",
+        "n": 3,
+        "on_issue": 26,
+        "validate_after": "authenticate the consumed event and confirm baseline activation and permanent single-use lockout"
+      },
+      {
+        "command": "Test Integrity activation verification",
+        "n": 4,
+        "on_branch": "main",
+        "validate_after": "confirm production Test Integrity passes on the activated default branch"
+      },
+      {
+        "command": "Deployment",
+        "n": 5,
+        "validate_after": "separate founder deployment gate; not authorized by this snapshot"
+      }
+    ]
+  },
+  "metadata": {
+    "artifact": "eos-activation-readiness-snapshot",
+    "authority_statement": "Git object identities (commit, tree, blob) and authenticated EOS event hashes are authoritative. The generated_at_utc timestamp and all narrative prose are informational only. This snapshot is a point-in-time record of the recorded source_of_truth_commit and does not itself authorize any lifecycle action.",
+    "generated_at_utc": "2026-07-22T03:17:52Z",
+    "governing_mission": 40,
+    "governing_mission_ready_event_hash": "5768d96b9ab21ac906d50b91c52ca1c5b3f8d40bb277dadcc310e3d8854394a3",
+    "schema_version": "1.0.0",
+    "source_of_truth_commit": "1921a8d67ff758f07894113e3553136d2f8d7696"
+  },
+  "mission_bindings": {
+    "26": {
+      "declaration_digest": "4f03d6b9fc0510b1d44fc2d63d646adf5f4baf918b789b0a04b2acd703747bad",
+      "issue": 26,
+      "lifecycle_status": "historical baseline mission; authorization structurally superseded; activation pending",
+      "ready_event_hash": "638372ce99050d2439eabbadfa4ffbcfac272e68bc7d5e91eee28cdf7ef06bcc",
+      "title": "Test Integrity baseline & initial-activation canonical bootstrap finding set"
+    },
+    "31": {
+      "declaration_digest": "9996e5ebebd26b297e5ce57bcc4d4e78b01723d78052bea0b385a1ad5b95a9e0",
+      "issue": 31,
+      "lifecycle_status": "completed governance predecessor",
+      "ready_event_hash": "7c796c64513b21732975999db7bbca695d3209207c5f26bcbdd7b313c489bb47",
+      "title": "Activation integration \u2014 final identity/provenance/schema/cryptographic scope closure"
+    },
+    "32": {
+      "declaration_digest": "72a5059b338fca592333f6a77d64eafef9ee13ea51d6da7d32e4859b12ba54a9",
+      "issue": 32,
+      "lifecycle_status": "completed governance predecessor",
+      "ready_event_hash": "f83d273132d927f3c31eb5f931cc6aacba9ad93cd475b8f669179ceea1c5a16d",
+      "title": "Validation classification successor \u2014 exact-head Ready exception"
+    },
+    "35": {
+      "declaration_digest": "500893d5a183002bc5a781d8aa6cc43214bd1b8189617e2ff55de347225bc005",
+      "issue": 35,
+      "lifecycle_status": "completed; merged PR #34",
+      "ready_event_hash": "5ee89231aac2ac0a574a24f25f9ff6e4be1e510d38e826529b595299f3211624",
+      "title": "Activation identity separation & Model B compatibility chain"
+    },
+    "36": {
+      "declaration_digest": "4dd87cd97c764950395278097034f73cd647a1f562d83aff0f5b798b254c3485",
+      "issue": 36,
+      "lifecycle_status": "completed; merged PR #37",
+      "ready_event_hash": "8f732a9824aef6df58ecad3ba40438463cfafb4aa9bb16d4289ebc037b05dcd5",
+      "title": "Compatibility-chain merge-parent closure (pre-baseline ancestry + DAG)"
+    },
+    "38": {
+      "declaration_digest": "4a42faa564e16c4fd2303a7ab7d15572a055bad33247e901943a1c11aad34765",
+      "issue": 38,
+      "lifecycle_status": "completed; merged PR #39",
+      "ready_event_hash": "10138e95789554d160d89e97255cc6b670d6e462c5690638d550aa3d37461a35",
+      "title": "Activation nonce retirement \u2014 fail-closed enforcement"
+    }
+  },
+  "repository_identity": {
+    "branch_protection_required_contexts": [
+      "Validate Terraform",
+      "GitGuardian Security Checks"
+    ],
+    "clean_worktree": true,
+    "commit": "1921a8d67ff758f07894113e3553136d2f8d7696",
+    "commit_parents": [
+      "f49310f2faeb05b9d79be2d3d2759f70a5bb8b64",
+      "bec746b64d01e707b331aa71ba95fca52b5241ba"
+    ],
+    "default_branch": "main",
+    "open_historical_prs_preserved": [
+      24,
+      20,
+      14,
+      13
+    ],
+    "repository": "josephmccann/AIFO-Control-Plane",
+    "synchronized_remote": true,
+    "tree": "5e76dd9a210b466b96c94eb02ced22c3f4532256"
+  },
+  "security_and_operational_boundaries": {
+    "authenticated_history_rewritten": false,
+    "branch_protection_changed": false,
+    "credential_or_secret_changed": false,
+    "demo_repository_changed": false,
+    "deployment_performed": false,
+    "deployment_record_5528959623_state": "inactive",
+    "deployment_status_mutated": false,
+    "force_push": false,
+    "pr_24_changed": false,
+    "preserved_stashes_touched": false,
+    "protected_worktree_touched": false
+  },
+  "validation_and_review": {
+    "activation_closure": "pass",
+    "compatibility_chain": "COMPATIBILITY_CHAIN_VALID",
+    "deterministic_tests": {
+      "count": 576,
+      "result": "OK"
+    },
+    "git_diff_check": "clean",
+    "required_ci_on_main": [
+      {
+        "commit": "1921a8d67ff758f07894113e3553136d2f8d7696",
+        "conclusion": "success",
+        "name": "Validate Terraform",
+        "run_id": 29885041427
+      },
+      {
+        "commit": "1921a8d67ff758f07894113e3553136d2f8d7696",
+        "conclusion": "success",
+        "name": "GitGuardian Security Checks"
+      }
+    ],
+    "successor_closure": "pass",
+    "test_integrity_non_required": {
+      "reason": "Corpus-wide preactivation ambiguity: with no active baseline, coverage-preservation cannot be proven for the governed test corpus. This is the expected Mission #26 bootstrap boundary, is not a required branch-protection check, and was never suppressed, bypassed, or weakened. It clears only on baseline activation.",
+      "state": "fail_closed_preactivation"
+    },
+    "validate_all": "clean"
+  }
+}

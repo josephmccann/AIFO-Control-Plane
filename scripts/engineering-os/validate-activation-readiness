@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""Validate the EOS Activation Readiness Snapshot.
+
+Deterministic cross-field validator. It proves that the machine-readable JSON
+snapshot and the human-readable Markdown snapshot refer to the same commit,
+tree, event hashes, and artifact digests, and that the committed digest file
+matches the actual artifact bytes.
+
+It is intentionally pure: it reads only the three snapshot files, recomputes
+their SHA-256 digests, and checks internal consistency. It performs no Git,
+network, or lifecycle action, and it never depends on the current time (the
+snapshot timestamp is informational data, not a checked value).
+"""
+
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+
+_GOVERNING_MISSION = 40
+_REQUIRED_MISSION_BINDINGS = {"26", "31", "32", "35", "36", "38"}
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _fail(message: str) -> "int":
+    print("READINESS_SNAPSHOT_INVALID: %s" % message, file=sys.stderr)
+    return 1
+
+
+def validate(json_path: Path, md_path: Path) -> int:
+    sha_path = json_path.with_suffix(".sha256")
+    for path in (json_path, md_path, sha_path):
+        if not path.is_file():
+            return _fail("missing artifact: %s" % path)
+
+    json_bytes = json_path.read_bytes()
+    md_bytes = md_path.read_bytes()
+    json_digest = _sha256(json_bytes)
+    md_digest = _sha256(md_bytes)
+
+    try:
+        snapshot = json.loads(json_bytes.decode("utf-8"))
+    except ValueError as error:
+        return _fail("snapshot JSON is not parseable: %s" % error)
+    if not isinstance(snapshot, dict):
+        return _fail("snapshot JSON is not an object")
+
+    md_text = md_bytes.decode("utf-8")
+
+    # The committed digest file is the authority for this checkpoint, so parse it
+    # exactly rather than by substring: it must map precisely the two artifact
+    # filenames to their recomputed digests, with no missing, extra, malformed,
+    # or contradictory lines.
+    recorded = {}
+    for line in sha_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) != 2 or not re.fullmatch(r"[0-9a-f]{64}", parts[1]):
+            return _fail("digest file has a malformed line: %r" % line)
+        name = parts[0]
+        if name in recorded:
+            return _fail("digest file has a duplicate entry for %s" % name)
+        recorded[name] = parts[1]
+    if recorded != {json_path.name: json_digest, md_path.name: md_digest}:
+        return _fail("digest file does not exactly match the recomputed artifact digests")
+
+    # Helper: a Markdown field must appear exactly once and match an expected
+    # value. Substring presence is not enough — a stale visible field must fail
+    # closed even if the correct value appears elsewhere in the document.
+    def _md_exact(pattern, label, expected):
+        found = re.findall(pattern, md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("Markdown %s field is missing or ambiguous" % label)
+        if found[0] != expected:
+            return _fail("Markdown %s field disagrees with the JSON" % label)
+        return None
+
+    # The Markdown must cite the exact JSON digest in its machine-artifact line.
+    err = _md_exact(r"Machine artifact:\*\* `[^`]+` — sha256 `([0-9a-f]{64})`",
+                    "machine-artifact digest", json_digest)
+    if err:
+        return err
+
+    # Cross-field identity consistency: commit and tree.
+    repo = snapshot.get("repository_identity", {})
+    commit = repo.get("commit")
+    tree = repo.get("tree")
+    if not (isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit)):
+        return _fail("repository commit is not a 40-hex sha")
+    if not (isinstance(tree, str) and re.fullmatch(r"[0-9a-f]{40}", tree)):
+        return _fail("repository tree is not a 40-hex sha")
+    # Parse the specific Markdown identity fields rather than checking substring
+    # presence: a stale commit/tree in the identity table must fail closed even
+    # if the correct SHA still appears elsewhere in the document.
+    def _md_field(pattern, label):
+        found = re.findall(pattern, md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("Markdown %s field is missing or ambiguous" % label), None
+        return None, found[0]
+
+    err, md_commit = _md_field(r"^\| commit \| `([0-9a-f]{40})` \|$", "repository-identity commit")
+    if err:
+        return err
+    err, md_tree = _md_field(r"^\| tree \| `([0-9a-f]{40})` \|$", "repository-identity tree")
+    if err:
+        return err
+    err, md_source = _md_field(r"Source-of-truth commit:\*\* `([0-9a-f]{40})`", "source-of-truth commit")
+    if err:
+        return err
+    if md_commit != commit or md_tree != tree or md_source != commit:
+        return _fail("Markdown identity fields disagree with the JSON commit/tree")
+    if snapshot.get("metadata", {}).get("source_of_truth_commit") != commit:
+        return _fail("metadata source-of-truth commit disagrees with repository commit")
+
+    # Every Markdown row that restates the active commit or tree must also match,
+    # so a drifted active-execution or compatibility-endpoint row fails closed.
+    for pattern, label, expected in (
+        (r"^\| active_execution_commit \| `([0-9a-f]{40})` \|$", "active_execution_commit", commit),
+        (r"^\| active_execution_tree \| `([0-9a-f]{40})` \|$", "active_execution_tree", tree),
+        (r"^\| active_endpoint_commit \| `([0-9a-f]{40})` \|$", "active_endpoint_commit", commit),
+    ):
+        err = _md_exact(pattern, label, expected)
+        if err:
+            return err
+
+    # The active-execution endpoint and the compatibility-chain active endpoint
+    # must be the same commit/tree as the repository identity.
+    baseline = snapshot.get("baseline_identity", {}).get("active_execution", {})
+    if baseline.get("active_execution_commit") != commit or baseline.get("active_execution_tree") != tree:
+        return _fail("active-execution identity disagrees with repository commit/tree")
+    chain = snapshot.get("compatibility_chain", {})
+    if chain.get("active_endpoint_commit") != commit or chain.get("active_endpoint_tree") != tree:
+        return _fail("compatibility-chain active endpoint disagrees with repository commit/tree")
+    if chain.get("validation_result") != "COMPATIBILITY_CHAIN_VALID" or not chain.get("validated", False):
+        return _fail("compatibility chain is not recorded as valid")
+
+    # Authenticated event hashes must be present, well formed, and cited by the
+    # exact Markdown field (not merely present somewhere in the document).
+    ready_hash = snapshot.get("metadata", {}).get("governing_mission_ready_event_hash")
+    auth_hash = snapshot.get("baseline_identity", {}).get("authorization_authenticity", {}).get("authorization_event_hash")
+    for name, value in (("governing_mission_ready_event_hash", ready_hash),
+                        ("authorization_event_hash", auth_hash)):
+        if not (isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)):
+            return _fail("%s is not a 64-hex event hash" % name)
+    # The governing mission is the readiness snapshot's authority. Bind both the
+    # issue number and the Ready hash: this artifact is authored under Mission
+    # #40, so a Markdown line that keeps the hash but changes the number must
+    # fail closed.
+    governing = snapshot.get("metadata", {}).get("governing_mission")
+    if governing != _GOVERNING_MISSION:
+        return _fail("metadata governing_mission is not #%d" % _GOVERNING_MISSION)
+    gm = re.findall(r"Governing mission:\*\* #(\d+) \(Ready `([0-9a-f]{64})`\)", md_text)
+    if len(gm) != 1:
+        return _fail("Markdown governing-mission field is missing or ambiguous")
+    if int(gm[0][0]) != governing or gm[0][1] != ready_hash:
+        return _fail("Markdown governing-mission number or Ready hash disagrees with the JSON")
+    err = _md_exact(r"Authorization authenticity:\*\* event hash `([0-9a-f]{64})`",
+                    "authorization event hash", auth_hash)
+    if err:
+        return err
+
+    # The readiness snapshot depends on the complete predecessor authority set.
+    # Reject a snapshot that drops or adds a mission binding before comparing
+    # the individual rows.
+    bindings = snapshot.get("mission_bindings", {})
+    if set(bindings) != _REQUIRED_MISSION_BINDINGS:
+        return _fail("mission bindings are not exactly the required predecessor set %s"
+                     % sorted(_REQUIRED_MISSION_BINDINGS))
+
+    # Every mission-binding row in the Markdown table must match the JSON
+    # bindings exactly (declaration digest and Ready event hash).
+    for issue, binding in sorted(bindings.items()):
+        pattern = r"^\| #%s \|[^|]*\| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|" % re.escape(issue)
+        found = re.findall(pattern, md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("mission #%s binding row is missing or ambiguous" % issue)
+        declaration, ready = found[0]
+        if declaration != binding.get("declaration_digest") or ready != binding.get("ready_event_hash"):
+            return _fail("mission #%s binding row disagrees with the JSON" % issue)
+
+    # Every flat table row that restates a JSON value must match it, so no
+    # human-readable field can silently contradict the machine artifact.
+    chain = snapshot.get("compatibility_chain", {})
+    ledger = snapshot.get("activation_ledger_state", {})
+    repo = snapshot.get("repository_identity", {})
+    table_pairs = list(snapshot.get("baseline_identity", {}).get("historical", {}).items())
+    table_pairs += [
+        ("repository", repo.get("repository")),
+        ("default_branch", repo.get("default_branch")),
+        ("commit_parents", " ".join(repo.get("commit_parents", []))),
+        ("required_contexts", ", ".join(repo.get("branch_protection_required_contexts", []))),
+        ("open_historical_prs_preserved", ", ".join("#%d" % p for p in repo.get("open_historical_prs_preserved", []))),
+        ("clean_worktree", repo.get("clean_worktree")),
+        ("synchronized_remote", repo.get("synchronized_remote")),
+        ("historical_anchor_commit", chain.get("historical_anchor_commit")),
+        ("commit_count", chain.get("commit_count")),
+        ("pre_baseline_parent_declarations", ", ".join(chain.get("pre_baseline_parent_declarations", []))),
+        ("chain_sha256", chain.get("chain_sha256")),
+        ("invariant_digest", chain.get("invariant_digest")),
+        ("validation_result", chain.get("validation_result")),
+        ("authenticated_event_count", ledger.get("authenticated_event_count")),
+        ("authorized", ledger.get("authorized")),
+        ("attempted", ledger.get("attempted")),
+        ("consumed", ledger.get("consumed")),
+    ]
+    # Section 7 security and operational boundary rows are 1:1 key/value.
+    table_pairs += list(snapshot.get("security_and_operational_boundaries", {}).items())
+    for label, expected in table_pairs:
+        found = re.findall(r"^\| %s \| `([^`]*)` \|$" % re.escape(label), md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("Markdown row %s is missing or ambiguous" % label)
+        if found[0] != str(expected):
+            return _fail("Markdown row %s disagrees with the JSON" % label)
+
+    # The raw retired nonce must never appear; only its digest identity may.
+    nonce = snapshot.get("baseline_identity", {}).get("authorization_authenticity", {})
+    if nonce.get("raw_nonce_disclosed") is not False:
+        return _fail("snapshot claims the raw retired nonce is disclosed")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(nonce.get("retired_nonce_sha256", ""))):
+        return _fail("retired-nonce digest identity is missing or malformed")
+
+    # The ledger must record the pre-activation state: exactly one
+    # authorization, unattempted and unconsumed.
+    ledger = snapshot.get("activation_ledger_state", {})
+    if ledger.get("authorized") != 1:
+        return _fail("ledger does not record exactly one authorization")
+    if ledger.get("attempted") != 0 or ledger.get("consumed") != 0:
+        return _fail("ledger records an attempt or consumption")
+    if ledger.get("proof_retired_nonce_rejected", {}).get("result") != [False, "ACTIVATION_NONCE_RETIRED"]:
+        return _fail("retired-nonce rejection proof is not recorded")
+    if ledger.get("no_event_appended_during_validation") is not True:
+        return _fail("ledger does not record that no event was appended during validation")
+
+    # A readiness checkpoint must not bless a validation record that reports a
+    # failed or dirty state. The recorded results must show a ready main.
+    review = snapshot.get("validation_and_review", {})
+    if review.get("deterministic_tests", {}).get("result") != "OK":
+        return _fail("recorded deterministic test result is not OK")
+    for key, expected in (("validate_all", "clean"), ("activation_closure", "pass"),
+                          ("successor_closure", "pass"),
+                          ("compatibility_chain", "COMPATIBILITY_CHAIN_VALID"),
+                          ("git_diff_check", "clean")):
+        if review.get(key) != expected:
+            return _fail("recorded %s is not %r" % (key, expected))
+    ci = review.get("required_ci_on_main", [])
+    if not ci or any(entry.get("conclusion") != "success" for entry in ci):
+        return _fail("recorded required CI is not all success")
+    # Every required-CI entry must be attributed to the source-of-truth commit,
+    # so an unattributed or stale status cannot satisfy the readiness gate.
+    if any(entry.get("commit") != commit for entry in ci):
+        return _fail("a required CI entry is not attributed to the source-of-truth commit")
+    # Every branch-protection required context must have passing CI evidence, so
+    # a snapshot cannot omit a required gate and still validate.
+    ci_names = {entry.get("name") for entry in ci}
+    required_contexts = set(repo.get("branch_protection_required_contexts", []))
+    if not required_contexts or not required_contexts <= ci_names:
+        return _fail("required CI evidence does not cover every branch-protection context")
+    # The recorded chain result must agree with the compatibility-chain section.
+    if review.get("compatibility_chain") != chain.get("validation_result"):
+        return _fail("validation record chain result disagrees with the chain section")
+
+    print("READINESS_SNAPSHOT_VALID commit=%s json=%s md=%s" % (commit, json_digest, md_digest))
+    return 0
+
+
+def main(argv) -> int:
+    if len(argv) != 3:
+        print("usage: validate-activation-readiness SNAPSHOT.json SNAPSHOT.md", file=sys.stderr)
+        return 2
+    return validate(Path(argv[1]), Path(argv[2]))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

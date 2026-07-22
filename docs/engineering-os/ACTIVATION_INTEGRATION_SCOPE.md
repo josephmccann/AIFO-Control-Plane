@@ -136,3 +136,22 @@ Retirement is enforced at two independent layers, and neither trusts the other:
 A distinct fresh nonce is unaffected and authorizes normally. Single-use
 activation is unchanged: repeated authorization, attempt, or consumption still
 fail closed.
+
+### Activation readiness snapshot
+
+`outputs/eos-activation-readiness/activation-readiness-snapshot.json` and its
+Markdown twin are an immutable, evidence-only checkpoint of the complete
+pre-authorization state, bound to a recorded source-of-truth commit. They record
+repository identity, mission and declaration bindings, the historical-versus-active
+baseline identity separation, the Model B compatibility-chain proof, the
+activation-ledger state including fail-closed retired-nonce behavior, the
+validation record, the security boundaries, and the documented-but-unexecuted
+founder activation sequence.
+
+`scripts/engineering-os/validate-activation-readiness` deterministically checks
+that the JSON and Markdown refer to the same commit, tree, event hashes, and
+artifact digests, and that the committed digest file matches the artifact bytes.
+Git object identities and authenticated event hashes are authoritative; the
+snapshot timestamp is informational. The raw retired nonce never appears in the
+snapshot — only its SHA-256 digest identity and the authenticated authorization
+event hash are recorded — and no real replacement nonce is present.

@@ -1,0 +1,7 @@
+{
+  "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md": "6efd93bef60696fef8cc22cf9c78f0825410527d",
+  "engineering_os/commands.py": "07b4a420bf0032900567c286da54b523cf03136e",
+  "scripts/engineering-os/validate-activation-closure": "a4d9805702cf70a869df9d8dc2894275948974d9",
+  "tests/engineering_os/test_activation_ledger.py": "2f8a8d5ce533ae5dd1fbee30d3cf6473fcd7e788",
+  "tests/engineering_os/test_commands.py": "3d96a9939c92fad3bd8381ed972488beff438e4e"
+}

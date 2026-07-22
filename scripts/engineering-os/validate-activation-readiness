@@ -48,10 +48,24 @@ def validate(json_path: Path, md_path: Path) -> int:
 
     md_text = md_bytes.decode("utf-8")
 
-    # The committed digest file must match the actual artifact bytes.
-    sha_text = sha_path.read_text(encoding="utf-8")
-    if json_digest not in sha_text or md_digest not in sha_text:
-        return _fail("digest file does not match recomputed artifact digests")
+    # The committed digest file is the authority for this checkpoint, so parse it
+    # exactly rather than by substring: it must map precisely the two artifact
+    # filenames to their recomputed digests, with no missing, extra, malformed,
+    # or contradictory lines.
+    recorded = {}
+    for line in sha_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) != 2 or not re.fullmatch(r"[0-9a-f]{64}", parts[1]):
+            return _fail("digest file has a malformed line: %r" % line)
+        name = parts[0]
+        if name in recorded:
+            return _fail("digest file has a duplicate entry for %s" % name)
+        recorded[name] = parts[1]
+    if recorded != {json_path.name: json_digest, md_path.name: md_digest}:
+        return _fail("digest file does not exactly match the recomputed artifact digests")
 
     # The Markdown must cite the exact JSON digest.
     if json_digest not in md_text:

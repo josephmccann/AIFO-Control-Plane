@@ -154,6 +154,41 @@ def validate(json_path: Path, md_path: Path) -> int:
     if err:
         return err
 
+    # Every mission-binding row in the Markdown table must match the JSON
+    # bindings exactly (declaration digest and Ready event hash).
+    for issue, binding in sorted(snapshot.get("mission_bindings", {}).items()):
+        pattern = r"^\| #%s \|[^|]*\| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|" % re.escape(issue)
+        found = re.findall(pattern, md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("mission #%s binding row is missing or ambiguous" % issue)
+        declaration, ready = found[0]
+        if declaration != binding.get("declaration_digest") or ready != binding.get("ready_event_hash"):
+            return _fail("mission #%s binding row disagrees with the JSON" % issue)
+
+    # Every flat table row that restates a JSON value must match it, so no
+    # human-readable field can silently contradict the machine artifact.
+    chain = snapshot.get("compatibility_chain", {})
+    ledger = snapshot.get("activation_ledger_state", {})
+    table_pairs = list(snapshot.get("baseline_identity", {}).get("historical", {}).items())
+    table_pairs += [
+        ("historical_anchor_commit", chain.get("historical_anchor_commit")),
+        ("commit_count", chain.get("commit_count")),
+        ("pre_baseline_parent_declarations", ", ".join(chain.get("pre_baseline_parent_declarations", []))),
+        ("chain_sha256", chain.get("chain_sha256")),
+        ("invariant_digest", chain.get("invariant_digest")),
+        ("validation_result", chain.get("validation_result")),
+        ("authenticated_event_count", ledger.get("authenticated_event_count")),
+        ("authorized", ledger.get("authorized")),
+        ("attempted", ledger.get("attempted")),
+        ("consumed", ledger.get("consumed")),
+    ]
+    for label, expected in table_pairs:
+        found = re.findall(r"^\| %s \| `([^`]*)` \|$" % re.escape(label), md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("Markdown row %s is missing or ambiguous" % label)
+        if found[0] != str(expected):
+            return _fail("Markdown row %s disagrees with the JSON" % label)
+
     # The raw retired nonce must never appear; only its digest identity may.
     nonce = snapshot.get("baseline_identity", {}).get("authorization_authenticity", {})
     if nonce.get("raw_nonce_disclosed") is not False:

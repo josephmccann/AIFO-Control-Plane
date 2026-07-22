@@ -88,6 +88,21 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def test_drifted_mission_binding_and_table_rows_fail_closed(self):
+        # A drifted mission-binding hash, ledger count, or historical field in
+        # the Markdown must fail closed even when the digest file is refreshed.
+        h26 = self.snapshot["mission_bindings"]["26"]["ready_event_hash"]
+        cases = [
+            ("`%s` |" % h26, "`%s` |" % ("0" * 64)),
+            ("| authorized | `1` |", "| authorized | `9` |"),
+            ("| rollback_sha | `%s` |" % self.snapshot["baseline_identity"]["historical"]["rollback_sha"],
+             "| rollback_sha | `%s` |" % ("0" * 40)),
+        ]
+        for old, new in cases:
+            result = self._tamper_and_validate(old, new)
+            self.assertNotEqual(result.returncode, 0, (old, new))
+            self.assertIn("READINESS_SNAPSHOT_INVALID", result.stderr)
+
     def test_stale_active_endpoint_rows_fail_closed(self):
         commit = self.snapshot["repository_identity"]["commit"]
         for row in ("active_execution_commit", "active_endpoint_commit"):

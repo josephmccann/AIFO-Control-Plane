@@ -88,6 +88,45 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def _validate_mutated(self, mutate):
+        import copy
+        import hashlib
+        import re
+        import tempfile
+        snap = copy.deepcopy(self.snapshot)
+        mutate(snap)
+        new_json = json.dumps(snap, indent=2, sort_keys=True) + "\n"
+        json_digest = hashlib.sha256(new_json.encode()).hexdigest()
+        md = re.sub(r"(Machine artifact:\*\* `[^`]+` — sha256 `)[0-9a-f]{64}(`)",
+                    r"\g<1>%s\g<2>" % json_digest, self.md)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / JSON_PATH.name).write_text(new_json, encoding="utf-8")
+            (tmp / MD_PATH.name).write_text(md, encoding="utf-8")
+            (tmp / SHA_PATH.name).write_text(
+                "# d\n%s  %s\n%s  %s\n" % (
+                    JSON_PATH.name, json_digest, MD_PATH.name, hashlib.sha256(md.encode()).hexdigest()),
+                encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def test_missing_required_ci_context_fails_closed(self):
+        def drop_gitguardian(snap):
+            ci = snap["validation_and_review"]["required_ci_on_main"]
+            snap["validation_and_review"]["required_ci_on_main"] = [
+                c for c in ci if c["name"] != "GitGuardian Security Checks"]
+        result = self._validate_mutated(drop_gitguardian)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("branch-protection context", result.stderr)
+
+    def test_missing_no_event_proof_fails_closed(self):
+        def flip(snap):
+            snap["activation_ledger_state"]["no_event_appended_during_validation"] = False
+        result = self._validate_mutated(flip)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no event was appended", result.stderr)
+
     def test_non_ready_validation_record_fails_closed(self):
         # A snapshot that internally records a failed/dirty validation state must
         # not validate as ready, even with consistent digests.

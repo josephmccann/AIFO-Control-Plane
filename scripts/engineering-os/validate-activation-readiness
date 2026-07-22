@@ -232,6 +232,8 @@ def validate(json_path: Path, md_path: Path) -> int:
         return _fail("ledger records an attempt or consumption")
     if ledger.get("proof_retired_nonce_rejected", {}).get("result") != [False, "ACTIVATION_NONCE_RETIRED"]:
         return _fail("retired-nonce rejection proof is not recorded")
+    if ledger.get("no_event_appended_during_validation") is not True:
+        return _fail("ledger does not record that no event was appended during validation")
 
     # A readiness checkpoint must not bless a validation record that reports a
     # failed or dirty state. The recorded results must show a ready main.
@@ -247,6 +249,12 @@ def validate(json_path: Path, md_path: Path) -> int:
     ci = review.get("required_ci_on_main", [])
     if not ci or any(entry.get("conclusion") != "success" for entry in ci):
         return _fail("recorded required CI is not all success")
+    # Every branch-protection required context must have passing CI evidence, so
+    # a snapshot cannot omit a required gate and still validate.
+    ci_names = {entry.get("name") for entry in ci}
+    required_contexts = set(repo.get("branch_protection_required_contexts", []))
+    if not required_contexts or not required_contexts <= ci_names:
+        return _fail("required CI evidence does not cover every branch-protection context")
     # The recorded chain result must agree with the compatibility-chain section.
     if review.get("compatibility_chain") != chain.get("validation_result"):
         return _fail("validation record chain result disagrees with the chain section")

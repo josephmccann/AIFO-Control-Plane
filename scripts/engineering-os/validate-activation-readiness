@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Validate the EOS Activation Readiness Snapshot.
+
+Deterministic cross-field validator. It proves that the machine-readable JSON
+snapshot and the human-readable Markdown snapshot refer to the same commit,
+tree, event hashes, and artifact digests, and that the committed digest file
+matches the actual artifact bytes.
+
+It is intentionally pure: it reads only the three snapshot files, recomputes
+their SHA-256 digests, and checks internal consistency. It performs no Git,
+network, or lifecycle action, and it never depends on the current time (the
+snapshot timestamp is informational data, not a checked value).
+"""
+
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _fail(message: str) -> "int":
+    print("READINESS_SNAPSHOT_INVALID: %s" % message, file=sys.stderr)
+    return 1
+
+
+def validate(json_path: Path, md_path: Path) -> int:
+    sha_path = json_path.with_suffix(".sha256")
+    for path in (json_path, md_path, sha_path):
+        if not path.is_file():
+            return _fail("missing artifact: %s" % path)
+
+    json_bytes = json_path.read_bytes()
+    md_bytes = md_path.read_bytes()
+    json_digest = _sha256(json_bytes)
+    md_digest = _sha256(md_bytes)
+
+    try:
+        snapshot = json.loads(json_bytes.decode("utf-8"))
+    except ValueError as error:
+        return _fail("snapshot JSON is not parseable: %s" % error)
+    if not isinstance(snapshot, dict):
+        return _fail("snapshot JSON is not an object")
+
+    md_text = md_bytes.decode("utf-8")
+
+    # The committed digest file must match the actual artifact bytes.
+    sha_text = sha_path.read_text(encoding="utf-8")
+    if json_digest not in sha_text or md_digest not in sha_text:
+        return _fail("digest file does not match recomputed artifact digests")
+
+    # The Markdown must cite the exact JSON digest.
+    if json_digest not in md_text:
+        return _fail("Markdown does not cite the JSON artifact digest")
+
+    # Cross-field identity consistency: commit and tree.
+    repo = snapshot.get("repository_identity", {})
+    commit = repo.get("commit")
+    tree = repo.get("tree")
+    if not (isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit)):
+        return _fail("repository commit is not a 40-hex sha")
+    if not (isinstance(tree, str) and re.fullmatch(r"[0-9a-f]{40}", tree)):
+        return _fail("repository tree is not a 40-hex sha")
+    if commit not in md_text or tree not in md_text:
+        return _fail("Markdown does not reference the same commit and tree as the JSON")
+    if snapshot.get("metadata", {}).get("source_of_truth_commit") != commit:
+        return _fail("metadata source-of-truth commit disagrees with repository commit")
+
+    # The active-execution endpoint and the compatibility-chain active endpoint
+    # must be the same commit/tree as the repository identity.
+    baseline = snapshot.get("baseline_identity", {}).get("active_execution", {})
+    if baseline.get("active_execution_commit") != commit or baseline.get("active_execution_tree") != tree:
+        return _fail("active-execution identity disagrees with repository commit/tree")
+    chain = snapshot.get("compatibility_chain", {})
+    if chain.get("active_endpoint_commit") != commit or chain.get("active_endpoint_tree") != tree:
+        return _fail("compatibility-chain active endpoint disagrees with repository commit/tree")
+    if chain.get("validation_result") != "COMPATIBILITY_CHAIN_VALID" or not chain.get("validated", False):
+        return _fail("compatibility chain is not recorded as valid")
+
+    # Authenticated event hashes must be present and well formed.
+    for name, value in (
+        ("governing_mission_ready_event_hash", snapshot.get("metadata", {}).get("governing_mission_ready_event_hash")),
+        ("authorization_event_hash", snapshot.get("baseline_identity", {}).get("authorization_authenticity", {}).get("authorization_event_hash")),
+    ):
+        if not (isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)):
+            return _fail("%s is not a 64-hex event hash" % name)
+        if value not in md_text:
+            return _fail("Markdown does not cite %s" % name)
+
+    # The raw retired nonce must never appear; only its digest identity may.
+    nonce = snapshot.get("baseline_identity", {}).get("authorization_authenticity", {})
+    if nonce.get("raw_nonce_disclosed") is not False:
+        return _fail("snapshot claims the raw retired nonce is disclosed")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(nonce.get("retired_nonce_sha256", ""))):
+        return _fail("retired-nonce digest identity is missing or malformed")
+
+    # The ledger must record a fail-closed pre-activation state.
+    ledger = snapshot.get("activation_ledger_state", {})
+    if ledger.get("attempted") != 0 or ledger.get("consumed") != 0:
+        return _fail("ledger records an attempt or consumption")
+    if ledger.get("proof_retired_nonce_rejected", {}).get("result") != [False, "ACTIVATION_NONCE_RETIRED"]:
+        return _fail("retired-nonce rejection proof is not recorded")
+
+    print("READINESS_SNAPSHOT_VALID commit=%s json=%s md=%s" % (commit, json_digest, md_digest))
+    return 0
+
+
+def main(argv) -> int:
+    if len(argv) != 3:
+        print("usage: validate-activation-readiness SNAPSHOT.json SNAPSHOT.md", file=sys.stderr)
+        return 2
+    return validate(Path(argv[1]), Path(argv[2]))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

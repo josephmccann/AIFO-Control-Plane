@@ -5,7 +5,7 @@
 - **Generated (UTC, informational):** 2026-07-22T03:17:52Z
 - **Source-of-truth commit:** `1921a8d67ff758f07894113e3553136d2f8d7696`
 - **Governing mission:** #40 (Ready `5768d96b9ab21ac906d50b91c52ca1c5b3f8d40bb277dadcc310e3d8854394a3`)
-- **Machine artifact:** `outputs/eos-activation-readiness/activation-readiness-snapshot.json` — sha256 `f93b0dba80bc181f2247548e17e2ffaad6353e1a469a96da1779833f2daed8e1`
+- **Machine artifact:** `outputs/eos-activation-readiness/activation-readiness-snapshot.json` — sha256 `5e0697abd96d2ecca70326d8f2b56a889c1539d33c106d08519fb934115445ef`
 
 ## 1. Repository identity
 
@@ -94,7 +94,7 @@
 
 - Deterministic tests: **576 OK**
 - validate-all: **clean** · activation closure: **pass** · successor closure: **pass** · compatibility chain: **COMPATIBILITY_CHAIN_VALID** · git diff --check: **clean**
-- Required CI on main: **Terraform Validate** success · **GitGuardian Security Checks** success
+- Required CI on main: **Validate Terraform** success · **GitGuardian Security Checks** success
 - Test Integrity (non-required): **fail_closed_preactivation** — Corpus-wide preactivation ambiguity: with no active baseline, coverage-preservation cannot be proven for the governed test corpus. This is the expected Mission #26 bootstrap boundary, is not a required branch-protection check, and was never suppressed, bypassed, or weakened. It clears only on baseline activation.
 
 ## 7. Security and operational boundaries

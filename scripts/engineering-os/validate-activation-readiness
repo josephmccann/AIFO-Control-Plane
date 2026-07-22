@@ -67,9 +67,22 @@ def validate(json_path: Path, md_path: Path) -> int:
     if recorded != {json_path.name: json_digest, md_path.name: md_digest}:
         return _fail("digest file does not exactly match the recomputed artifact digests")
 
-    # The Markdown must cite the exact JSON digest.
-    if json_digest not in md_text:
-        return _fail("Markdown does not cite the JSON artifact digest")
+    # Helper: a Markdown field must appear exactly once and match an expected
+    # value. Substring presence is not enough — a stale visible field must fail
+    # closed even if the correct value appears elsewhere in the document.
+    def _md_exact(pattern, label, expected):
+        found = re.findall(pattern, md_text, re.MULTILINE)
+        if len(found) != 1:
+            return _fail("Markdown %s field is missing or ambiguous" % label)
+        if found[0] != expected:
+            return _fail("Markdown %s field disagrees with the JSON" % label)
+        return None
+
+    # The Markdown must cite the exact JSON digest in its machine-artifact line.
+    err = _md_exact(r"Machine artifact:\*\* `[^`]+` — sha256 `([0-9a-f]{64})`",
+                    "machine-artifact digest", json_digest)
+    if err:
+        return err
 
     # Cross-field identity consistency: commit and tree.
     repo = snapshot.get("repository_identity", {})
@@ -113,15 +126,22 @@ def validate(json_path: Path, md_path: Path) -> int:
     if chain.get("validation_result") != "COMPATIBILITY_CHAIN_VALID" or not chain.get("validated", False):
         return _fail("compatibility chain is not recorded as valid")
 
-    # Authenticated event hashes must be present and well formed.
-    for name, value in (
-        ("governing_mission_ready_event_hash", snapshot.get("metadata", {}).get("governing_mission_ready_event_hash")),
-        ("authorization_event_hash", snapshot.get("baseline_identity", {}).get("authorization_authenticity", {}).get("authorization_event_hash")),
-    ):
+    # Authenticated event hashes must be present, well formed, and cited by the
+    # exact Markdown field (not merely present somewhere in the document).
+    ready_hash = snapshot.get("metadata", {}).get("governing_mission_ready_event_hash")
+    auth_hash = snapshot.get("baseline_identity", {}).get("authorization_authenticity", {}).get("authorization_event_hash")
+    for name, value in (("governing_mission_ready_event_hash", ready_hash),
+                        ("authorization_event_hash", auth_hash)):
         if not (isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)):
             return _fail("%s is not a 64-hex event hash" % name)
-        if value not in md_text:
-            return _fail("Markdown does not cite %s" % name)
+    err = _md_exact(r"Governing mission:\*\* #\d+ \(Ready `([0-9a-f]{64})`\)",
+                    "governing-mission Ready hash", ready_hash)
+    if err:
+        return err
+    err = _md_exact(r"Authorization authenticity:\*\* event hash `([0-9a-f]{64})`",
+                    "authorization event hash", auth_hash)
+    if err:
+        return err
 
     # The raw retired nonce must never appear; only its digest identity may.
     nonce = snapshot.get("baseline_identity", {}).get("authorization_authenticity", {})

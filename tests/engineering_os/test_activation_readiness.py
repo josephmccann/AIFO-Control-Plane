@@ -64,6 +64,37 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
         result = self._run_validator(sha_override=tampered)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_required_ci_name_matches_branch_protection_context(self):
+        contexts = set(self.snapshot["repository_identity"]["branch_protection_required_contexts"])
+        ci_names = {c["name"] for c in self.snapshot["validation_and_review"]["required_ci_on_main"]}
+        # Every recorded required-CI evidence name must be an actual required context.
+        self.assertTrue(ci_names <= contexts, (ci_names, contexts))
+
+    def _tamper_and_validate(self, replace_old, replace_new):
+        import hashlib
+        import tempfile
+        tampered = self.md.replace(replace_old, replace_new, 1)
+        self.assertNotEqual(tampered, self.md)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / JSON_PATH.name).write_bytes(JSON_PATH.read_bytes())
+            (tmp / MD_PATH.name).write_text(tampered, encoding="utf-8")
+            (tmp / SHA_PATH.name).write_text(
+                "# d\n%s  %s\n%s  %s\n" % (
+                    JSON_PATH.name, hashlib.sha256(JSON_PATH.read_bytes()).hexdigest(),
+                    MD_PATH.name, hashlib.sha256(tampered.encode()).hexdigest()),
+                encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def test_stale_event_hash_in_markdown_fails_closed(self):
+        auth_hash = self.snapshot["baseline_identity"]["authorization_authenticity"]["authorization_event_hash"]
+        result = self._tamper_and_validate(
+            "event hash `%s`" % auth_hash, "event hash `%s`" % ("0" * 64))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("authorization event hash", result.stderr)
+
     def test_stale_identity_row_in_markdown_fails_closed(self):
         import hashlib
         import tempfile

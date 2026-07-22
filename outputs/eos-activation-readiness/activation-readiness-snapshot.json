@@ -220,7 +220,7 @@
       {
         "commit": "1921a8d67ff758f07894113e3553136d2f8d7696",
         "conclusion": "success",
-        "name": "Terraform Validate",
+        "name": "Validate Terraform",
         "run_id": 29885041427
       },
       {

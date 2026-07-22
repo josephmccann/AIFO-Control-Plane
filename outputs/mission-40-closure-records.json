@@ -1,0 +1,12 @@
+{
+  "docs/engineering-os/ACTIVATION_INTEGRATION_SCOPE.md": "a1f92ef2df31bd71201bde0fa91fa3e44a903439",
+  "engineering_os/commands.py": "07b4a420bf0032900567c286da54b523cf03136e",
+  "outputs/eos-activation-readiness/activation-readiness-snapshot.json": "9222e585cb2dbd189666546db8d0f896f683bcc7",
+  "outputs/eos-activation-readiness/activation-readiness-snapshot.md": "e13c260ef9fa9fda2feb94c89c71aef421818500",
+  "outputs/eos-activation-readiness/activation-readiness-snapshot.sha256": "460a9847af041f6f6f298520d4fe279b19fe8382",
+  "scripts/engineering-os/validate-activation-closure": "1fbb8af897153c8276bde4df03af77bb194aa02a",
+  "scripts/engineering-os/validate-activation-readiness": "bc4551bf05eb4cd3b89be5400da17a5c529698aa",
+  "tests/engineering_os/test_activation_ledger.py": "2f8a8d5ce533ae5dd1fbee30d3cf6473fcd7e788",
+  "tests/engineering_os/test_activation_readiness.py": "da1c238f47ac2fb8f4da2e91412efb8548dfd3b7",
+  "tests/engineering_os/test_commands.py": "3d96a9939c92fad3bd8381ed972488beff438e4e"
+}

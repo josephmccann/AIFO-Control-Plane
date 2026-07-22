@@ -189,8 +189,16 @@ def validate(json_path: Path, md_path: Path) -> int:
     # human-readable field can silently contradict the machine artifact.
     chain = snapshot.get("compatibility_chain", {})
     ledger = snapshot.get("activation_ledger_state", {})
+    repo = snapshot.get("repository_identity", {})
     table_pairs = list(snapshot.get("baseline_identity", {}).get("historical", {}).items())
     table_pairs += [
+        ("repository", repo.get("repository")),
+        ("default_branch", repo.get("default_branch")),
+        ("commit_parents", " ".join(repo.get("commit_parents", []))),
+        ("required_contexts", ", ".join(repo.get("branch_protection_required_contexts", []))),
+        ("open_historical_prs_preserved", ", ".join("#%d" % p for p in repo.get("open_historical_prs_preserved", []))),
+        ("clean_worktree", repo.get("clean_worktree")),
+        ("synchronized_remote", repo.get("synchronized_remote")),
         ("historical_anchor_commit", chain.get("historical_anchor_commit")),
         ("commit_count", chain.get("commit_count")),
         ("pre_baseline_parent_declarations", ", ".join(chain.get("pre_baseline_parent_declarations", []))),
@@ -202,6 +210,8 @@ def validate(json_path: Path, md_path: Path) -> int:
         ("attempted", ledger.get("attempted")),
         ("consumed", ledger.get("consumed")),
     ]
+    # Section 7 security and operational boundary rows are 1:1 key/value.
+    table_pairs += list(snapshot.get("security_and_operational_boundaries", {}).items())
     for label, expected in table_pairs:
         found = re.findall(r"^\| %s \| `([^`]*)` \|$" % re.escape(label), md_text, re.MULTILINE)
         if len(found) != 1:

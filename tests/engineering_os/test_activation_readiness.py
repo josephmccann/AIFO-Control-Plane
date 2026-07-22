@@ -88,6 +88,14 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def test_drifted_boundary_rows_fail_closed(self):
+        for row in ("| deployment_performed | `False` |",
+                    "| credential_or_secret_changed | `False` |",
+                    "| authenticated_history_rewritten | `False` |"):
+            result = self._tamper_and_validate(row, row.replace("`False`", "`True`"))
+            self.assertNotEqual(result.returncode, 0, row)
+            self.assertIn("disagrees with the JSON", result.stderr)
+
     def test_wrong_governing_mission_number_fails_closed(self):
         result = self._tamper_and_validate(
             "Governing mission:** #40 (Ready", "Governing mission:** #99 (Ready")

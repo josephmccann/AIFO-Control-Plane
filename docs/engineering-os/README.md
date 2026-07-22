@@ -10,6 +10,25 @@ The active contract is EOS version `1.0.0`. Every mission must pin the exact
 Engineering Constitution SHA-256:
 `a255c0976949d8acae91f7d46e85cc083a15e242ccbd62e587c4e3163b29265e`.
 
+## EOS Version 1 is complete (maintenance mode)
+
+EOS Version 1 governance is complete and the repository is in operational
+maintenance. Change it only for operational experience, discovered defects, new
+governance requirements, or organizational growth — not to add sophistication.
+
+The operational handoff documentation lives at the repository root:
+
+- [EOS Version 1 Final Report](../../EOS_VERSION_1_FINAL_REPORT.md) — overview, governance history, roadmap, lessons.
+- [EOS Architecture](../../EOS_ARCHITECTURE.md) — components and flows (Mermaid diagrams).
+- [EOS Engineering Guide](../../EOS_ENGINEERING_GUIDE.md) — engineer and AI-agent handbook.
+- [EOS Founder Guide](../../EOS_FOUNDER_GUIDE.md) — founder commands and gates.
+- [EOS Operations Runbook](../../EOS_OPERATIONS_RUNBOOK.md) — founder-controlled activation runbook.
+- [EOS Repository Status](../../EOS_REPOSITORY_STATUS.md) — current repository, branch, worktree, stash, mission, and activation status.
+
+The founder-controlled activation lifecycle (authorize → attempt → consume →
+Test Integrity activation → deployment) is documented but not executed. No real
+activation nonce appears in any document.
+
 ## Start here
 
 - [Engineering Constitution](ENGINEERING_CONSTITUTION.md)

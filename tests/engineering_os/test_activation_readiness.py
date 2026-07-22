@@ -88,6 +88,14 @@ class ActivationReadinessSnapshotTests(unittest.TestCase):
                 [sys.executable, str(VALIDATOR), str(tmp / JSON_PATH.name), str(tmp / MD_PATH.name)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def test_stale_active_endpoint_rows_fail_closed(self):
+        commit = self.snapshot["repository_identity"]["commit"]
+        for row in ("active_execution_commit", "active_endpoint_commit"):
+            result = self._tamper_and_validate(
+                "| %s | `%s` |" % (row, commit), "| %s | `%s` |" % (row, "0" * 40))
+            self.assertNotEqual(result.returncode, 0, row)
+            self.assertIn(row, result.stderr)
+
     def test_stale_event_hash_in_markdown_fails_closed(self):
         auth_hash = self.snapshot["baseline_identity"]["authorization_authenticity"]["authorization_event_hash"]
         result = self._tamper_and_validate(

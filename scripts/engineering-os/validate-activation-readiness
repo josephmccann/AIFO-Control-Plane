@@ -115,6 +115,17 @@ def validate(json_path: Path, md_path: Path) -> int:
     if snapshot.get("metadata", {}).get("source_of_truth_commit") != commit:
         return _fail("metadata source-of-truth commit disagrees with repository commit")
 
+    # Every Markdown row that restates the active commit or tree must also match,
+    # so a drifted active-execution or compatibility-endpoint row fails closed.
+    for pattern, label, expected in (
+        (r"^\| active_execution_commit \| `([0-9a-f]{40})` \|$", "active_execution_commit", commit),
+        (r"^\| active_execution_tree \| `([0-9a-f]{40})` \|$", "active_execution_tree", tree),
+        (r"^\| active_endpoint_commit \| `([0-9a-f]{40})` \|$", "active_endpoint_commit", commit),
+    ):
+        err = _md_exact(pattern, label, expected)
+        if err:
+            return err
+
     # The active-execution endpoint and the compatibility-chain active endpoint
     # must be the same commit/tree as the repository identity.
     baseline = snapshot.get("baseline_identity", {}).get("active_execution", {})

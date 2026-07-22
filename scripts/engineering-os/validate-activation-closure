@@ -122,10 +122,27 @@ MISSION_40_SUCCESSOR_PATHS = {
     "scripts/engineering-os/validate-activation-readiness",
     "tests/engineering_os/test_activation_readiness.py",
 }
+# Mission #41 delivers the EOS Version 1 documentation set. Documentation-only.
+MISSION_41_SUCCESSOR_PATHS = {
+    "EOS_VERSION_1_FINAL_REPORT.md",
+    "EOS_ARCHITECTURE.md",
+    "EOS_ENGINEERING_GUIDE.md",
+    "EOS_FOUNDER_GUIDE.md",
+    "EOS_OPERATIONS_RUNBOOK.md",
+    "EOS_REPOSITORY_STATUS.md",
+    "docs/engineering-os/README.md",
+    "outputs/mission-41-closure-records.json",
+    "outputs/mission-41-reconciliation.md",
+    "outputs/mission-41-review-a.md",
+    "outputs/mission-41-validation/exact-head-ci.log",
+    "outputs/mission-41-validation/local-full-suite.log",
+    "outputs/mission-41-validation/validate-all.log",
+    "scripts/engineering-os/validate-activation-closure",
+}
 SUCCESSOR_ALLOWED_PATHS = (
     MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS
     | MISSION_36_SUCCESSOR_PATHS | MISSION_38_SUCCESSOR_PATHS
-    | MISSION_40_SUCCESSOR_PATHS
+    | MISSION_40_SUCCESSOR_PATHS | MISSION_41_SUCCESSOR_PATHS
 )
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
@@ -489,6 +506,7 @@ SUCCESSOR_RECORDS_PATHS = (
     "outputs/mission-36-closure-records.json",
     "outputs/mission-38-closure-records.json",
     "outputs/mission-40-closure-records.json",
+    "outputs/mission-41-closure-records.json",
 )
 
 

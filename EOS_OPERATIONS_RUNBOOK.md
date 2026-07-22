@@ -13,7 +13,9 @@
 - Mission #26 has: exactly **1** authorization event that is **structurally superseded**, **0** attempts, **0** consumptions.
 - The `outputs/eos-activation-readiness/` snapshot validates (`scripts/engineering-os/validate-activation-readiness ...`).
 
-If the current authorization is the superseded (pre-identity-separation) one, activation proceeds by issuing a **replacement** authorization (below). The model supports this without rewriting history.
+If the current authorization is the superseded (pre-identity-separation) one, activation proceeds by issuing a **replacement** authorization (below). The model supports this without rewriting history. Note that only a *structurally superseded* authorization can be replaced; a *usable* (non-superseded) authorization cannot be re-issued while it exists.
+
+> **Do not advance `main` between authorize and consume.** The authorization pins the exact active-execution identity (the live checkout). If the default branch advances after a usable authorization exists, attempt/consume fails closed (`ACTIVATION_COMMIT_MISMATCH`) and the usable authorization cannot be re-issued (`ACTIVATION_AUTHORIZATION_REPLAY`) — there is no in-band re-authorization. Complete steps 1–3 against a stable default branch, ideally in one sitting with no merges in between.
 
 ---
 
@@ -100,7 +102,7 @@ Deployment is **not** part of activation and is not exercised by the EOS. Deploy
 | `ACTIVATION_NONCE_RETIRED` | reused the retired or a prior nonce | generate a brand-new nonce |
 | `COMPATIBILITY_CHAIN_PARENT_UNDECLARED` | a merge parent outside the range is not a declared pre-baseline ancestor | inspect the range; the builder declares verified pre-baseline parents |
 | `COMPATIBILITY_INVARIANT_VIOLATED` | the baseline generator/analyzer surface changed in-range | the invariant surface is prohibited from change; a real change requires a new reviewed baseline (founder decision) |
-| `ACTIVATION_COMMIT_MISMATCH` | `main` advanced after authorization | re-authorize against the current head |
+| `ACTIVATION_COMMIT_MISMATCH` | `main` advanced past the authorized execution identity between steps | **Fail-closed stop.** The authorization cannot be attempted (commit mismatch) and a usable authorization cannot be re-issued (replay). There is no in-band re-authorization — prevent it by completing authorize→attempt→consume without advancing `main`. Recovering after an advance is a founder governance decision (the model fails closed rather than silently re-binding to a new head). |
 | Test Integrity still denies after consume | findings not resolved through the baseline | investigate; never suppress or exclude |
 
 All rejections are fail-closed: no event is appended, no nonce is consumed, no partial state is left.

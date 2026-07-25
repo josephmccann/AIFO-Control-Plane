@@ -16,6 +16,7 @@ through
 | [AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md) | How governance documents change: change classes, approval rules, the explicit-statement rule for agent-permission expansions, supersession rules, and the amendment log |
 | [PR180_RECONCILIATION.md](PR180_RECONCILIATION.md) | Item-level crosswalk of AI.FO-Demo draft PR #180 (constitution and founder-context working drafts) into the manual, with a recommended disposition for that PR |
 | [SOURCE_MATERIAL_INDEX.md](SOURCE_MATERIAL_INDEX.md) | Pinned sources for every doctrine statement, including commit-pinned links to unmerged draft material |
+| [CURRENT_COMPANY_STATE.md](CURRENT_COMPANY_STATE.md) | Dated current-state document, not doctrine: stage, market band, product framing, priorities, and positioning constraints. The canonical home for the volatile facts the manual excludes |
 
 ## Reading order
 

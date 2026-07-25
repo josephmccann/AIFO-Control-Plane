@@ -2,7 +2,7 @@
 
 Status: ADOPTED.
 Owner: Joseph McCann (founder).
-Version: 1.0.0.
+Version: 1.0.1.
 Created: 2026-07-14. Adopted: 2026-07-15.
 
 This document is the canonical home for AI.FO founder doctrine, adopted by
@@ -275,8 +275,8 @@ was created to serve. AI.FO is built for this market from first principles;
 it is not an enterprise product reaching backward.
 
 The current revenue-band definition of this market is a current-state
-parameter, recorded in the product repository's positioning documents, not
-here.
+parameter, recorded in
+[CURRENT_COMPANY_STATE.md](CURRENT_COMPANY_STATE.md), not here.
 
 ### 4.5 Non-negotiable product constraints
 
@@ -763,8 +763,8 @@ company's operating discipline credible under diligence. Therefore:
 - Words are promises. No claim describes a capability the product has not
   earned; prohibited framings (for example, positioning as an autonomous
   finance department or claiming network intelligence that does not exist)
-  are recorded in the product repository's positioning decisions and bind
-  all external communication.
+  are recorded in [CURRENT_COMPANY_STATE.md](CURRENT_COMPANY_STATE.md) and
+  bind all external communication.
 - Research claims stay inside their preregistered bounds, and removals or
   failed legs remain visible in the record rather than being cleaned away.
 - Diligence is welcomed, not managed. The repositories are the data room:

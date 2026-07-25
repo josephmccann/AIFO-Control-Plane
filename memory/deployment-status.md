@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE: OPERATIONAL REFINEMENT
 
 The approved current-scope AWS control-plane baseline is operationally complete in AWS account `350480401760`, Region `us-west-2`.
 
@@ -33,7 +33,7 @@ Current validation state:
 
 - `PATH="$PWD/build/bin:$PATH" AWS_PROFILE=aifo-admin AWS_SDK_LOAD_CONFIG=1 ./scripts/validate.sh`
 - Local Terraform control-plane plan: `0 to add, 0 to change, 0 to destroy`.
-- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712.
+- Terraform Plan history: https://github.com/josephmccann/AIFO-Control-Plane/actions/workflows/terraform-plan.yml.
 - GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`.
 - EC2 instance state: `stopped`.
 - GitHub plan-role policy default version: `v4`.
@@ -183,7 +183,7 @@ Scheduler:
 - IAM Identity Center.
 - Human admin permission set `AIFO-Platform-Admin`.
 - Manual AWS Budget target: $250/month, budget name `First budget`.
-- Private GitHub repository.
+- Public GitHub repository. Never store credentials, customer data, private operational exports, or activation nonces in repository content or GitHub discussion and workflow surfaces.
 
 The manual AWS Budget is not imported into Terraform state.
 

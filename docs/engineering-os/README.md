@@ -14,16 +14,16 @@ Engineering Constitution SHA-256:
 
 EOS Version 1 governance is complete and the repository is in operational
 maintenance. Change it only for operational experience, discovered defects, new
-governance requirements, or organizational growth — not to add sophistication.
+governance requirements, or organizational growth, not to add sophistication.
 
 The operational handoff documentation lives at the repository root:
 
-- [EOS Version 1 Final Report](../../EOS_VERSION_1_FINAL_REPORT.md) — overview, governance history, roadmap, lessons.
-- [EOS Architecture](../../EOS_ARCHITECTURE.md) — components and flows (Mermaid diagrams).
-- [EOS Engineering Guide](../../EOS_ENGINEERING_GUIDE.md) — engineer and AI-agent handbook.
-- [EOS Founder Guide](../../EOS_FOUNDER_GUIDE.md) — founder commands and gates.
-- [EOS Operations Runbook](../../EOS_OPERATIONS_RUNBOOK.md) — founder-controlled activation runbook.
-- [EOS Repository Status](../../EOS_REPOSITORY_STATUS.md) — current repository, branch, worktree, stash, mission, and activation status.
+- [EOS Version 1 Final Report](../../EOS_VERSION_1_FINAL_REPORT.md): overview, governance history, roadmap, lessons.
+- [EOS Architecture](../../EOS_ARCHITECTURE.md): components and flows (Mermaid diagrams).
+- [EOS Engineering Guide](../../EOS_ENGINEERING_GUIDE.md): engineer and AI-agent handbook.
+- [EOS Founder Guide](../../EOS_FOUNDER_GUIDE.md): founder commands and gates.
+- [EOS Operations Runbook](../../EOS_OPERATIONS_RUNBOOK.md): founder-controlled activation runbook.
+- [EOS Repository Status](../../EOS_REPOSITORY_STATUS.md): current repository, branch, worktree, stash, mission, and activation status.
 
 The founder-controlled activation lifecycle (authorize → attempt → consume →
 Test Integrity activation → deployment) is documented but not executed. No real
@@ -71,6 +71,13 @@ Run the complete repository gate, including Terraform and pinned linters:
 ```bash
 ./scripts/install-dev-tools.sh
 PATH="$PWD/build/bin:$PATH" ./scripts/validate.sh
+```
+
+The complete repository gate executes the developer-tools shell regression in
+an isolated child process. Run that regression alone while diagnosing its
+contract with:
+
+```bash
 PATH="$PWD/build/bin:$PATH" bash tests/install-dev-tools-test.sh
 ```
 
@@ -80,10 +87,14 @@ No command above deploys infrastructure or mutates AWS.
 
 Auto-merge, deployment, cloud mutation, live Airtable writes, orphan recovery
 mutation, and EDGAR integration remain disabled. The AI.FO-Demo callers pin a
-reviewed Control Plane commit, but private cross-repository GitHub Actions
-access remains a founder gate. Required checks and branch protection are
-external controls and must be verified before an EOS pull request is eligible
-for merge authorization.
+reviewed Control Plane commit. Exact caller repository, workflow identity,
+revision, and provenance checks remain the cross-repository trust boundary.
+Required checks and branch protection are external controls and must be
+verified before an EOS pull request is eligible for merge authorization.
+
+The Control Plane repository is public. Never place credentials, customer
+data, private operational exports, or an activation nonce in repository
+content, issue history, pull requests, comments, or workflow logs.
 
 Humans and agents use the same mission declaration, authenticated events,
 validation, independent review, evidence, and founder approval gate. No schema,

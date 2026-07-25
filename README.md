@@ -2,9 +2,13 @@
 
 AWS infrastructure control-plane repository for AI.FO.
 
-Session state: ACTIVE — OPERATIONAL REFINEMENT
+Session state: ACTIVE: OPERATIONAL REFINEMENT
 
 The approved current-scope AWS control-plane baseline is operationally complete. It does not host the AI.FO product runtime and it does not include an apply workflow.
+
+This repository is public. Treat every tracked file, issue, pull request,
+workflow log, and comment as public data. Never commit credentials, customer
+data, private operational exports, or an activation nonce.
 
 The repository also contains Engineering Operating System version `1.0.0`,
 pinned to Engineering Constitution SHA-256
@@ -39,11 +43,13 @@ Start with [docs/session-handoffs/HANDOFF_CONTROL_PLANE_2026-07-15.md](docs/sess
 ## Current Verification
 
 - Local Terraform control-plane plan: `0 to add, 0 to change, 0 to destroy`
-- Latest successful GitHub Terraform Plan: https://github.com/josephmccann/AIFO-Control-Plane/actions/runs/29378532712
-- GitHub plan classification: exit code `0`, `0` add / `0` change / `0` destroy, result `clean`
+- Terraform Plan history: [GitHub Actions](https://github.com/josephmccann/AIFO-Control-Plane/actions/workflows/terraform-plan.yml)
+- Complete repository validation, including the isolated developer-tools shell regression, passes on current `main`
 - GitHub plan-role policy default version: `v4`
 - OIDC trust: unchanged and restricted to exact repository/environment subjects
 - Scheduler: unchanged and targets only `i-0254a9e2fcbcdebd7`
+- EOS orphan discovery: direct read-only Mission #26 verification passed after the reusable-kernel repair; scheduled observation is still in progress
+- Required `main` checks: `Validate Terraform` and `GitGuardian Security Checks`; Test Integrity promotion remains a later founder gate
 
 ## Repository Layout
 

@@ -35,9 +35,21 @@ file closes that gap.
 
 Seeded from `docs/context/CURRENT_COMPANY_STATE.md` in AI.FO-Demo draft PR
 #180, branch `docs/founder-aifo-context`, at the pinned head
-`5d058ee31f60d2e4f84c652a92c9fd310bb20d2c`. That branch is preserved. Content
-is reproduced without revision so that the crosswalk in
-[PR180_RECONCILIATION.md](PR180_RECONCILIATION.md) stays item-addressable.
+`5d058ee31f60d2e4f84c652a92c9fd310bb20d2c`. That branch is preserved.
+
+Content follows the **item-level dispositions** in
+[PR180_RECONCILIATION.md](PR180_RECONCILIATION.md), not a blanket copy. Items
+classified there as temporary company state (CCS-01 to CCS-05, CCS-07 to
+CCS-10, CCS-12 to CCS-14) are carried forward as written. Two are not:
+
+- **CCS-06**, architectural principles, was reclassified as doctrine with the
+  ruling that a current-state file must link rather than restate. It links.
+- **CCS-11**, the strategic sequence, had its ordering superseded by the
+  founder decision of 2026-07-15 (amendment log 0.2.0). The superseded
+  ordering is not reproduced.
+
+A verbatim copy would have reintroduced both defects, one of them contradicting
+a founder decision.
 
 ## Verification required
 
@@ -70,17 +82,17 @@ the long-range vision. The broader business reasoning and network-intelligence
 horizons remain directional strategy rather than present-tense product
 capability.
 
-## Current architectural principles
+## Architectural principles
 
-- Deterministic engine owns calculations.
-- AI layer interprets computed outputs and does not alter the math.
-- Important outputs should be traceable, explainable, and independently
-  validated.
-- Product claims should remain bounded by capabilities that exist and have been
-  tested.
+Not restated here. The reconciliation ruled on this directly (CCS-06):
+architectural principles are doctrine, and a file that declares itself
+non-doctrine must link rather than restate them.
 
-These restate, in current-state terms, doctrine held in manual sections 6 and
-7. The manual is authoritative for the durable form.
+See [FOUNDER_OPERATING_MANUAL.md](FOUNDER_OPERATING_MANUAL.md) sections 6 and
+7 for the deterministic-engine boundary, the rule that the AI layer interprets
+computed outputs without altering the math, traceability and independent
+validation, and the constraint that product claims stay bounded by tested
+capability.
 
 ## Current product priorities
 
@@ -92,12 +104,21 @@ These restate, in current-state terms, doctrine held in manual sections 6 and
 5. Establish a proactive delivery cadence for insights and priorities.
 6. Continue system validation, including work using public SEC data.
 
-## Current strategic sequence
+## Position in the strategic sequence
 
-- Near term: financial trust and continuous CFO reasoning.
-- Next: selected operational data and broader business reasoning.
-- Long term: anonymized network intelligence and collective operating
-  experience.
+The sequence itself is doctrine and lives in
+[FOUNDER_OPERATING_MANUAL.md](FOUNDER_OPERATING_MANUAL.md) section 3: Horizon 1
+is continuous financial reasoning, Horizon 2 is privacy-preserving network
+intelligence, and Horizon 3 is a living decision model of the company.
+
+Current state is only where AI.FO sits within it: **Horizon 1**, building and
+validating financial trust and continuous CFO reasoning. Horizon 2 has not
+begun.
+
+The PR #180 draft placed network intelligence last, after broader business
+reasoning. That ordering was superseded by the founder decision of 2026-07-15
+(amendment log version 0.2.0) and is recorded as superseded at CCS-11 in
+[PR180_RECONCILIATION.md](PR180_RECONCILIATION.md). It is not carried forward.
 
 ## Current positioning constraints
 

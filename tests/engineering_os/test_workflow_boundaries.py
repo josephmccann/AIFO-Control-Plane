@@ -580,16 +580,24 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(0, checked.returncode, checked.stderr)
 
-    def test_orphan_discovery_collects_activation_provenance_run_ids(self):
+    def test_orphan_paths_collect_activation_provenance_run_ids(self):
         workflow = load_workflow("reusable-orphan-recovery.yml")
-        step = next(
+        discovery_step = next(
             item
             for item in workflow["jobs"]["discover"]["steps"]
             if item.get("name") == "Scheduled and default dry-run discovery"
         )
-        script = step["run"]
-        extractor = script.split(
+        discovery_extractor = discovery_step["run"].split(
             'ISSUE="$issue" python3 - <<\'PY\'\n', 1
+        )[1].split("\nPY\n", 1)[0]
+        recovery_step = next(
+            item
+            for item in workflow["jobs"]["recover"]["steps"]
+            if item.get("name")
+            == "Re-fetch and revalidate chain immediately before atomic append"
+        )
+        recovery_extractor = recovery_step["run"].split(
+            "python3 - <<'PY'\n", 1
         )[1].split("\nPY\n", 1)[0]
         mission = json.loads(
             (ROOT / "tests/engineering_os/fixtures/mission-valid.json").read_text(
@@ -645,8 +653,8 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             (root / "comments-26.json").write_text(
                 json.dumps(comments), encoding="utf-8"
             )
-            extracted = subprocess.run(
-                ["python3", "-c", extractor],
+            discovery = subprocess.run(
+                ["python3", "-c", discovery_extractor],
                 cwd=ROOT,
                 env={
                     **os.environ,
@@ -658,10 +666,35 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(0, extracted.returncode, extracted.stderr)
+            self.assertEqual(0, discovery.returncode, discovery.stderr)
             self.assertEqual(
                 ["123", "29851542883", "29851543000"],
                 (root / "run-ids-26.txt").read_text(encoding="utf-8").splitlines(),
+            )
+            (root / "issue.json").write_text(
+                json.dumps({"body": declaration}), encoding="utf-8"
+            )
+            (root / "comments-latest.json").write_text(
+                json.dumps(comments), encoding="utf-8"
+            )
+            recovery = subprocess.run(
+                ["python3", "-c", recovery_extractor],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "GITHUB_REPOSITORY": KERNEL_REPOSITORY,
+                    "RUNNER_TEMP": str(root),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, recovery.returncode, recovery.stderr)
+            self.assertEqual(
+                ["123", "29851542883", "29851543000"],
+                (root / "run-ids-latest.txt")
+                .read_text(encoding="utf-8")
+                .splitlines(),
             )
 
     def test_mission_26_legacy_authorization_requires_fetched_run(self):

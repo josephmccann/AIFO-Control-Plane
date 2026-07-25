@@ -4,10 +4,10 @@
   ".github/workflows/reusable-frozen-path-guard.yml": "7ba4b1ca9e269288375dd25590b6d8a592edd449",
   ".github/workflows/reusable-merge-authorization.yml": "013d089f89c080d6b29ddcdaeb0d551ee8cd55d7",
   ".github/workflows/reusable-mission-validation.yml": "63ed309c1e0fb9ee1a31706b6c648bac32abf320",
-  ".github/workflows/reusable-orphan-recovery.yml": "fa7bf5a59a1db0bcb38efed4438fac49911cac26",
+  ".github/workflows/reusable-orphan-recovery.yml": "ce4f9af885cd102c9ea5262cf6219784bc2ab9a9",
   ".github/workflows/reusable-test-integrity.yml": "60777cf877f9640407d848b1996b2611ff051d97",
   ".github/workflows/reusable-tier-path-guard.yml": "c7b6164481d487e84624cb1b088dee34da019897",
   "scripts/engineering-os/validate-activation-closure": "0ce834da43cad8fece6b78225fe786a8ada0cb27",
   "tests/engineering_os/test_test_integrity.py": "41b63ab24c416e6e2e9a490d9d29e35d5c6e8a62",
-  "tests/engineering_os/test_workflow_boundaries.py": "afa7471b77f54e5522a71ee8c412360baa765713"
+  "tests/engineering_os/test_workflow_boundaries.py": "acdbc04635e258a21789b5196bff712ed39a9fcb"
 }

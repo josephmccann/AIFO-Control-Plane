@@ -51,6 +51,7 @@ jobs:
       - name: Normalize mission and paginated comments
         if: ${{ steps.exact.outcome == 'success' && steps.exact.outputs.command != 'claim' }}
         env:
+          COMMAND_NAME: ${{ steps.exact.outputs.command }}
           GH_TOKEN: ${{ github.token }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -84,11 +85,72 @@ jobs:
           with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
               stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY
-          printf '%s\n' "$GITHUB_RUN_ID" >> "$RUNNER_TEMP/run-ids.txt"
           : > "$RUNNER_TEMP/runs.ndjson"
           while read -r run_id; do
             gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$RUNNER_TEMP/runs.ndjson"
           done < "$RUNNER_TEMP/run-ids.txt"
+          case "$COMMAND_NAME" in
+            authorize-baseline | attempt-baseline | consume-baseline)
+              CURRENT_RUN_OUTPUT="$RUNNER_TEMP/runs.ndjson" python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import time
+          from engineering_os.commands import validate_activation_run
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          run_id = int(os.environ["GITHUB_RUN_ID"])
+          run_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+          run_url = "https://github.com/%s/actions/runs/%s" % (repository, run_id)
+          provenance = {
+              "repository": repository,
+              "workflow_path": ".github/workflows/mission-command.yml",
+              "workflow_ref": "%s/.github/workflows/mission-command.yml@%s" % (repository, head),
+              "workflow_sha": head,
+              "run_id": run_id,
+              "run_attempt": run_attempt,
+              "job": "prepare",
+              "actor": "github-actions[bot]",
+              "trigger_actor": os.environ["GITHUB_ACTOR"],
+              "event": "issue_comment",
+              "head_sha": head,
+              "head_tree": tree,
+          }
+          endpoint = "repos/%s/actions/runs/%s" % (repository, run_id)
+          for attempt in range(1, 6):
+              fetched = subprocess.run(
+                  ["gh", "api", endpoint],
+                  capture_output=True, text=True, check=False,
+              )
+              try:
+                  run = json.loads(fetched.stdout) if fetched.returncode == 0 else None
+              except json.JSONDecodeError:
+                  run = None
+              if validate_activation_run(
+                  run, repository, run_url,
+                  expected_head_sha=head, provenance=provenance,
+              ):
+                  with open(os.environ["CURRENT_RUN_OUTPUT"], "a", encoding="utf-8") as stream:
+                      json.dump(run, stream, sort_keys=True, separators=(",", ":"))
+                      stream.write("\n")
+                  break
+              print(
+                  "current activation run metadata is not ready "
+                  "(attempt %d/5)" % attempt,
+                  file=sys.stderr,
+              )
+              if attempt < 5:
+                  time.sleep(2)
+          else:
+              raise SystemExit(
+                  "current activation run metadata did not stabilize after 5 attempts"
+              )
+          PY
+              ;;
+          esac
           if [[ -s "$RUNNER_TEMP/runs.ndjson" ]]; then jq -s '.' "$RUNNER_TEMP/runs.ndjson" > "$RUNNER_TEMP/runs.json"; else printf '[]\n' > "$RUNNER_TEMP/runs.json"; fi
       - name: Authenticate history and authorize proposal
         id: proposal
@@ -353,6 +415,11 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" > "$RUNNER_TEMP/issue.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" | jq 'add' > "$RUNNER_TEMP/comments.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > "$RUNNER_TEMP/runs.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > "$RUNNER_TEMP/current-run.json"
+          jq --argjson run_id "$GITHUB_RUN_ID" --slurpfile current "$RUNNER_TEMP/current-run.json" \
+            '[.[] | select(.id != $run_id)] + [$current[0]]' \
+            "$RUNNER_TEMP/runs.json" > "$RUNNER_TEMP/runs-complete.json"
+          mv "$RUNNER_TEMP/runs-complete.json" "$RUNNER_TEMP/runs.json"
           python3 - <<'PY'
           import json
           import os

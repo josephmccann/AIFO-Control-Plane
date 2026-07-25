@@ -1142,6 +1142,121 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         ):
             self.assertIn(required, workflow)
 
+    def test_activation_current_run_metadata_poll_is_bounded_and_fail_closed(self):
+        workflow = load_workflow("mission-command.yml")
+        normalize = next(
+            step
+            for step in workflow["jobs"]["prepare"]["steps"]
+            if step.get("name") == "Normalize mission and paginated comments"
+        )
+        script = normalize["run"].split(
+            'CURRENT_RUN_OUTPUT="$RUNNER_TEMP/runs.ndjson" python3 - <<\'PY\'\n', 1
+        )[1].split("\nPY\n", 1)[0]
+        head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip()
+        repository = KERNEL_REPOSITORY
+        run_id = 30153628769
+        run_url = "https://github.com/%s/actions/runs/%s" % (repository, run_id)
+        valid = {
+            "id": run_id,
+            "html_url": run_url,
+            "path": ".github/workflows/mission-command.yml",
+            "event": "issue_comment",
+            "run_attempt": 1,
+            "head_sha": head,
+            "actor": {"login": "josephmccann"},
+            "repository": {"full_name": repository},
+        }
+        incomplete = {key: value for key, value in valid.items() if key != "path"}
+        contradictory = {**valid, "head_sha": "0" * 40}
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_gh = root / "gh"
+            fake_gh.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os\n"
+                "from pathlib import Path\n"
+                "counter = Path(os.environ['FAKE_GH_COUNTER'])\n"
+                "index = int(counter.read_text()) if counter.exists() else 0\n"
+                "records = json.loads(Path(os.environ['FAKE_GH_RECORDS']).read_text())\n"
+                "counter.write_text(str(index + 1))\n"
+                "print(json.dumps(records[min(index, len(records) - 1)]))\n",
+                encoding="utf-8",
+            )
+            fake_gh.chmod(0o755)
+
+            def run_poll(records):
+                counter = root / "counter"
+                output = root / "runs.ndjson"
+                records_path = root / "records.json"
+                if counter.exists():
+                    counter.unlink()
+                if output.exists():
+                    output.unlink()
+                records_path.write_text(json.dumps(records), encoding="utf-8")
+                environment = {
+                    **os.environ,
+                    "CURRENT_RUN_OUTPUT": str(output),
+                    "FAKE_GH_COUNTER": str(counter),
+                    "FAKE_GH_RECORDS": str(records_path),
+                    "GITHUB_ACTOR": "josephmccann",
+                    "GITHUB_REPOSITORY": repository,
+                    "GITHUB_RUN_ATTEMPT": "1",
+                    "GITHUB_RUN_ID": str(run_id),
+                    "PATH": "%s%s%s" % (
+                        root, os.pathsep, os.environ.get("PATH", "")
+                    ),
+                }
+                checked = subprocess.run(
+                    [
+                        "python3",
+                        "-c",
+                        "import time; time.sleep = lambda _: None\n" + script,
+                    ],
+                    cwd=ROOT,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                count = int(counter.read_text()) if counter.exists() else 0
+                written = output.read_text(encoding="utf-8") if output.exists() else ""
+                return checked, count, written
+
+            delayed, attempts, written = run_poll([incomplete, valid])
+            self.assertEqual(0, delayed.returncode, delayed.stderr)
+            self.assertEqual(2, attempts)
+            self.assertEqual(valid, json.loads(written))
+
+            for label, records in (
+                ("permanently incomplete", [incomplete]),
+                ("contradictory", [contradictory]),
+            ):
+                with self.subTest(label=label):
+                    denied, attempts, written = run_poll(records)
+                    self.assertNotEqual(0, denied.returncode)
+                    self.assertEqual(5, attempts)
+                    self.assertEqual("", written)
+                    self.assertIn(
+                        "did not stabilize after 5 attempts", denied.stderr
+                    )
+
+    def test_activation_append_refetches_exact_current_run(self):
+        workflow = load_workflow("mission-command.yml")
+        append = next(
+            step
+            for step in workflow["jobs"]["append"]["steps"]
+            if step.get("name")
+            == "Re-fetch and re-authenticate the complete history before append"
+        )["run"]
+        self.assertIn(
+            'gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"',
+            append,
+        )
+        self.assertIn("[.[] | select(.id != $run_id)] + [$current[0]]", append)
+
     def test_activation_tuple_separates_historical_identity_from_active_execution(self):
         """The live checkout is the active execution identity, never a relabelled
         historical remediation.  Binding ``remediation_head`` to the checkout

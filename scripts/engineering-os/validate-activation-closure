@@ -174,12 +174,21 @@ MISSION_50_SUCCESSOR_PATHS = {
     "outputs/mission-50-closure-records.json",
     "scripts/engineering-os/validate-activation-closure",
 }
+# Mission #54 completes the activation current-run provenance readiness repair
+# and records the exact reviewed successor content required by the closure.
+MISSION_54_SUCCESSOR_PATHS = {
+    ".github/workflows/mission-command.yml",
+    "outputs/mission-54-closure-records.json",
+    "scripts/engineering-os/validate-activation-closure",
+    "tests/engineering_os/test_commands.py",
+    "tests/engineering_os/test_workflow_boundaries.py",
+}
 SUCCESSOR_ALLOWED_PATHS = (
     MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS
     | MISSION_36_SUCCESSOR_PATHS | MISSION_38_SUCCESSOR_PATHS
     | MISSION_40_SUCCESSOR_PATHS | MISSION_41_SUCCESSOR_PATHS
     | MISSION_46_SUCCESSOR_PATHS | MISSION_48_SUCCESSOR_PATHS
-    | MISSION_50_SUCCESSOR_PATHS
+    | MISSION_50_SUCCESSOR_PATHS | MISSION_54_SUCCESSOR_PATHS
 )
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
@@ -547,6 +556,7 @@ SUCCESSOR_RECORDS_PATHS = (
     "outputs/mission-46-closure-records.json",
     "outputs/mission-48-closure-records.json",
     "outputs/mission-50-closure-records.json",
+    "outputs/mission-54-closure-records.json",
 )
 
 

@@ -1,0 +1,5 @@
+{
+  ".github/workflows/mission-command.yml": "64194f470b80ee9638d7e2e82e8cebe4f3f279f5",
+  "scripts/engineering-os/validate-activation-closure": "2658df828ca2449f36ef129a46ae5f8886463c75",
+  "tests/engineering_os/test_workflow_boundaries.py": "39c9b0092cf21efb6e4d22875fc383eeb0ec89f2"
+}

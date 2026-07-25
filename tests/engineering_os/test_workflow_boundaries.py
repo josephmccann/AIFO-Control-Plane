@@ -697,6 +697,77 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 .splitlines(),
             )
 
+    def test_mission_command_collects_activation_provenance_run_ids(self):
+        workflow = load_workflow("mission-command.yml")
+        normalizer = next(
+            item
+            for item in workflow["jobs"]["prepare"]["steps"]
+            if item.get("name") == "Normalize mission and paginated comments"
+        )["run"]
+        extractor = normalizer.split(
+            '> "$RUNNER_TEMP/comments.json"\n', 1
+        )[1].split(
+            "python3 - <<'PY'\n", 1
+        )[1].split("\nPY\n", 1)[0]
+        events = (
+            {
+                "source_url": (
+                    "https://github.com/josephmccann/AIFO-Control-Plane/"
+                    "actions/runs/123"
+                ),
+                "details": {},
+            },
+            {
+                "source_url": (
+                    "https://github.com/josephmccann/AIFO-Control-Plane/"
+                    "issues/26#issuecomment-5036846324"
+                ),
+                "details": {
+                    "authorization_provenance": {"run_id": 29851542883},
+                    "consumer_provenance": {"run_id": 29851543000},
+                },
+            },
+            {
+                "source_url": "not-a-run",
+                "details": {
+                    "authorization_provenance": {"run_id": True},
+                    "consumer_provenance": {"run_id": 0},
+                },
+            },
+        )
+        comments = [
+            {
+                "body": (
+                    "<!-- EOS:EVENT:BEGIN -->\n"
+                    + json.dumps(event, sort_keys=True, separators=(",", ":"))
+                    + "\n<!-- EOS:EVENT:END -->"
+                )
+            }
+            for event in events
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "comments.json").write_text(
+                json.dumps(comments), encoding="utf-8"
+            )
+            checked = subprocess.run(
+                ["python3", "-c", extractor],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "GITHUB_REPOSITORY": KERNEL_REPOSITORY,
+                    "RUNNER_TEMP": str(root),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, checked.returncode, checked.stderr)
+            self.assertEqual(
+                ["123", "29851542883", "29851543000"],
+                (root / "run-ids.txt").read_text(encoding="utf-8").splitlines(),
+            )
+
     def test_mission_26_legacy_authorization_requires_fetched_run(self):
         from engineering_os.canonical import content_sha256
         from engineering_os.commands import _EVENT_MARKER, authenticate_event_history

@@ -82,6 +82,14 @@ jobs:
                   found = pattern.fullmatch(source or "")
                   if found:
                       run_ids.add(int(found.group(1)))
+                  details = event.get("details", {}) if isinstance(event, dict) else {}
+                  if not isinstance(details, dict):
+                      continue
+                  for provenance_key in ("authorization_provenance", "consumer_provenance"):
+                      provenance = details.get(provenance_key, {})
+                      run_id = provenance.get("run_id") if isinstance(provenance, dict) else None
+                      if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0:
+                          run_ids.add(run_id)
           with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids.txt"), "w", encoding="utf-8") as stream:
               stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY

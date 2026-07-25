@@ -38,8 +38,22 @@ Editorial or Clarifying, but it amends no principle, standard, or constraint,
 so calling it Material strains the definition. The protocol requires every
 change to belong to exactly one class, so this is a real gap rather than a
 drafting choice. Resolving it is a founder decision and an amendment to the
-protocol, not something this index may settle. Until it is resolved, classify
-each change explicitly in the PR body and state the reasoning.
+protocol, not something this index may settle.
+
+**Until it is resolved, this fails closed.**
+
+- Editorial and Clarifying changes to a current-state document proceed
+  normally: typo and link repair, formatting, renumbering, or a clearer
+  statement of content whose meaning is unchanged. These have a valid class.
+- A **substantive refresh, where a recorded fact changes**, has no valid class
+  and **must not proceed**. Stop and escalate for a protocol amendment. Do not
+  select a class by analogy, do not stretch Material to fit, and do not rely
+  on PR-body reasoning to supply authority the protocol does not grant.
+
+Known immediate consequence: the founder verification this document is waiting
+on is itself a substantive refresh, so it hits this gate. The protocol
+amendment should therefore land before or together with the first verified
+update, not after it.
 
 | Document | Role | Status |
 |----------|------|--------|

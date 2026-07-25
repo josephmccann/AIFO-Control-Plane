@@ -155,3 +155,12 @@ not restate an engine figure here; link to those instead.
 Review monthly, or whenever fundraising status, product stage, customer
 traction, hiring priorities, or core messaging materially changes. Record the
 review date in the header rather than leaving the content silently aging.
+
+Note the gate before you edit. A review that only records a date, or that
+restates unchanged content more clearly, is Editorial or Clarifying and
+proceeds normally. A review that **changes a recorded fact** currently has no
+valid class under
+[AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md)
+section 1 and must stop for a protocol amendment first. See the current-state
+section of [README.md](README.md). This is a known gap, not a reason to skip
+the review: run it, then escalate what it found.

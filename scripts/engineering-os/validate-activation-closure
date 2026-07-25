@@ -155,11 +155,20 @@ MISSION_46_SUCCESSOR_PATHS = {
     "tests/engineering_os/test_test_integrity.py",
     "tests/engineering_os/test_workflow_boundaries.py",
 }
+# Mission #48 makes the standalone shell regression an isolated, mandatory
+# part of complete repository validation and repairs its stale lint contract.
+MISSION_48_SUCCESSOR_PATHS = {
+    "outputs/mission-48-closure-records.json",
+    "scripts/engineering-os/validate-activation-closure",
+    "scripts/validate.sh",
+    "tests/engineering_os/test_validation_classification.py",
+    "tests/install-dev-tools-test.sh",
+}
 SUCCESSOR_ALLOWED_PATHS = (
     MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS
     | MISSION_36_SUCCESSOR_PATHS | MISSION_38_SUCCESSOR_PATHS
     | MISSION_40_SUCCESSOR_PATHS | MISSION_41_SUCCESSOR_PATHS
-    | MISSION_46_SUCCESSOR_PATHS
+    | MISSION_46_SUCCESSOR_PATHS | MISSION_48_SUCCESSOR_PATHS
 )
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
@@ -525,6 +534,7 @@ SUCCESSOR_RECORDS_PATHS = (
     "outputs/mission-40-closure-records.json",
     "outputs/mission-41-closure-records.json",
     "outputs/mission-46-closure-records.json",
+    "outputs/mission-48-closure-records.json",
 )
 
 

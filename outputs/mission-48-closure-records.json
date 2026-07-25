@@ -1,0 +1,6 @@
+{
+  "scripts/engineering-os/validate-activation-closure": "b8ff6db01e08254b613dbb653f936921fdc58b3f",
+  "scripts/validate.sh": "0a0b8f3d01fc05b25198fc943b4c8ae5152b4d75",
+  "tests/engineering_os/test_validation_classification.py": "f4671044e46d66702ba1242f8c738c651dcbe693",
+  "tests/install-dev-tools-test.sh": "d9364922e46ba9472c7ad9c7f799120ead58e2cd"
+}

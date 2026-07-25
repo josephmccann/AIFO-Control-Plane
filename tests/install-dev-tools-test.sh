@@ -123,8 +123,17 @@ assert_equal "" "$DEV_TOOLS_TEMP_DIR" "cleanup clears temporary directory state"
 
 assert_file_contains \
   "$ROOT_DIR/scripts/validate.sh" \
-  "shellcheck \"\$ROOT_DIR\"/scripts/*.sh \"\$ROOT_DIR\"/scripts/engineering-os/* \"\$ROOT_DIR\"/tests/*.sh" \
-  "validation lints scripts and tests"
+  'classify_discovered_paths' \
+  "validation classifies discovered scripts before linting"
+assert_file_contains \
+  "$ROOT_DIR/scripts/validate.sh" \
+  "shellcheck \"\${SHELL_FILES[@]}\"" \
+  "validation lints the classified shell path set"
+assert_file_occurrences \
+  "$ROOT_DIR/scripts/validate.sh" \
+  "bash \"\$ROOT_DIR/tests/install-dev-tools-test.sh\"" \
+  "1" \
+  "complete validation runs this shell regression exactly once"
 assert_file_contains \
   "$ROOT_DIR/scripts/validate.sh" \
   "actionlint" \

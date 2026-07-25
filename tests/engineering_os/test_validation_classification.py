@@ -202,6 +202,20 @@ exercise
         self.assertIn('"$ROOT_DIR/scripts/install-dev-tools.sh"', source)
         self.assertIn('PATH="$ROOT_DIR/build/bin:$PATH"', source)
 
+    def test_shell_regression_runs_once_in_an_isolated_child(self):
+        source = ENTRYPOINT.read_text(encoding="utf-8")
+        invocation = 'bash "$ROOT_DIR/tests/install-dev-tools-test.sh"'
+        self.assertEqual(1, source.count(invocation))
+        self.assertIn("Running isolated shell validation tests.", source)
+        self.assertLess(
+            source.index("Running Engineering OS tests."),
+            source.index(invocation),
+        )
+        self.assertLess(
+            source.index(invocation),
+            source.index("Checking Engineering OS Python syntax."),
+        )
+
     def test_standard_validation_replays_the_governed_closure(self):
         source = ENTRYPOINT.read_text(encoding="utf-8")
         self.assertIn('validate-activation-closure', source)

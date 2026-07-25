@@ -184,6 +184,10 @@ main() {
   python3 -m unittest discover -s "$ROOT_DIR/tests/engineering_os" -p 'test_*.py' -v
   verify_tracked_validation_state
 
+  echo "Running isolated shell validation tests."
+  bash "$ROOT_DIR/tests/install-dev-tools-test.sh"
+  verify_tracked_validation_state
+
   echo "Checking Engineering OS Python syntax."
   python3 -m py_compile "$ROOT_DIR"/engineering_os/*.py
 

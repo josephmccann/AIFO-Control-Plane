@@ -19,12 +19,18 @@ through
 
 ## Current-state documents
 
-The status above applies to the adopted doctrine set only. The documents in
-this section are **not doctrine**, are **not** covered by the 2026-07-15
-adoption, and change on their own cadence rather than through the amendment
-protocol. They record what is true right now and are expected to go out of
-date. Where a current-state document and the manual appear to disagree about a
-durable belief, the manual wins.
+The documents in this section are **not doctrine** and are **not** covered by
+the 2026-07-15 doctrine adoption. They record what is true right now and are
+expected to go out of date. Where a current-state document and the manual
+appear to disagree about a durable belief, the manual wins.
+
+**They are still governed.**
+[AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md)
+governs every document in `docs/governance/`, so changes here are classified
+like any other and only the founder merges them. What differs is the expected
+change class, not the gate: a routine state refresh is Editorial or
+Clarifying, so it relies on git history rather than an amendment-log row.
+Updating state does not amend doctrine, but it is not ungoverned.
 
 | Document | Role | Status |
 |----------|------|--------|

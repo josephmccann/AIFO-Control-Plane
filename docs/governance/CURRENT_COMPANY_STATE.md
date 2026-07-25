@@ -88,11 +88,17 @@ Not restated here. The reconciliation ruled on this directly (CCS-06):
 architectural principles are doctrine, and a file that declares itself
 non-doctrine must link rather than restate them.
 
-See [FOUNDER_OPERATING_MANUAL.md](FOUNDER_OPERATING_MANUAL.md) sections 6 and
-7 for the deterministic-engine boundary, the rule that the AI layer interprets
-computed outputs without altering the math, traceability and independent
-validation, and the constraint that product claims stay bounded by tested
-capability.
+In [FOUNDER_OPERATING_MANUAL.md](FOUNDER_OPERATING_MANUAL.md):
+
+- **4.1** for the deterministic-engine boundary: deterministic systems own
+  computation, AI owns interpretation, and the AI layer must not silently
+  recalculate or alter authoritative financial outputs.
+- **6.1** for the rule that AI.FO reasons while people govern.
+- **7** for engineering standards, including traceability and independent
+  validation.
+- **4.5** and **17** for the constraint that claims stay bounded by tested
+  capability: 4.5 prohibits making claims the product has not earned, and 17
+  sets the investor and public-claim standards.
 
 ## Current product priorities
 

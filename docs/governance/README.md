@@ -26,11 +26,20 @@ appear to disagree about a durable belief, the manual wins.
 
 **They are still governed.**
 [AMENDMENT_AND_TRACEABILITY_PROTOCOL.md](AMENDMENT_AND_TRACEABILITY_PROTOCOL.md)
-governs every document in `docs/governance/`, so changes here are classified
-like any other and only the founder merges them. What differs is the expected
-change class, not the gate: a routine state refresh is Editorial or
-Clarifying, so it relies on git history rather than an amendment-log row.
-Updating state does not amend doctrine, but it is not ungoverned.
+governs every document in `docs/governance/`. Changes here are classified
+under its section 1 like any other change, and only the founder merges them.
+
+**Open question, deliberately not answered here.** The protocol's four classes
+are defined against doctrine: Editorial is "no change in meaning", Clarifying
+is "same doctrine, clearer statement", and Material is "doctrine changes".
+A substantive state refresh, moving from pre-seed to seed or changing the
+market band, fits none of them cleanly: it changes meaning, so it is not
+Editorial or Clarifying, but it amends no principle, standard, or constraint,
+so calling it Material strains the definition. The protocol requires every
+change to belong to exactly one class, so this is a real gap rather than a
+drafting choice. Resolving it is a founder decision and an amendment to the
+protocol, not something this index may settle. Until it is resolved, classify
+each change explicitly in the PR body and state the reasoning.
 
 | Document | Role | Status |
 |----------|------|--------|
@@ -49,9 +58,14 @@ Updating state does not amend doctrine, but it is not ungoverned.
 
 ## Boundaries
 
-These documents are canonical for doctrine only. They contain no volatile
-facts: company state lives in dated current-state documents, infrastructure
-truth lives in [memory/](../../memory/current-state.md) and the architecture
-and security documents, product methodology lives in AI.FO-Demo, and this
-directory never overrides any of them. See manual section 1.3 and 1.4 for
-the full authority hierarchy.
+The **adopted doctrine documents** listed above are canonical for doctrine
+only, and they contain no volatile facts. Company state lives in the
+current-state documents listed above, infrastructure truth lives in
+[memory/](../../memory/current-state.md) and the architecture and security
+documents, product methodology lives in AI.FO-Demo, and the doctrine set never
+overrides any of them. See manual section 1.3 and 1.4 for the full authority
+hierarchy.
+
+This boundary is about the doctrine set, not the directory.
+`docs/governance/` now also holds a current-state document, which exists
+precisely to carry the volatile facts the doctrine documents exclude.

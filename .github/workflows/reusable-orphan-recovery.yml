@@ -90,9 +90,9 @@ jobs:
       enabled: ${{ steps.policy.outputs.enabled }}
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@c48c2d9e04452e041a9af1c38bf24391115d5816
         with:
-          expected_kernel_sha: 29eaa5811c6d161b17299ed177690343106cb31f
+          expected_kernel_sha: c48c2d9e04452e041a9af1c38bf24391115d5816
       - name: Check out target repository default branch
         uses: actions/checkout@v4
         with:
@@ -132,9 +132,9 @@ jobs:
       issues: read
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@c48c2d9e04452e041a9af1c38bf24391115d5816
         with:
-          expected_kernel_sha: 29eaa5811c6d161b17299ed177690343106cb31f
+          expected_kernel_sha: c48c2d9e04452e041a9af1c38bf24391115d5816
       - name: Check out target repository default branch
         uses: actions/checkout@v4
         with:
@@ -185,6 +185,14 @@ jobs:
                   found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
                   if found:
                       run_ids.add(int(found.group(1)))
+                  details = event.get("details", {}) if isinstance(event, dict) else {}
+                  if not isinstance(details, dict):
+                      continue
+                  for provenance_key in ("authorization_provenance", "consumer_provenance"):
+                      provenance = details.get(provenance_key, {})
+                      run_id = provenance.get("run_id") if isinstance(provenance, dict) else None
+                      if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0:
+                          run_ids.add(run_id)
           with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids-%s.txt" % issue), "w", encoding="utf-8") as stream:
               stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY
@@ -215,9 +223,9 @@ jobs:
       issues: write
     steps:
       - name: Materialize immutable enforcement kernel
-        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f
+        uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@c48c2d9e04452e041a9af1c38bf24391115d5816
         with:
-          expected_kernel_sha: 29eaa5811c6d161b17299ed177690343106cb31f
+          expected_kernel_sha: c48c2d9e04452e041a9af1c38bf24391115d5816
       - name: Check out target repository default branch
         uses: actions/checkout@v4
         with:
@@ -262,6 +270,14 @@ jobs:
                   found = pattern.fullmatch(event.get("source_url", "") if isinstance(event, dict) else "")
                   if found:
                       run_ids.add(int(found.group(1)))
+                  details = event.get("details", {}) if isinstance(event, dict) else {}
+                  if not isinstance(details, dict):
+                      continue
+                  for provenance_key in ("authorization_provenance", "consumer_provenance"):
+                      provenance = details.get(provenance_key, {})
+                      run_id = provenance.get("run_id") if isinstance(provenance, dict) else None
+                      if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0:
+                          run_ids.add(run_id)
           with open(os.path.join(os.environ["RUNNER_TEMP"], "run-ids-latest.txt"), "w", encoding="utf-8") as stream:
               stream.writelines("%s\n" % run_id for run_id in sorted(run_ids))
           PY

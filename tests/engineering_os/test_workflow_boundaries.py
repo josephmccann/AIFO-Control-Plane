@@ -14,7 +14,7 @@ KERNEL_ACTION = ROOT / ".github" / "actions" / "materialize-kernel" / "action.ym
 AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
-KERNEL_ACTION_SHA = "29eaa5811c6d161b17299ed177690343106cb31f"
+KERNEL_ACTION_SHA = "c48c2d9e04452e041a9af1c38bf24391115d5816"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
 )
@@ -580,6 +580,165 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(0, checked.returncode, checked.stderr)
 
+    def test_orphan_paths_collect_activation_provenance_run_ids(self):
+        workflow = load_workflow("reusable-orphan-recovery.yml")
+        discovery_step = next(
+            item
+            for item in workflow["jobs"]["discover"]["steps"]
+            if item.get("name") == "Scheduled and default dry-run discovery"
+        )
+        discovery_extractor = discovery_step["run"].split(
+            'ISSUE="$issue" python3 - <<\'PY\'\n', 1
+        )[1].split("\nPY\n", 1)[0]
+        recovery_step = next(
+            item
+            for item in workflow["jobs"]["recover"]["steps"]
+            if item.get("name")
+            == "Re-fetch and revalidate chain immediately before atomic append"
+        )
+        recovery_extractor = recovery_step["run"].split(
+            "python3 - <<'PY'\n", 1
+        )[1].split("\nPY\n", 1)[0]
+        mission = json.loads(
+            (ROOT / "tests/engineering_os/fixtures/mission-valid.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        declaration = (
+            "MISSION_SCOPE_VERSION: 1\n<!-- EOS:MISSION:BEGIN -->\n"
+            + json.dumps(mission, sort_keys=True, separators=(",", ":"))
+            + "\n<!-- EOS:MISSION:END -->\n"
+        )
+        events = (
+            {
+                "source_url": (
+                    "https://github.com/josephmccann/AIFO-Control-Plane/"
+                    "actions/runs/123"
+                ),
+                "details": {},
+            },
+            {
+                "source_url": (
+                    "https://github.com/josephmccann/AIFO-Control-Plane/"
+                    "issues/26#issuecomment-5036846324"
+                ),
+                "details": {
+                    "authorization_provenance": {"run_id": 29851542883},
+                    "consumer_provenance": {"run_id": 29851543000},
+                },
+            },
+            {
+                "source_url": "not-a-run",
+                "details": {
+                    "authorization_provenance": {"run_id": True},
+                    "consumer_provenance": {"run_id": 0},
+                },
+            },
+        )
+        comments = [
+            {
+                "body": (
+                    "<!-- EOS:EVENT:BEGIN -->\n"
+                    + json.dumps(event, sort_keys=True, separators=(",", ":"))
+                    + "\n<!-- EOS:EVENT:END -->"
+                )
+            }
+            for event in events
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "issue-26.json").write_text(
+                json.dumps({"body": declaration}), encoding="utf-8"
+            )
+            (root / "comments-26.json").write_text(
+                json.dumps(comments), encoding="utf-8"
+            )
+            discovery = subprocess.run(
+                ["python3", "-c", discovery_extractor],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "GITHUB_REPOSITORY": KERNEL_REPOSITORY,
+                    "ISSUE": "26",
+                    "RUNNER_TEMP": str(root),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, discovery.returncode, discovery.stderr)
+            self.assertEqual(
+                ["123", "29851542883", "29851543000"],
+                (root / "run-ids-26.txt").read_text(encoding="utf-8").splitlines(),
+            )
+            (root / "issue.json").write_text(
+                json.dumps({"body": declaration}), encoding="utf-8"
+            )
+            (root / "comments-latest.json").write_text(
+                json.dumps(comments), encoding="utf-8"
+            )
+            recovery = subprocess.run(
+                ["python3", "-c", recovery_extractor],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "GITHUB_REPOSITORY": KERNEL_REPOSITORY,
+                    "RUNNER_TEMP": str(root),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, recovery.returncode, recovery.stderr)
+            self.assertEqual(
+                ["123", "29851542883", "29851543000"],
+                (root / "run-ids-latest.txt")
+                .read_text(encoding="utf-8")
+                .splitlines(),
+            )
+
+    def test_mission_26_legacy_authorization_requires_fetched_run(self):
+        from engineering_os.canonical import content_sha256
+        from engineering_os.commands import _EVENT_MARKER, authenticate_event_history
+        from tests.engineering_os.test_commands import CommandTests, event_comment
+
+        fixture = CommandTests()._retired_nonce_context(
+            proposed_nonce="fresh-distinct-nonce-98765432109876543210"
+        )
+        authorization = json.loads(
+            _EVENT_MARKER.search(fixture["comments"][3]["body"]).group(1)
+        )
+        run_id = 29851542883
+        authorization["details"]["authorization_provenance"]["run_id"] = run_id
+        authorization["event_hash"] = content_sha256(authorization)
+        fixture["comments"][3] = event_comment(45, [authorization], issue=26)
+        fixture["run"]["id"] = run_id
+        fixture["run"]["html_url"] = (
+            "https://github.com/%s/actions/runs/%s"
+            % (KERNEL_REPOSITORY, run_id)
+        )
+
+        denied = authenticate_event_history(
+            fixture["comments"],
+            fixture["mission"],
+            fixture["policy"],
+            repository=KERNEL_REPOSITORY,
+            actions_runs=[],
+        )
+        self.assertFalse(denied.allowed)
+        self.assertEqual("ACTIVATION_WORKFLOW_PROVENANCE_INVALID", denied.code)
+
+        authenticated = authenticate_event_history(
+            fixture["comments"],
+            fixture["mission"],
+            fixture["policy"],
+            repository=KERNEL_REPOSITORY,
+            actions_runs=[fixture["run"]],
+        )
+        self.assertTrue(authenticated.allowed, authenticated.code)
+        self.assertEqual("EVENT_HISTORY_AUTHENTICATED", authenticated.code)
+        self.assertEqual([1, 2], [event["sequence"] for event in authenticated.events])
+
     def test_caller_authorization_script_fails_closed(self):
         workflow = load_workflow("reusable-mission-validation.yml")
         self.assertIn("caller-authorization", workflow["jobs"])
@@ -821,8 +980,8 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
 
     def test_boundary_check_rejects_representative_regressions(self):
         valid = """
-          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f
-          expected_kernel_sha: 29eaa5811c6d161b17299ed177690343106cb31f
+          uses: josephmccann/AIFO-Control-Plane/.github/actions/materialize-kernel@c48c2d9e04452e041a9af1c38bf24391115d5816
+          expected_kernel_sha: c48c2d9e04452e041a9af1c38bf24391115d5816
           repository: ${{ github.repository }}
           ref: ${{ github.event.repository.default_branch }}
           path: target
@@ -833,7 +992,7 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
         self.assertEqual(cross_repository_boundary_errors(valid), [])
 
         no_kernel_identity = valid.replace(
-            "materialize-kernel@29eaa5811c6d161b17299ed177690343106cb31f",
+            "materialize-kernel@c48c2d9e04452e041a9af1c38bf24391115d5816",
             "materialize-kernel@main",
             1,
         )

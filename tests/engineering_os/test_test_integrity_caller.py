@@ -1,10 +1,11 @@
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-KERNEL_SHA = "6ec2fc95c8965892f387189e05baf3c4a5c4ed4a"
+KERNEL_SHA = "a100e3eef7c2d0d65eb320ad37b2133d7ed74608"
 
 
 class TestIntegrityCallerTests(unittest.TestCase):
@@ -26,4 +27,12 @@ class TestIntegrityCallerTests(unittest.TestCase):
         self.assertIn(expected, caller)
         self.assertIn("expected_workflow_sha: " + KERNEL_SHA, caller)
         self.assertIsNotNone(re.fullmatch(r"[0-9a-f]{40}", KERNEL_SHA))
+        reusable = subprocess.run(
+            ["git", "cat-file", "-e", "%s^{commit}" % KERNEL_SHA],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(reusable.returncode, 0, reusable.stderr)
         self.assertIn("bootstrap interval is an explicit enforcement gap", documentation)

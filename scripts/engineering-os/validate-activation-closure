@@ -183,12 +183,26 @@ MISSION_54_SUCCESSOR_PATHS = {
     "tests/engineering_os/test_commands.py",
     "tests/engineering_os/test_workflow_boundaries.py",
 }
+# Mission #58 bounds Test Integrity Actions run collection to the exact
+# authenticated evidence it consumes and records its reviewed successor blobs.
+MISSION_58_SUCCESSOR_PATHS = {
+    ".github/workflows/reusable-test-integrity.yml",
+    ".github/workflows/test-integrity.yml",
+    "engineering_os/test_integrity_cli.py",
+    "outputs/mission-58-closure-records.json",
+    "scripts/engineering-os/validate-activation-closure",
+    "tests/engineering_os/test_test_integrity.py",
+    "tests/engineering_os/test_test_integrity_adversarial.py",
+    "tests/engineering_os/test_test_integrity_caller.py",
+    "tests/engineering_os/test_workflow_boundaries.py",
+}
 SUCCESSOR_ALLOWED_PATHS = (
     MISSION_32_SUCCESSOR_PATHS | MISSION_35_SUCCESSOR_PATHS
     | MISSION_36_SUCCESSOR_PATHS | MISSION_38_SUCCESSOR_PATHS
     | MISSION_40_SUCCESSOR_PATHS | MISSION_41_SUCCESSOR_PATHS
     | MISSION_46_SUCCESSOR_PATHS | MISSION_48_SUCCESSOR_PATHS
     | MISSION_50_SUCCESSOR_PATHS | MISSION_54_SUCCESSOR_PATHS
+    | MISSION_58_SUCCESSOR_PATHS
 )
 RECONCILIATION_PATH = "outputs/mission-32-reconciliation-ready.md"
 VALIDATION_PATH = "outputs/mission-32-validation/exact-head-ci-ready.log"
@@ -557,6 +571,7 @@ SUCCESSOR_RECORDS_PATHS = (
     "outputs/mission-48-closure-records.json",
     "outputs/mission-50-closure-records.json",
     "outputs/mission-54-closure-records.json",
+    "outputs/mission-58-closure-records.json",
 )
 
 

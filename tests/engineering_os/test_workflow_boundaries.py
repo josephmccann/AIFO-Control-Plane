@@ -15,6 +15,7 @@ AUTHORIZED_CALLER = "josephmccann/AI.FO-Demo"
 AUTHORIZED_OWNER = "josephmccann"
 KERNEL_REPOSITORY = "josephmccann/AIFO-Control-Plane"
 KERNEL_ACTION_SHA = "c48c2d9e04452e041a9af1c38bf24391115d5816"
+TEST_INTEGRITY_KERNEL_SHA = "7efc90a81606f6a958fa3be832b377010841b3ba"
 PINNED_TRANSPORT_PATHS = (
     ".github/actions/materialize-kernel/action.yml",
 )
@@ -440,12 +441,17 @@ class ReusableWorkflowBoundaryTests(unittest.TestCase):
                 self.assertIn("required: true", self.read(name).split(
                     "expected_workflow_sha:", 1
                 )[1].split("jobs:", 1)[0])
+                kernel_sha = (
+                    TEST_INTEGRITY_KERNEL_SHA
+                    if name == "reusable-test-integrity.yml"
+                    else KERNEL_ACTION_SHA
+                )
                 self.assertIn(
                     "josephmccann/AIFO-Control-Plane/.github/actions/"
-                    "materialize-kernel@" + KERNEL_ACTION_SHA,
+                    "materialize-kernel@" + kernel_sha,
                     self.read(name),
                 )
-                self.assertIn("expected_kernel_sha: " + KERNEL_ACTION_SHA, self.read(name))
+                self.assertIn("expected_kernel_sha: " + kernel_sha, self.read(name))
                 self.assertNotIn("repository: ${{ job.workflow_repository }}", self.read(name))
 
                 def reaches_authorization(job_name: str, seen: set[str]) -> bool:

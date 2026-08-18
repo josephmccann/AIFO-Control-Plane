@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "engineering_os" / "fixtures" / "test-integrity"
 BASE_SHA = "1" * 40
 HEAD_SHA = "2" * 40
-REUSABLE_KERNEL_SHA = "7efc90a81606f6a958fa3be832b377010841b3ba"
+REUSABLE_KERNEL_SHA = "141d47653d236f4f502d63132816fa440ad29000"
 
 
 def _hash(path):

@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "engineering_os" / "fixtures" / "test-integrity"
 BASE_SHA = "1" * 40
 HEAD_SHA = "2" * 40
+REUSABLE_KERNEL_SHA = "7efc90a81606f6a958fa3be832b377010841b3ba"
 
 
 def _hash(path):
@@ -315,13 +317,21 @@ class TestIntegrityTests(unittest.TestCase):
         self.assertNotIn("issues: write", workflow)
         self.assertNotIn("pull-requests: write", workflow)
         self.assertIn(
-            "materialize-kernel@c48c2d9e04452e041a9af1c38bf24391115d5816",
+            "materialize-kernel@%s" % REUSABLE_KERNEL_SHA,
             workflow,
         )
         self.assertIn(
-            "expected_kernel_sha: c48c2d9e04452e041a9af1c38bf24391115d5816",
+            "expected_kernel_sha: %s" % REUSABLE_KERNEL_SHA,
             workflow,
         )
+        kernel = subprocess.run(
+            ["git", "cat-file", "-e", "%s^{commit}" % REUSABLE_KERNEL_SHA],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(kernel.returncode, 0, kernel.stderr)
         self.assertIn("kernel/scripts/engineering-os/validate-test-integrity", workflow)
         self.assertNotIn("head/scripts/engineering-os/validate-test-integrity", workflow)
         self.assertNotIn("base/scripts/engineering-os/validate-test-integrity", workflow)

@@ -2589,3 +2589,140 @@ class SharedTransportBudgetTests(unittest.TestCase):
             path.write_bytes(b"1234")
             with self.assertRaisesRegex(OverflowError, "TEST_RESOURCE_LIMIT"):
                 _bounded_file_bytes(path, budget, phase="policy-input")
+
+
+class GitHubMissionTransportTests(unittest.TestCase):
+    def test_mission_without_run_references_avoids_repository_actions_history(self):
+        from engineering_os.test_integrity_cli import _github_mission
+
+        repository = "acme/widgets"
+        base_sha, head_sha = "1" * 40, "2" * 40
+        mission_body = "<!-- EOS:MISSION:BEGIN -->\n{}\n<!-- EOS:MISSION:END -->"
+        pr = {
+            "number": 7, "body": "<!-- AIFO-EOS-MISSION-ISSUE: 42 -->",
+            "base": {"sha": base_sha, "repo": {"full_name": repository}},
+            "head": {"sha": head_sha},
+        }
+        captured = {}
+
+        def github(*args, **_kwargs):
+            endpoint = args[-1]
+            if endpoint == "repos/acme/widgets/pulls/7":
+                return pr
+            if endpoint == "repos/acme/widgets/issues/42":
+                return {"number": 42, "body": mission_body}
+            if endpoint == "repos/acme/widgets/issues/42/comments?per_page=100":
+                return [[]]
+            raise AssertionError("unexpected GitHub endpoint: %s" % endpoint)
+
+        def authenticate(*_args, **kwargs):
+            captured["actions_runs"] = kwargs["actions_runs"]
+            return {"authenticated": True}
+
+        with mock.patch("engineering_os.test_integrity_cli._gh", side_effect=github), mock.patch(
+            "engineering_os.test_integrity_cli.authenticate_integrity_context",
+            side_effect=authenticate,
+        ):
+            result = _github_mission(repository, 7, base_sha, head_sha, {}, [])
+
+        self.assertEqual(result, {"authenticated": True})
+        self.assertEqual(captured["actions_runs"], [])
+
+    def test_mission_run_reference_fetches_only_the_exact_run(self):
+        from engineering_os.test_integrity_cli import _github_mission
+
+        repository = "acme/widgets"
+        base_sha, head_sha = "1" * 40, "2" * 40
+        source_url = "https://github.com/acme/widgets/actions/runs/91"
+        event = {
+            "actor": "system", "actor_role": "system", "source_url": source_url,
+        }
+        event_comment = {
+            "body": "<!-- EOS:EVENT:BEGIN -->\n%s\n<!-- EOS:EVENT:END -->"
+            % json.dumps(event, sort_keys=True),
+            "html_url": "https://github.com/acme/widgets/issues/42#issuecomment-1",
+            "user": {"login": "github-actions[bot]"},
+        }
+        pr = {
+            "number": 7, "body": "<!-- AIFO-EOS-MISSION-ISSUE: 42 -->",
+            "base": {"sha": base_sha, "repo": {"full_name": repository}},
+            "head": {"sha": head_sha},
+        }
+        run = {"id": 91, "html_url": source_url}
+        captured = {}
+
+        def github(*args, **_kwargs):
+            endpoint = args[-1]
+            if endpoint == "repos/acme/widgets/pulls/7":
+                return pr
+            if endpoint == "repos/acme/widgets/issues/42":
+                return {"number": 42, "body": "<!-- EOS:MISSION:BEGIN -->\n{}\n<!-- EOS:MISSION:END -->"}
+            if endpoint == "repos/acme/widgets/issues/42/comments?per_page=100":
+                return [[event_comment]]
+            if endpoint == "repos/acme/widgets/actions/runs/91":
+                return run
+            raise AssertionError("unexpected GitHub endpoint: %s" % endpoint)
+
+        def authenticate(*_args, **kwargs):
+            captured["actions_runs"] = kwargs["actions_runs"]
+            return {"authenticated": True}
+
+        with mock.patch("engineering_os.test_integrity_cli._gh", side_effect=github), mock.patch(
+            "engineering_os.test_integrity_cli.authenticate_integrity_context",
+            side_effect=authenticate,
+        ):
+            result = _github_mission(repository, 7, base_sha, head_sha, {}, [])
+
+        self.assertEqual(result, {"authenticated": True})
+        self.assertEqual(captured["actions_runs"], [run])
+
+    def test_baseline_authorization_fetches_its_exact_provenance_run(self):
+        from engineering_os.test_integrity_cli import _github_mission
+
+        repository = "acme/widgets"
+        base_sha, head_sha = "1" * 40, "2" * 40
+        event = {
+            "type": "test_integrity.baseline.authorized",
+            "details": {"authorization_provenance": {"run_id": 92}},
+        }
+        event_comment = {
+            "body": "<!-- EOS:EVENT:BEGIN -->\n%s\n<!-- EOS:EVENT:END -->"
+            % json.dumps(event, sort_keys=True),
+            "html_url": "https://github.com/acme/widgets/issues/42#issuecomment-2",
+            "user": {"login": "github-actions[bot]"},
+        }
+        pr = {
+            "number": 7, "body": "<!-- AIFO-EOS-MISSION-ISSUE: 42 -->",
+            "base": {"sha": base_sha, "repo": {"full_name": repository}},
+            "head": {"sha": head_sha},
+        }
+        run = {
+            "id": 92,
+            "html_url": "https://github.com/acme/widgets/actions/runs/92",
+        }
+        captured = {}
+
+        def github(*args, **_kwargs):
+            endpoint = args[-1]
+            if endpoint == "repos/acme/widgets/pulls/7":
+                return pr
+            if endpoint == "repos/acme/widgets/issues/42":
+                return {"number": 42, "body": "<!-- EOS:MISSION:BEGIN -->\n{}\n<!-- EOS:MISSION:END -->"}
+            if endpoint == "repos/acme/widgets/issues/42/comments?per_page=100":
+                return [[event_comment]]
+            if endpoint == "repos/acme/widgets/actions/runs/92":
+                return run
+            raise AssertionError("unexpected GitHub endpoint: %s" % endpoint)
+
+        def authenticate(*_args, **kwargs):
+            captured["actions_runs"] = kwargs["actions_runs"]
+            return {"authenticated": True}
+
+        with mock.patch("engineering_os.test_integrity_cli._gh", side_effect=github), mock.patch(
+            "engineering_os.test_integrity_cli.authenticate_integrity_context",
+            side_effect=authenticate,
+        ):
+            result = _github_mission(repository, 7, base_sha, head_sha, {}, [])
+
+        self.assertEqual(result, {"authenticated": True})
+        self.assertEqual(captured["actions_runs"], [run])

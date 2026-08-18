@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
-from .commands import authenticate_event_history
+from .commands import _extract_event_comments, authenticate_event_history
 from .mission import parse_issue_body
 from .schema import validate_document
 from .test_integrity import (
@@ -403,6 +403,33 @@ def validate_github_pages(
     return flattened
 
 
+def _referenced_action_run_ids(
+    comments: Sequence[Mapping[str, Any]], repository: str,
+) -> Tuple[int, ...]:
+    """Return bounded transport hints for run evidence authenticated downstream."""
+
+    extraction_error, events, _ = _extract_event_comments(comments)
+    if extraction_error:
+        return ()
+    source_pattern = re.compile(
+        r"https://github\.com/%s/actions/runs/([1-9][0-9]*)" % re.escape(repository),
+    )
+    run_ids = set()
+    for event in events:
+        if event.get("actor") == "system" or event.get("actor_role") == "system":
+            source_url = event.get("source_url")
+            match = source_pattern.fullmatch(source_url) if isinstance(source_url, str) else None
+            if match is not None:
+                run_ids.add(int(match.group(1)))
+        if event.get("type") == "test_integrity.baseline.authorized":
+            details = event.get("details")
+            provenance = details.get("authorization_provenance") if isinstance(details, Mapping) else None
+            run_id = provenance.get("run_id") if isinstance(provenance, Mapping) else None
+            if isinstance(run_id, int) and not isinstance(run_id, bool) and run_id > 0:
+                run_ids.add(run_id)
+    return tuple(sorted(run_ids))
+
+
 def _github_mission(
     repository: str, pull_request: int, base_sha: str, head_sha: str,
     policy: Mapping[str, Any], changed_files: Sequence[str],
@@ -448,27 +475,26 @@ def _github_mission(
     usage["items"] += 2 + len(comments)
     if resource_budget is not None:
         resource_budget.consume_github(pages=len(comment_pages), items=2 + len(comments))
-    run_pages = _gh(
-        "--paginate", "--slurp", "repos/%s/actions/runs?per_page=100" % repository,
-        max_response_bytes=response_cap, usage=usage,
-        resource_budget=resource_budget,
-    )
+    run_ids = _referenced_action_run_ids(comments, repository)
+    if (
+        usage["pages"] + len(run_ids) > limits["max_github_pages"]
+        or usage["items"] + len(run_ids) > limits["max_github_items"]
+    ):
+        raise ValueError("TEST_GITHUB_RESOURCE_LIMIT")
     actions_runs = []
-    if not isinstance(run_pages, list):
-        raise ValueError("TEST_GITHUB_EVIDENCE_INVALID")
-    if len(run_pages) > limits["max_github_pages"]:
-        raise ValueError("TEST_GITHUB_RESOURCE_LIMIT")
-    usage["pages"] += len(run_pages)
-    if usage["pages"] > limits["max_github_pages"]:
-        raise ValueError("TEST_GITHUB_RESOURCE_LIMIT")
-    for page in run_pages:
-        if not isinstance(page, Mapping) or not isinstance(page.get("workflow_runs"), list):
+    for run_id in run_ids:
+        run = _gh(
+            "repos/%s/actions/runs/%d" % (repository, run_id),
+            max_response_bytes=response_cap, usage=usage,
+            resource_budget=resource_budget,
+        )
+        if not isinstance(run, Mapping):
             raise ValueError("TEST_GITHUB_EVIDENCE_INVALID")
-        if usage["items"] + len(actions_runs) + len(page["workflow_runs"]) > limits["max_github_items"]:
-            raise ValueError("TEST_GITHUB_RESOURCE_LIMIT")
-        actions_runs.extend(page["workflow_runs"])
+        actions_runs.append(run)
+    usage["pages"] += len(run_ids)
+    usage["items"] += len(run_ids)
     if resource_budget is not None:
-        resource_budget.consume_github(pages=len(run_pages), items=len(actions_runs))
+        resource_budget.consume_github(pages=len(run_ids), items=len(actions_runs))
     mission_sha256 = content_sha256(mission)
     initial_ready_attestation = _initial_ready_attestation(
         pr,

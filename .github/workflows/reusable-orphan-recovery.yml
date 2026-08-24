@@ -29,7 +29,7 @@ on:
         default: true
         type: boolean
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 */4 * * *"
 
 permissions: {}
 

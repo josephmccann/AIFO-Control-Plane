@@ -1,4 +1,4 @@
-> **Status: archived/dormant as of 2026-10-04.** No active development since 2026-08-18. This AWS control plane never hosted the AI.FO product runtime; the product runs from AIFO-Inc/AI.FO-Demo (app.getaifo.com). Kept for reference; not maintained. Status claims below (for example "ACTIVE") are historical.
+> **Status: archived/dormant as of 2026-10-04.** No active development since 2026-08-18. This AWS control plane never hosted the AI.FO product runtime; the product runs from AIFO-Inc/AI.FO-Demo (app.getaifo.com). Kept for reference; no further development planned. Status claims below (for example "ACTIVE") are historical. Note: `memory/deployment-status.md` records AWS resources as deployed (state bootstrap, GitHub OIDC, CloudTrail, Session Manager logging, a no-ingress EC2 host and its EventBridge Scheduler start/stop) and no decommission is recorded. Until someone confirms in the AWS account that they are torn down, treat them as live and still needing patching and monitoring.
 
 # AI.FO Control Plane
 

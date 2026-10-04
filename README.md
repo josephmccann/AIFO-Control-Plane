@@ -1,3 +1,5 @@
+> **Status: archived/dormant as of 2026-10-04.** No active development since 2026-08-18. This AWS control plane never hosted the AI.FO product runtime; the product runs from AIFO-Inc/AI.FO-Demo (app.getaifo.com). Kept for reference; not maintained. Status claims below (for example "ACTIVE") are historical.
+
 # AI.FO Control Plane
 
 AWS infrastructure control-plane repository for AI.FO.
